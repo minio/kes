@@ -150,7 +150,7 @@ func readPolicyHandler(roles *Roles) xhttp.HandlerFunc {
 func listPoliciesHandler(roles *Roles) xhttp.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) error {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(roles.List())
+		json.NewEncoder(w).Encode(roles.Policies())
 		return nil
 	}
 }
@@ -188,7 +188,7 @@ func assignIdentityHandler(roles *Roles) xhttp.HandlerFunc {
 
 func listIdentitiesHandler(roles *Roles) xhttp.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
-		json.NewEncoder(w).Encode(roles.ListIdentities())
+		json.NewEncoder(w).Encode(roles.Identities())
 		return nil
 	}
 }

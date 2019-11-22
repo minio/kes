@@ -161,7 +161,7 @@ func (r *Roles) Delete(name string) {
 	r.lock.Unlock()
 }
 
-func (r *Roles) List() (names []string) {
+func (r *Roles) Policies() (names []string) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -211,7 +211,7 @@ func (r *Roles) IsAssigned(id Identity) bool {
 	return false
 }
 
-func (r *Roles) ListIdentities() map[Identity]string {
+func (r *Roles) Identities() map[Identity]string {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
