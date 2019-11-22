@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/aead/key"
 	"github.com/aead/key/kms/mem"
@@ -71,17 +75,23 @@ func server(args []string) {
 	if tlsCertPath == "" {
 		tlsCertPath = config.TLS.CertPath
 	}
+	certificate, err := tls.LoadX509KeyPair(tlsCertPath, tlsKeyPath)
+	if err != nil {
+		failf(cli.Output(), "Failed to load TLS certificate: %v", err)
+	}
 
 	server := key.Server{
 		Addr: addr,
-		Roles: key.Roles{
+		Roles: &key.Roles{
 			Root: key.Identity(rootIdentity),
 		},
 		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS13,
-			ClientAuth: tls.RequireAnyClientCert,
+			MinVersion:   tls.VersionTLS13,
+			ClientAuth:   tls.RequireAnyClientCert,
+			Certificates: []tls.Certificate{certificate},
 		},
 	}
+
 	switch {
 	case config.Vault.Addr != "":
 		store, err := vault.NewKeyStore(&vault.Config{
@@ -111,5 +121,15 @@ func server(args []string) {
 			server.Roles.Assign(name, identity)
 		}
 	}
-	fmt.Fprintln(cli.Output(), server.ListenAndServe(tlsCertPath, tlsKeyPath))
+
+	shutdownContext, shutdownServer := context.WithCancel(context.Background())
+	sigCh := make(chan os.Signal)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		_ = <-sigCh
+		shutdownServer()
+	}()
+	if err := server.ServeTCP(shutdownContext, 800*time.Millisecond); err != nil && err != context.Canceled {
+		fmt.Fprintln(cli.Output(), err)
+	}
 }
