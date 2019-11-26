@@ -42,7 +42,10 @@ func NewClient(addr string, config *tls.Config) *Client {
 func (c *Client) Transport(transport http.RoundTripper) { c.httpClient.Transport = transport }
 
 func (c *Client) CreateKey(name string, key []byte) error {
-	body, err := json.Marshal(createKeyRequest{
+	type Request struct {
+		Bytes []byte `json:"bytes"`
+	}
+	body, err := json.Marshal(Request{
 		Bytes: key,
 	})
 	if err != nil {
@@ -77,7 +80,10 @@ func (c *Client) DeleteKey(name string) error {
 }
 
 func (c *Client) GenerateDataKey(name string, context []byte) ([]byte, []byte, error) {
-	body, err := json.Marshal(generateKeyRequest{
+	type Request struct {
+		Context []byte `json:"context"`
+	}
+	body, err := json.Marshal(Request{
 		Context: context,
 	})
 	if err != nil {
@@ -94,8 +100,12 @@ func (c *Client) GenerateDataKey(name string, context []byte) ([]byte, []byte, e
 	}
 	defer resp.Body.Close()
 
+	type Response struct {
+		Plaintext  []byte `json:"plaintext"`
+		Ciphertext []byte `json:"ciphertext"`
+	}
 	const limit = 1 << 20
-	var response generateKeyResponse
+	var response Response
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, nil, err
 	}
@@ -103,7 +113,11 @@ func (c *Client) GenerateDataKey(name string, context []byte) ([]byte, []byte, e
 }
 
 func (c *Client) DecryptDataKey(name string, ciphertext, context []byte) ([]byte, error) {
-	body, err := json.Marshal(decryptKeyRequest{
+	type Request struct {
+		Ciphertext []byte `json:"ciphertext"`
+		Context    []byte `json:"context"`
+	}
+	body, err := json.Marshal(Request{
 		Ciphertext: ciphertext,
 		Context:    context,
 	})
@@ -121,8 +135,11 @@ func (c *Client) DecryptDataKey(name string, ciphertext, context []byte) ([]byte
 	}
 	defer resp.Body.Close()
 
+	type Response struct {
+		Plaintext []byte `json:"plaintext"`
+	}
 	const limit = 32 * 1024
-	var response decryptKeyResponse
+	var response Response
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, err
 	}
@@ -199,7 +216,10 @@ func (c *Client) DeletePolicy(name string) error {
 }
 
 func (c *Client) AssignIdentity(policy string, id Identity) error {
-	body, err := json.Marshal(assignIdentityRequest{
+	type Request struct {
+		Policy string `json:"policy"`
+	}
+	body, err := json.Marshal(Request{
 		Policy: policy,
 	})
 	if err != nil {

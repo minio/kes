@@ -5,14 +5,15 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/aead/key"
-	"github.com/aead/key/kms/mem"
-	"github.com/aead/key/kms/vault"
+	"github.com/aead/key/mem"
+	"github.com/aead/key/vault"
 )
 
 const serverCmdUsage = `usage: %s [options]
@@ -75,61 +76,77 @@ func server(args []string) {
 	if tlsCertPath == "" {
 		tlsCertPath = config.TLS.CertPath
 	}
-	certificate, err := tls.LoadX509KeyPair(tlsCertPath, tlsKeyPath)
-	if err != nil {
-		failf(cli.Output(), "Failed to load TLS certificate: %v", err)
-	}
 
-	server := key.Server{
-		Addr: addr,
-		Roles: &key.Roles{
-			Root: key.Identity(rootIdentity),
-		},
-		TLSConfig: &tls.Config{
-			MinVersion:   tls.VersionTLS13,
-			ClientAuth:   tls.RequireAnyClientCert,
-			Certificates: []tls.Certificate{certificate},
-		},
-	}
-
-	switch {
-	case config.Vault.Addr != "":
-		store, err := vault.NewKeyStore(&vault.Config{
+	var store key.Store = &mem.KeyStore{}
+	if config.Vault.Addr != "" {
+		vaultStore := &vault.KeyStore{
 			Addr: config.Vault.Addr,
 			Name: config.Vault.Name,
-			AppRole: vault.AppRole{
+			AppRole: &vault.AppRole{
 				ID:     config.Vault.AppRole.ID,
 				Secret: config.Vault.AppRole.Secret,
 				Retry:  config.Vault.AppRole.Retry,
 			},
 			StatusPing: config.Vault.Status.Ping,
-		})
-		if err != nil {
+		}
+		if err = vaultStore.Authenticate(context.Background()); err != nil {
 			failf(cli.Output(), "Failed to connect to Vault: %v", err)
 		}
-		server.KeyStore = store
-	default:
-		server.KeyStore = &mem.KeyStore{}
+		store = vaultStore
 	}
 
+	roles := &key.Roles{
+		Root: key.Identity(rootIdentity),
+	}
 	for name, policy := range config.Policies {
-		server.Roles.Set(name, key.NewPolicy(policy.Paths...))
+		roles.Set(name, key.NewPolicy(policy.Paths...))
 		for _, identity := range policy.Identities {
-			if server.Roles.IsAssigned(identity) {
+			if roles.IsAssigned(identity) {
 				failf(cli.Output(), "Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
 			}
-			server.Roles.Assign(name, identity)
+			roles.Assign(name, identity)
 		}
 	}
 
-	shutdownContext, shutdownServer := context.WithCancel(context.Background())
+	const maxBody = 1 << 20
+	mux := http.NewServeMux()
+	mux.Handle("/v1/key/create/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleCreateKey(store)))))
+	mux.Handle("/v1/key/delete/", key.RequireMethod(http.MethodDelete, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleDeleteKey(store)))))
+	mux.Handle("/v1/key/generate/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleGenerateKey(store)))))
+	mux.Handle("/v1/key/decrypt/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleDecryptKey(store)))))
+
+	mux.Handle("/v1/policy/write/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleWritePolicy(roles)))))
+	mux.Handle("/v1/policy/read/", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleReadPolicy(roles)))))
+	mux.Handle("/v1/policy/list", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListPolicies(roles)))))
+	mux.Handle("/v1/policy/delete/", key.RequireMethod(http.MethodDelete, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleDeletePolicy(roles)))))
+
+	mux.Handle("/v1/identity/assign/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleAssignIdentity(roles)))))
+	mux.Handle("/v1/identity/list", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListIdentities(roles)))))
+	mux.Handle("/v1/identity/forget/", key.RequireMethod(http.MethodDelete, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleForgetIdentity(roles)))))
+
+	server := http.Server{
+		Addr:    addr,
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS13,
+			ClientAuth: tls.RequireAnyClientCert,
+		},
+	}
+
 	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		_ = <-sigCh
-		shutdownServer()
+
+		shutdownContext, _ := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
+		if err := server.Shutdown(shutdownContext); err == context.DeadlineExceeded {
+			err = server.Close()
+		}
+		if err != nil {
+			failf(cli.Output(), "Abnormal server shutdown: %v", err)
+		}
 	}()
-	if err := server.ServeTCP(shutdownContext, 800*time.Millisecond); err != nil && err != context.Canceled {
-		fmt.Fprintln(cli.Output(), err)
+	if err = server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
+		failf(cli.Output(), "Cannot start server: %v", err)
 	}
 }

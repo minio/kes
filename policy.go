@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aead/key/internal/xhttp"
 	"github.com/pelletier/go-toml"
 )
 
@@ -41,6 +40,13 @@ func HashPublicKey(hash crypto.Hash) IdentityFunc {
 		return Identity(hex.EncodeToString(h.Sum(nil)))
 	}
 }
+
+const errForbidden policyError = "prohibited by policy"
+
+type policyError string
+
+func (e policyError) Error() string { return string(e) }
+func (policyError) Status() int     { return http.StatusForbidden }
 
 type Policy struct {
 	patterns []string
@@ -228,15 +234,13 @@ func (r *Roles) Forget(id Identity) {
 	r.lock.Unlock()
 }
 
-var errForbidden = xhttp.Error(http.StatusForbidden, "prohibited by policy")
-
-func (r *Roles) Enforce(_ http.ResponseWriter, req *http.Request) error {
+func (r *Roles) enforce(req *http.Request) error {
 	if req.TLS == nil {
 		return nil // TODO: decide
 	}
 
 	if len(req.TLS.PeerCertificates) > 1 {
-		return xhttp.Error(http.StatusBadRequest, "too many identities: more than one certificate is present")
+		return policyError("too many identities: more than one certificate is present")
 	}
 
 	var cert *x509.Certificate

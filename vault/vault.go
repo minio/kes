@@ -2,23 +2,16 @@ package vault
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/aead/key/kms"
+	"github.com/aead/key"
 	vaultapi "github.com/hashicorp/vault/api"
 )
-
-type Config struct {
-	Addr string
-	Name string
-
-	AppRole AppRole
-
-	StatusPing time.Duration
-}
 
 type AppRole struct {
 	ID     string
@@ -27,73 +20,81 @@ type AppRole struct {
 }
 
 type KeyStore struct {
-	lock  sync.RWMutex
-	cache map[string]kms.Key
+	Addr string
 
-	name   string
+	Name string
+
+	AppRole *AppRole
+
+	StatusPing time.Duration
+
+	lock  sync.RWMutex
+	cache map[string]key.Secret
+
 	client *vaultapi.Client
 	sealed bool
 }
 
-func NewKeyStore(config *Config) (*KeyStore, error) {
+func (store *KeyStore) Authenticate(context context.Context) error {
+	if store.AppRole == nil {
+		return errors.New("vault: no approle authentication provided")
+	}
 	client, err := vaultapi.NewClient(&vaultapi.Config{
-		Address: config.Addr,
+		Address: store.Addr,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	store := &KeyStore{
-		cache:  map[string]kms.Key{},
-		name:   config.Name,
-		client: client,
-	}
-
-	status, err := store.client.Sys().Health()
+	status, err := client.Sys().Health()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	store.sealed = status.Sealed
 
 	var token string
 	var ttl time.Duration
 	if !status.Sealed {
-		token, ttl, err = store.authenticate(config.AppRole)
+		token, ttl, err = store.authenticate(*store.AppRole)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		store.client.SetToken(token)
+		client.SetToken(token)
 	}
 
-	go store.checkStatus(config.StatusPing)
-	go store.renewAuthToken(config.AppRole, ttl)
-	return store, nil
+	store.client = client
+	go store.checkStatus(context, store.StatusPing)
+	go store.renewAuthToken(context, *store.AppRole, ttl)
+	return nil
 }
 
-func (store *KeyStore) Get(name string) (key kms.Key, err error) {
+func (store *KeyStore) Get(name string) (secret key.Secret, err error) {
+	if store.client == nil {
+		panic("vault: key store is not connected to vault")
+	}
 	if store.sealed {
-		return key, kms.ErrSealed
+		return secret, key.ErrStoreSealed
 	}
 
 	// First check whether a master key with that key is cached.
 	store.lock.RLock()
-	if key, ok := store.cache[name]; ok {
+	if secret, ok := store.cache[name]; ok {
 		store.lock.RUnlock()
-		return key, nil
+		return secret, nil
 	}
 	store.lock.RUnlock()
 
 	// Since we haven't found the requested master key in the cache
 	// we reach out to Vault's K/V store and fetch it from there.
-	entry, err := store.client.Logical().Read(fmt.Sprintf("/kv/%s/%s", store.name, name))
+	entry, err := store.client.Logical().Read(fmt.Sprintf("/kv/%s/%s", store.Name, name))
 	if err != nil {
-		return key, err
+		return secret, err
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader([]byte(entry.Data["key"].(string))))
+	decoder := json.NewDecoder(bytes.NewReader([]byte(entry.Data[name].(string))))
 	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&key); err != nil {
-		return key, err
+	if err = decoder.Decode(&secret); err != nil {
+		return secret, err
 	}
 
 	// Now add the master key to the cache to
@@ -108,62 +109,53 @@ func (store *KeyStore) Get(name string) (key kms.Key, err error) {
 	if k, ok := store.cache[name]; ok {
 		return k, nil
 	}
-	store.cache[name] = key
-	return key, nil
+	store.cache[name] = secret
+	return secret, nil
 }
 
-func (store *KeyStore) Create(key kms.Key) error {
+func (store *KeyStore) Create(name string, secret key.Secret) error {
+	if store.client == nil {
+		panic("vault: key store is not connected to vault")
+	}
 	if store.sealed {
-		return kms.ErrSealed
+		return key.ErrStoreSealed
 	}
 
-	content, err := json.Marshal(key)
+	content, err := json.Marshal(secret)
 	if err != nil {
 		return err
 	}
 	payload := map[string]interface{}{
-		"key": string(content),
+		name: string(content),
 	}
 
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
-	if _, ok := store.cache[key.Name]; ok {
-		return kms.ErrKeyExists
+	if _, ok := store.cache[name]; ok {
+		return key.ErrKeyExists
 	}
 
-	_, err = store.client.Logical().Write(fmt.Sprintf("/kv/%s/%s", store.name, key.Name), payload)
+	_, err = store.client.Logical().Write(fmt.Sprintf("/kv/%s/%s", store.Name, name), payload)
 	if err != nil {
 		return err
 	}
-	store.cache[key.Name] = key
+	store.cache[name] = secret
 	return nil
 }
 
-func (v *KeyStore) List() []string {
-	if v.sealed {
-		return []string{}
-	}
-
-	v.lock.RLock()
-	defer v.lock.RUnlock()
-
-	names := make([]string, 0, len(v.cache))
-	for name := range v.cache {
-		names = append(names, name)
-	}
-	return names
-}
-
 func (store *KeyStore) Delete(name string) error {
+	if store.client == nil {
+		panic("vault: key store is not connected to vault")
+	}
 	if store.sealed {
-		return kms.ErrSealed
+		return key.ErrStoreSealed
 	}
 
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
-	_, err := store.client.Logical().Delete(fmt.Sprintf("/kv/%s/%s", store.name, name))
+	_, err := store.client.Logical().Delete(fmt.Sprintf("/kv/%s/%s", store.Name, name))
 	delete(store.cache, name)
 	return err
 }
@@ -192,7 +184,8 @@ func (store *KeyStore) authenticate(login AppRole) (token string, ttl time.Durat
 	return token, ttl, err
 }
 
-func (store *KeyStore) checkStatus(delay time.Duration) {
+func (store *KeyStore) checkStatus(ctx context.Context, delay time.Duration) {
+	var timer *time.Timer
 	for {
 		status, err := store.client.Sys().Health()
 		if err == nil {
@@ -201,26 +194,39 @@ func (store *KeyStore) checkStatus(delay time.Duration) {
 
 			if gotSealed {
 				store.lock.Lock()
-				store.cache = map[string]kms.Key{}
+				store.cache = map[string]key.Secret{}
 				store.lock.Unlock()
 			}
 		}
-		time.Sleep(delay)
+
+		if timer == nil {
+			timer = time.NewTimer(delay)
+		} else {
+			timer.Reset(delay)
+		}
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
 }
 
-func (store *KeyStore) renewAuthToken(login AppRole, ttl time.Duration) {
-	if login.Retry == 0 {
-		login.Retry = 15 * time.Second
-	}
+func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl time.Duration) {
 	for {
 		// If Vault is sealed we have to wait
 		// until it is unsealed again.
 		// The Vault status is checked by another go routine
 		// constantly by querying the Vault health status.
-		if store.sealed {
-			time.Sleep(1 * time.Second)
-			continue
+		for store.sealed {
+			timer := time.NewTimer(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
 		}
 		// If the TTL is 0 we cannot renew the token.
 		// Therefore, we try to re-authenticate and
@@ -234,7 +240,13 @@ func (store *KeyStore) renewAuthToken(login AppRole, ttl time.Duration) {
 			token, ttl, err = store.authenticate(login)
 			if err != nil {
 				ttl = 0
-				time.Sleep(login.Retry)
+				timer := time.NewTimer(login.Retry)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
 				continue
 			}
 			store.client.SetToken(token) // SetToken is safe to call from different go routines
@@ -244,8 +256,14 @@ func (store *KeyStore) renewAuthToken(login AppRole, ttl time.Duration) {
 		// such tht we can renew it. We repeat that until
 		// the renewable process fails once. In this case
 		// we try to re-authenticate again.
+		timer := time.NewTimer(ttl / 2)
 		for {
-			time.Sleep(ttl / 2)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
 			secret, err := store.client.Auth().Token().RenewSelf(int(ttl.Seconds()))
 			if err != nil || secret == nil {
 				break
@@ -257,6 +275,7 @@ func (store *KeyStore) renewAuthToken(login AppRole, ttl time.Duration) {
 			if err != nil || ttl == 0 {
 				break
 			}
+			timer.Reset(ttl / 2)
 		}
 		ttl = 0
 	}

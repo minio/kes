@@ -6,201 +6,299 @@ import (
 	"net/http"
 	"path"
 
-	"github.com/aead/key/internal/xhttp"
-	"github.com/aead/key/kms"
 	"github.com/secure-io/sio-go/sioutil"
 )
 
-type createKeyRequest struct {
-	Bytes []byte `json:"bytes"` // Optional
+func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if method != r.Method {
+			w.Header().Set("Accept", method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		f(w, r)
+	}
 }
 
-func createKeyHandler(store kms.KeyStore) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		var req createKeyRequest
+func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, n)
+		f(w, r)
+	}
+}
+
+func EnforcePolicies(roles *Roles, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := roles.enforce(r); err != nil {
+			http.Error(w, err.Error(), statusCode(err))
+			return
+		}
+		f(w, r)
+	}
+}
+
+func HandleCreateKey(store Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type request struct {
+			Bytes []byte `json:"bytes"`
+		}
+
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid key name", http.StatusBadRequest)
+			return
+		}
+
+		var req request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid JSON")
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
 		}
-		key := kms.Key{
-			Name:  path.Base(r.URL.Path),
-			Bytes: req.Bytes,
+
+		var secret Secret
+		if len(req.Bytes) > 0 && len(req.Bytes) != len(secret) {
+			http.Error(w, "invalid key", http.StatusBadRequest)
+			return
 		}
-		if len(key.Bytes) == 0 {
-			var err error
-			key.Bytes, err = sioutil.Random(32)
+
+		if len(req.Bytes) != len(secret) {
+			bytes, err := sioutil.Random(len(secret))
 			if err != nil {
-				return err
+				http.Error(w, err.Error(), statusCode(err))
+				return
 			}
+			copy(secret[:], bytes)
+		} else {
+			copy(secret[:], req.Bytes)
 		}
-		return store.Create(key)
+		if err := store.Create(name, secret); err != nil {
+			http.Error(w, err.Error(), statusCode(err))
+		}
 	}
 }
 
-func deleteKeyHandler(store kms.KeyStore) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		return store.Delete(path.Base(r.URL.Path))
+func HandleDeleteKey(store Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid key name", http.StatusBadRequest)
+			return
+		}
+		if err := store.Delete(name); err != nil {
+			http.Error(w, err.Error(), statusCode(err))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
-type generateKeyRequest struct {
-	Context []byte `json:"context"` // Optional
-}
+func HandleGenerateKey(store Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type Request struct {
+			Context []byte `json:"context"`
+		}
+		type Response struct {
+			Plaintext  []byte `json:"plaintext"`
+			Ciphertext []byte `json:"ciphertext"`
+		}
 
-type generateKeyResponse struct {
-	Plaintext  []byte `json:"plaintext"`
-	Ciphertext []byte `json:"ciphertext"`
-}
-
-func generateKeyHandler(store kms.KeyStore) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		var req generateKeyRequest
+		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid JSON")
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
 		}
 
-		name := path.Base(r.URL.Path)
-		key, err := store.Get(name)
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid key name", http.StatusBadRequest)
+			return
+		}
+		secret, err := store.Get(name)
 		if err != nil {
-			return xhttp.AsError(err, http.StatusNotFound, fmt.Sprintf("%s not found", name))
+			err = asStatusError(err, ErrKeyNotFound.Error(), ErrKeyNotFound.Status())
+			http.Error(w, err.Error(), statusCode(err))
+			return
 		}
 
 		dataKey, err := sioutil.Random(32)
 		if err != nil {
-			return err
+			http.Error(w, err.Error(), statusCode(err))
+			return
 		}
-
-		sealedKey, err := key.Seal(dataKey, req.Context)
+		ciphertext, err := secret.Wrap(dataKey, req.Context)
 		if err != nil {
-			return err
+			http.Error(w, err.Error(), statusCode(err))
+			return
 		}
-		ciphertext, err := json.Marshal(sealedKey)
-		if err != nil {
-			return err
-		}
-
-		json.NewEncoder(w).Encode(generateKeyResponse{
+		json.NewEncoder(w).Encode(Response{
 			Plaintext:  dataKey,
 			Ciphertext: ciphertext,
 		})
-		return nil
 	}
 }
 
-type decryptKeyRequest struct {
-	Ciphertext []byte `json:"ciphertext"`
-	Context    []byte `json:"context"`
-}
+func HandleDecryptKey(store Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type Request struct {
+			Ciphertext []byte `json:"ciphertext"`
+			Context    []byte `json:"context"`
+		}
+		type Response struct {
+			Plaintext []byte `json:"plaintext"`
+		}
 
-type decryptKeyResponse struct {
-	Plaintext []byte `json:"plaintext"`
-}
-
-func decryptKeyHandler(store kms.KeyStore) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		var req decryptKeyRequest
+		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid JSON")
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
 		}
 
-		name := path.Base(r.URL.Path)
-		key, err := store.Get(name)
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid key name", http.StatusBadRequest)
+			return
+		}
+		secret, err := store.Get(name)
 		if err != nil {
-			return xhttp.AsError(err, http.StatusNotFound, fmt.Sprintf("%s not found", name))
+			err = asStatusError(err, ErrKeyNotFound.Error(), ErrKeyNotFound.Status())
+			http.Error(w, err.Error(), statusCode(err))
+			return
 		}
-
-		var sealedKey kms.SealedKey
-		if err := json.Unmarshal(req.Ciphertext, &sealedKey); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid ciphertext")
-		}
-		plaintext, err := key.Open(sealedKey, req.Context)
+		plaintext, err := secret.Unwrap(req.Ciphertext, req.Context)
 		if err != nil {
-			return err
+			err = asStatusError(err, "not authentic", http.StatusBadRequest)
+			http.Error(w, err.Error(), statusCode(err))
+			return
 		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(decryptKeyResponse{
+		json.NewEncoder(w).Encode(Response{
 			Plaintext: plaintext,
 		})
-		return nil
 	}
 }
 
-func writePolicyHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
+func HandleWritePolicy(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid policy name", http.StatusBadRequest)
+			return
+		}
+
 		var policy Policy
 		if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid JSON")
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
 		}
-		roles.Set(path.Base(r.URL.Path), &policy)
-		return nil
+		roles.Set(name, &policy)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func readPolicyHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		policy, ok := roles.Get(path.Base(r.URL.Path))
+func HandleReadPolicy(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid policy name", http.StatusBadRequest)
+			return
+		}
+
+		policy, ok := roles.Get(name)
 		if !ok {
-			return xhttp.Error(http.StatusNotFound, "policy does not exists")
+			http.Error(w, "policy does not exists", http.StatusNotFound)
+			return
 		}
 		json.NewEncoder(w).Encode(policy)
-		return nil
 	}
 }
 
-func listPoliciesHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) error {
+func HandleListPolicies(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) { json.NewEncoder(w).Encode(roles.Policies()) }
+}
+
+func HandleDeletePolicy(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid policy name", http.StatusBadRequest)
+			return
+		}
+		roles.Delete(name)
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(roles.Policies())
-		return nil
 	}
 }
 
-func deletePolicyHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		roles.Delete(path.Base(r.URL.Path))
-		w.WriteHeader(http.StatusOK)
-		return nil
-	}
-}
-
-type assignIdentityRequest struct {
-	Policy string `json:"policy"`
-}
-
-func assignIdentityHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		var req assignIdentityRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			return xhttp.AsError(err, http.StatusBadRequest, "invalid JSON")
+func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type Request struct {
+			Policy string `json:"policy"`
 		}
 
-		identity := Identity(path.Base(r.URL.Path))
+		var req Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		identity := Identity(pathBase(r.URL.Path))
+		if identity.IsUnknown() {
+			http.Error(w, "invalid identity", http.StatusBadRequest)
+			return
+		}
 		if identity == roles.Root {
-			return xhttp.Error(http.StatusBadRequest, "identity is root")
+			http.Error(w, "identity is root", http.StatusBadRequest)
+			return
 		}
 		if err := roles.Assign(req.Policy, identity); err != nil {
-			return xhttp.Error(http.StatusNotFound, fmt.Sprintf("policy '%s' does not exists", req.Policy))
+			http.Error(w, "policy does not exists", http.StatusNotFound)
+			return
 		}
 		w.WriteHeader(http.StatusOK)
-		return nil
 	}
 }
 
-func listIdentitiesHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		json.NewEncoder(w).Encode(roles.Identities())
-		return nil
-	}
+func HandleListIdentities(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode(roles.Identities()) }
 }
 
-func forgetIdentityHandler(roles *Roles) xhttp.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		identity := Identity(path.Base(r.URL.Path))
+func HandleForgetIdentity(roles *Roles) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		identity := Identity(pathBase(r.URL.Path))
+		if identity.IsUnknown() {
+			http.Error(w, "invalid identity", http.StatusBadRequest)
+			return
+		}
 		if identity == roles.Root {
-			return xhttp.Error(http.StatusBadRequest, "identity is root")
+			http.Error(w, "identity is root", http.StatusBadRequest)
+			return
 		}
 		roles.Forget(identity)
 		w.WriteHeader(http.StatusOK)
-		return nil
 	}
 }
+
+func pathBase(p string) string { return path.Base(p) }
+
+func statusCode(err error) int {
+	if err, ok := err.(interface{ Status() int }); ok {
+		return err.Status()
+	}
+	return http.StatusInternalServerError
+}
+
+func asStatusError(err error, msg string, status int) error {
+	if _, ok := err.(interface{ Status() int }); ok {
+		return err
+	}
+	return statusError{
+		msg:    fmt.Sprintf("%s: %s", msg, err.Error()),
+		status: status,
+	}
+}
+
+type statusError struct {
+	msg    string
+	status int
+}
+
+func (e statusError) Error() string { return e.msg }
+func (e statusError) Status() int   { return e.status }
