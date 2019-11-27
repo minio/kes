@@ -17,36 +17,58 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-const UnknownIdentity Identity = ""
+// IdentityUnknown is the identity returned
+// by an IdentityFunc if it cannot map a
+// particular X.509 certificate to an actual
+// identity.
+const IdentityUnknown Identity = ""
 
+// An Identity should uniquely identify a client and
+// is computed from the X.509 certificate presented
+// by the client during the TLS handshake using an
+// IdentityFunc.
 type Identity string
 
-func (id Identity) IsUnknown() bool { return id == UnknownIdentity }
+// IsUnknown returns true if and only if the
+// identity is IdentityUnknown.
+func (id Identity) IsUnknown() bool { return id == IdentityUnknown }
 
+// String returns the string representation of
+// the identity.
 func (id Identity) String() string { return string(id) }
 
+// IdentityFunc maps a X.509 certificate to an
+// Identity. This mapping should be deterministic
+// and unique in the sense that:
+//  1. The same certificate always gets mapped to same identity.
+//  2. There is only one (valid / non-expired) certificate that
+//     gets mapped to a particular (known) identity.
+//
+// If no certificate is provided or an identity
+// cannot be computed - e.g. because the certificate
+// does not contain enough information - the IdentityFunc
+// should return IdentityUnknown.
 type IdentityFunc func(*x509.Certificate) Identity
 
+// HashPublicKey returns an IdentityFunc that
+// computes an identity as the cryptographic
+// hash of the certificate's public key.
+//
+// If the hash function is not available
+// it uses crypto.SHA256.
 func HashPublicKey(hash crypto.Hash) IdentityFunc {
 	if !hash.Available() {
 		hash = crypto.SHA256
 	}
 	return func(cert *x509.Certificate) Identity {
 		if cert == nil {
-			return UnknownIdentity
+			return IdentityUnknown
 		}
 		h := hash.New()
 		h.Write(cert.RawSubjectPublicKeyInfo)
 		return Identity(hex.EncodeToString(h.Sum(nil)))
 	}
 }
-
-const errForbidden policyError = "prohibited by policy"
-
-type policyError string
-
-func (e policyError) Error() string { return string(e) }
-func (policyError) Status() int     { return http.StatusForbidden }
 
 type Policy struct {
 	patterns []string
@@ -121,6 +143,8 @@ func NewPolicy(patterns ...string) *Policy {
 		patterns: patterns,
 	}
 }
+
+var errForbidden = NewError(http.StatusForbidden, "prohibited by policy")
 
 func (p *Policy) Verify(r *http.Request) error {
 	for _, pattern := range p.patterns {
@@ -236,11 +260,19 @@ func (r *Roles) Forget(id Identity) {
 
 func (r *Roles) enforce(req *http.Request) error {
 	if req.TLS == nil {
-		return nil // TODO: decide
+		// This can only happen if the server accepts non-TLS
+		// connections - which violates our fundamental security
+		// assumption. Therefore, we respond with BadRequest
+		// and log that the server is not correctly configured.
+		return NewError(http.StatusBadRequest, "insecure connection: TLS required")
 	}
 
 	if len(req.TLS.PeerCertificates) > 1 {
-		return policyError("too many identities: more than one certificate is present")
+		// For now we require that the client sends
+		// only one certificate. However, it's possible
+		// to support multiple - but we have to think
+		// about the semantics.
+		return NewError(http.StatusBadRequest, "too many identities: more than one certificate is present")
 	}
 
 	var cert *x509.Certificate
@@ -273,9 +305,11 @@ func (r *Roles) enforce(req *http.Request) error {
 	return policy.Verify(req)
 }
 
+// defaultIdentify computes the SHA-256 of the
+// public key in cert and returns it as hex.
 func defaultIdentify(cert *x509.Certificate) Identity {
 	if cert == nil {
-		return UnknownIdentity
+		return IdentityUnknown
 	}
 	h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	return Identity(hex.EncodeToString(h[:]))
