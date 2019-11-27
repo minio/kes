@@ -277,7 +277,7 @@ func (c *Client) parseErrorResponse(resp *http.Response) error {
 
 	const limit = 32 * 1024
 	var errMsg strings.Builder
-	if _, err := io.Copy(&errMsg, io.LimitReader(resp.Body, resp.ContentLength)); err != nil {
+	if _, err := io.Copy(&errMsg, io.LimitReader(resp.Body, limit)); err != nil {
 		return err
 	}
 	return fmt.Errorf("%s: %s", http.StatusText(resp.StatusCode), errMsg.String())

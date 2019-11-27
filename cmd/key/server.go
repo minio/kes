@@ -136,10 +136,11 @@ func server(args []string) {
 	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		_ = <-sigCh
+		<-sigCh
 
-		shutdownContext, _ := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
-		if err := server.Shutdown(shutdownContext); err == context.DeadlineExceeded {
+		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
+		err := server.Shutdown(shutdownContext)
+		if cancelShutdown(); err == context.DeadlineExceeded {
 			err = server.Close()
 		}
 		if err != nil {

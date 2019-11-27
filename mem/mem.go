@@ -25,10 +25,10 @@ func (store *KeyStore) Create(name string, secret key.Secret) error {
 	return nil
 }
 
-func (k *KeyStore) Delete(name string) error {
-	k.lock.Lock()
-	delete(k.store, name)
-	k.lock.Unlock()
+func (store *KeyStore) Delete(name string) error {
+	store.lock.Lock()
+	delete(store.store, name)
+	store.lock.Unlock()
 	return nil
 }
 
