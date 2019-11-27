@@ -289,16 +289,5 @@ func asStatusError(err error, msg string, status int) error {
 	if _, ok := err.(interface{ Status() int }); ok {
 		return err
 	}
-	return statusError{
-		msg:    fmt.Sprintf("%s: %s", msg, err.Error()),
-		status: status,
-	}
+	return NewError(status, fmt.Sprintf("%s: %s", msg, err.Error()))
 }
-
-type statusError struct {
-	msg    string
-	status int
-}
-
-func (e statusError) Error() string { return e.msg }
-func (e statusError) Status() int   { return e.status }
