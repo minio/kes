@@ -50,7 +50,7 @@ var secretUnwrapTests = []struct {
 	ShouldFail     bool
 }{
 	{ // 0
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"VJVUvXnRN52Pr/eRJQYUzQ==","nonce":"C5QfVoDLfTKirjjB","bytes":"pF3/xU1e916zhTBHEdPE+E+MR5h9wFsyerjWhYIfdYA="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
 		AssociatedData: nil,
 	},
 	{ // 1
@@ -58,12 +58,12 @@ var secretUnwrapTests = []struct {
 		AssociatedData: nil,
 	},
 	{ // 2
-		Ciphertext:     `{"aead":"AES-GCM","iv":"9Qup+RN5PQLQNxkqSsae","nonce":"C5QfVoDLfTKirjjB","bytes":"pF3/xU1e916zhTBHEdPE+E+MR5h9wFsyerjWhYIfdYA="}`,
+		Ciphertext:     `{"aead":"AES-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // Invalid algorithm
 	},
 	{ // 3
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"9Qup+RN5PQLQNxkqSsae","nonce":"C5QfVoDLfTKirjjB","bytes":"pF3/xU1e916zhTBHEdPE+E+MR5h9wFsyerjWhYIfdYA="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM","iv":"9Qup+RN5PQLQNxkqSsae","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid IV length
 	},
@@ -73,12 +73,12 @@ var secretUnwrapTests = []struct {
 		ShouldFail:     true, // invalid nonce length
 	},
 	{ // 5
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"VJVUvXnRN52Pr/eRJQYUzQ==","nonce":"EryghN51hWA=","bytes":"pF3/xU1e916zhTBHEdPE+E+MR5h9wFsyerjWhYIfdYA="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"EryghN51hWA=","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
 	},
 	{ // 6
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"VJVUvXnRN52Pr/eRJQYUzQ==","nonce":"C5QfVoDLfTKirjjB","bytes":"WH19g/H1oi/eejfRXWiEyPH4QHw2NrG+Wz+HXF07MOU="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"WH19g/H1oi/eejfRXWiEyPH4QHw2NrG+Wz+HXF07MOU="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
 	},
@@ -88,7 +88,7 @@ var secretUnwrapTests = []struct {
 		ShouldFail:     true, // ciphertext not authentic
 	},
 	{ // 8
-		Ciphertext:     `{"aead":"AES-256-GCM" "iv":"VJVUvXnRN52Pr/eRJQYUzQ==","nonce":"C5QfVoDLfTKirjjB","bytes":"pF3/xU1e916zhTBHEdPE+E+MR5h9wFsyerjWhYIfdYA="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM" "iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid JSON
 	},
@@ -120,22 +120,22 @@ var aesDeriveKeyTests = []struct {
 	{
 		Key:        make([]byte, 16),
 		IV:         make([]byte, 16),
-		DerivedKey: mustDecodeHex("66e94bd4ef8a2c3b47711816e91d6ff0"),
+		DerivedKey: mustDecodeHex("219853c2069743cbd1f745723fba24fd"),
 	},
 	{
 		Key:        mustDecodeHex("8f7ac5e8a42206d7c2e605914ba67498"),
 		IV:         mustDecodeHex("e24e500a7359d5564fa6e5d52e6cdc30"),
-		DerivedKey: mustDecodeHex("4df46cff20a8ac7cc2bcd2696ff81c58"),
+		DerivedKey: mustDecodeHex("8f48be964f50b0243a764a29c492ab81"),
 	},
 	{
 		Key:        make([]byte, 32),
 		IV:         make([]byte, 16),
-		DerivedKey: mustDecodeHex("dc95c078a24089895275f3d86b4fb868779b38d15bffb63d39d6e9ae76a9b2f3"),
+		DerivedKey: mustDecodeHex("8ee033a0c90f31e1e8dbb12a2d211c544e4dd17f2d5604ce7126bbd5ed3abb80"),
 	},
 	{
 		Key:        mustDecodeHex("5b647be0a1ecb2a01d3b0223f19b454b114be28cda1bf55bd28c478980139986"),
 		IV:         mustDecodeHex("325b10c6a642a992c3539554358c0b8a"),
-		DerivedKey: mustDecodeHex("3ef16fe5987c5dcbc263ffea80a04eff929990116741d3311f13aab08849592c"),
+		DerivedKey: mustDecodeHex("fc92900f18dc13349e738c54b6d47e1d8d8a3aa1ef088a1d33053a7ea31c7930"),
 	},
 	{
 		Key:        make([]byte, 24),

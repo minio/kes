@@ -170,34 +170,57 @@ func aesDeriveKey(key, iv []byte) ([]byte, error) {
 	}
 	block, _ := aes.NewCipher(key)
 
-	derivedKey := make([]byte, len(key))
-	var v, t [aes.BlockSize]byte
-
 	// RFC 8452 uses the entire nonce (96 bits)
-	// per 64 bit derivation. Since iv is 128 bits
-	// we derive the first 64 bits using the bits
-	// 0..96 and the second 64 bits using the bits
-	// 32..128.
-	binary.LittleEndian.PutUint32(v[:4], 0)
-	copy(v[4:], iv[:12])
-	block.Encrypt(t[:], v[:])
-	copy(derivedKey[0:], t[:8])
+	// per 64 bit derivation as following:
+	//
+	// k0 = E(k, 0 || nonce)[0..8]
+	// k1 = E(k, 1 || nonce)[0..8]
+	// k2 = E(k, 2 || nonce)[0..8]
+	// k3 = E(k, 3 || nonce)[0..8]
+	//
+	// Since iv is 128 bits we have to ensure
+	// that each 64 bit block of the key is
+	// affected by all 128 iv bits. Therefore,
+	// we modify the key derivation of RFC 8452
+	// as following:
+	//
+	// t0 = E(k, 0 || iv[0..12])
+	// t1 = E(k, 1 || iv[4..16])
+	// t2 = E(k, 2 || iv[0..12])
+	// t3 = E(k, 3 || iv[4..16])
+	//
+	// k0 = t0[0..8]  ^ t1[0..8]
+	// k1 = t0[8..16] ^ t1[8..16]
+	// k2 = t2[0..8]  ^ t3[0..8]
+	// k3 = t2[8..16] ^ t3[8..16]
 
-	binary.LittleEndian.PutUint32(v[:4], 1)
-	copy(v[4:], iv[4:16])
-	block.Encrypt(t[:], v[:])
-	copy(derivedKey[8:], t[:8])
+	derivedKey := make([]byte, len(key))
+	var t0, t1 [aes.BlockSize]byte
 
-	if len(key) == 256/8 {
-		binary.LittleEndian.PutUint32(v[:4], 2)
-		copy(v[4:], iv[:12])
-		block.Encrypt(t[:], v[:])
-		copy(derivedKey[16:], t[:8])
+	binary.LittleEndian.PutUint32(t0[:4], 0)
+	copy(t0[4:], iv[0:12])
+	binary.LittleEndian.PutUint32(t1[:4], 1)
+	copy(t1[4:], iv[4:16])
 
-		binary.LittleEndian.PutUint32(v[:4], 3)
-		copy(v[4:], iv[4:16])
-		block.Encrypt(t[:], v[:])
-		copy(derivedKey[24:], t[:8])
+	block.Encrypt(t0[:], t0[:])
+	block.Encrypt(t1[:], t1[:])
+	for i := range t0 {
+		derivedKey[i] = t0[i] ^ t1[i]
+	}
+
+	if len(derivedKey) == 256/8 {
+		var t2, t3 [aes.BlockSize]byte
+
+		binary.LittleEndian.PutUint32(t2[:4], 2)
+		copy(t2[4:], iv[0:12])
+		binary.LittleEndian.PutUint32(t3[:4], 3)
+		copy(t3[4:], iv[4:16])
+
+		block.Encrypt(t2[:], t2[:])
+		block.Encrypt(t3[:], t3[:])
+		for i := range t2 {
+			derivedKey[16+i] = t2[i] ^ t3[i]
+		}
 	}
 	return derivedKey, nil
 }
