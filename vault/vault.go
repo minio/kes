@@ -1,9 +1,8 @@
 package vault
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"sync"
@@ -45,8 +44,9 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 	if err != nil {
 		return err
 	}
+	store.client = client
 
-	status, err := client.Sys().Health()
+	status, err := store.client.Sys().Health()
 	if err != nil {
 		return err
 	}
@@ -62,21 +62,20 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 		client.SetToken(token)
 	}
 
-	store.client = client
 	go store.checkStatus(context, store.StatusPing)
 	go store.renewAuthToken(context, *store.AppRole, ttl)
 	return nil
 }
 
-func (store *KeyStore) Get(name string) (secret key.Secret, err error) {
+func (store *KeyStore) Get(name string) (key.Secret, error) {
 	if store.client == nil {
 		panic("vault: key store is not connected to vault")
 	}
 	if store.sealed {
-		return secret, key.ErrStoreSealed
+		return key.Secret{}, key.ErrStoreSealed
 	}
 
-	// First check whether a master key with that key is cached.
+	// First check whether there is a secret key in the cache.
 	store.lock.RLock()
 	if secret, ok := store.cache[name]; ok {
 		store.lock.RUnlock()
@@ -84,30 +83,54 @@ func (store *KeyStore) Get(name string) (secret key.Secret, err error) {
 	}
 	store.lock.RUnlock()
 
-	// Since we haven't found the requested master key in the cache
+	// Since we haven't found the requested secret key in the cache
 	// we reach out to Vault's K/V store and fetch it from there.
 	entry, err := store.client.Logical().Read(fmt.Sprintf("/kv/%s/%s", store.Name, name))
-	if err != nil {
-		return secret, err
+	if err != nil || entry == nil {
+		// Vault will not return an error if e.g. the key existed but has
+		// been deleted. However, it will return (nil, nil) in this case.
+		if err == nil && entry == nil {
+			return key.Secret{}, key.ErrKeyNotFound
+		}
+		return key.Secret{}, err
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader([]byte(entry.Data[name].(string))))
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&secret); err != nil {
-		return secret, err
+	// Verify that we got a well-formed secret key from Vault
+	v, ok := entry.Data[name]
+	if !ok || v == nil {
+		return key.Secret{}, errors.New("vault: missing secret key")
+	}
+	s, ok := v.(string)
+	if !ok {
+		return key.Secret{}, errors.New("vault: malformed secret key")
+	}
+	decodedSecret, err := base64.StdEncoding.DecodeString(s)
+	if err != nil || len(decodedSecret) != 32 {
+		return key.Secret{}, errors.New("vault: malformed secret key")
 	}
 
-	// Now add the master key to the cache to
+	var secret key.Secret
+	copy(secret[:], decodedSecret)
+
+	// Now add the secret key to the cache to
 	// make subsequent calls faster.
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
-	// First, we have to check that 'name' still does not
-	// exist. We should not override the cache on a Get
-	// when another call has added/fetched a master key
-	// in between.
-	if k, ok := store.cache[name]; ok {
-		return k, nil
+	// First, we have to check whether the secret key has
+	// been added in the meantime by another request. If so,
+	// we use the secret key that is already in the cache since
+	// it may has been used already.
+	// There is anyway no way we can handle a situation where
+	// two different keys have the same name safely. So we just
+	// honor whatever is cached and only add a new cache entry
+	// if none exists.
+	if sec, ok := store.cache[name]; ok {
+		return sec, nil
+	}
+
+	if store.cache == nil {
+		store.cache = map[string]key.Secret{}
 	}
 	store.cache[name] = secret
 	return secret, nil
@@ -121,22 +144,54 @@ func (store *KeyStore) Create(name string, secret key.Secret) error {
 		return key.ErrStoreSealed
 	}
 
-	content, err := json.Marshal(secret)
-	if err != nil {
-		return err
-	}
-	payload := map[string]interface{}{
-		name: string(content),
-	}
-
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
+	// First, we check whether there is a secret key in the cache.
+	if store.cache == nil {
+		store.cache = map[string]key.Secret{}
+	}
 	if _, ok := store.cache[name]; ok {
 		return key.ErrKeyExists
 	}
 
-	_, err = store.client.Logical().Write(fmt.Sprintf("/kv/%s/%s", store.Name, name), payload)
+	// Second we try to check whether key exists on the K/V store.
+	// If so, we must not overwrite it.
+	location := fmt.Sprintf("/kv/%s/%s", store.Name, name)
+
+	// Vault will return nil for the secret as well as a nil-error
+	// if the specified entry does not exist.
+	// More specifically the Vault server + client behaves as following:
+	//  - If the entry does not exist (b/c it never existed) the server
+	//    returns 404 and the client returns the tuple (nil, nil).
+	//  - If the entry does not exist (b/c it existed before but has
+	//    been deleted) the server returns 404 but response with a
+	//    "secret". The client will still parse the response body (even
+	//    though 404) and return (nil, nil) if the body is empty or
+	//    the secret contains no data (and no "warnings" or "errors")
+	//
+	// Therefore, we check whether the client returns a nil error
+	// and a non-nil "secret". In this case, the secret key already
+	// exists.
+	// But when the client returns an error it does not mean that
+	// the entry does not exist but that some other error (e.g.
+	// network error) occurred.
+	switch s, err := store.client.Logical().Read(location); {
+	case err == nil && s != nil:
+		return key.ErrKeyExists
+	case err != nil:
+		return err
+	}
+
+	// Finally, we create the secret key since it seems that it
+	// doesn't exist. However, this is just an assumption since
+	// another key server may have created that key in the meantime.
+	// Since there is now way we can detect that reliable we require
+	// that whoever has the permission to create keys does that in
+	// a non-racy way.
+	_, err := store.client.Logical().Write(location, map[string]interface{}{
+		name: base64.StdEncoding.EncodeToString(secret[:]),
+	})
 	if err != nil {
 		return err
 	}
@@ -155,6 +210,10 @@ func (store *KeyStore) Delete(name string) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
+	// Vault will not return an error if an entry does not
+	// exist. Instead, it responds with 204 No Content and
+	// no body. In this case the client also returns a nil-error
+	// Therefore, we can just try to delete it in any case.
 	_, err := store.client.Logical().Delete(fmt.Sprintf("/kv/%s/%s", store.Name, name))
 	delete(store.cache, name)
 	return err
