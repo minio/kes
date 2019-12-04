@@ -22,6 +22,10 @@ type serverConfig struct {
 		Identities []key.Identity `toml:"identities"`
 	} `toml:"policy"`
 
+	Fs struct {
+		Dir string `toml:"path"`
+	} `toml:"fs"`
+
 	Vault struct {
 		Addr string `toml:"address"`
 		Name string `toml:"name"`

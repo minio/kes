@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aead/key"
+	"github.com/aead/key/fs"
 	"github.com/aead/key/mem"
 	"github.com/aead/key/vault"
 )
@@ -77,8 +78,29 @@ func server(args []string) {
 		tlsCertPath = config.TLS.CertPath
 	}
 
-	var store key.Store = &mem.KeyStore{}
-	if config.Vault.Addr != "" {
+	if config.Fs.Dir != "" && config.Vault.Addr != "" {
+		failf(cli.Output(), "Ambiguous configuration: more than one key store specified")
+	}
+
+	var store key.Store
+	switch {
+	case config.Fs.Dir != "":
+		f, err := os.Stat(config.Fs.Dir)
+		if err != nil && !os.IsNotExist(err) {
+			failf(cli.Output(), "Failed to open %s: %v", config.Fs.Dir, err)
+		}
+		if err == nil && !f.IsDir() {
+			failf(cli.Output(), "%s is not a directory", config.Fs.Dir)
+		}
+		if os.IsNotExist(err) {
+			if err = os.MkdirAll(config.Fs.Dir, 0700); err != nil {
+				failf(cli.Output(), "Failed to create directory %s: %v", config.Fs.Dir, err)
+			}
+		}
+		store = &fs.KeyStore{
+			Dir: config.Fs.Dir,
+		}
+	case config.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
 			Addr: config.Vault.Addr,
 			Name: config.Vault.Name,
@@ -93,6 +115,8 @@ func server(args []string) {
 			failf(cli.Output(), "Failed to connect to Vault: %v", err)
 		}
 		store = vaultStore
+	default:
+		store = &mem.KeyStore{}
 	}
 
 	roles := &key.Roles{
