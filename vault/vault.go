@@ -105,7 +105,7 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 		if err != nil {
 			return err
 		}
-		client.SetToken(token)
+		store.client.SetToken(token)
 	}
 
 	go store.checkStatus(context, store.StatusPingAfter)
