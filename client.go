@@ -182,8 +182,8 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 	return &policy, nil
 }
 
-func (c *Client) ListPolicies() ([]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/list", c.addr))
+func (c *Client) ListPolicies(pattern string) ([]string, error) {
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.addr, pattern))
 	if err != nil {
 		return nil, err
 	}
@@ -237,8 +237,8 @@ func (c *Client) AssignIdentity(policy string, id Identity) error {
 	return nil
 }
 
-func (c *Client) ListIdentities() (map[Identity]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/identity/list", c.addr))
+func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.addr, pattern))
 	if err != nil {
 		return nil, err
 	}

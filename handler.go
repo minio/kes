@@ -212,7 +212,16 @@ func HandleReadPolicy(roles *Roles) http.HandlerFunc {
 }
 
 func HandleListPolicies(roles *Roles) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) { json.NewEncoder(w).Encode(roles.Policies()) }
+	return func(w http.ResponseWriter, r *http.Request) {
+		var policies []string
+		pattern := pathBase(r.URL.Path)
+		for _, policy := range roles.Policies() {
+			if ok, err := path.Match(pattern, policy); ok && err == nil {
+				policies = append(policies, policy)
+			}
+		}
+		json.NewEncoder(w).Encode(policies)
+	}
 }
 
 func HandleDeletePolicy(roles *Roles) http.HandlerFunc {
@@ -257,7 +266,16 @@ func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 }
 
 func HandleListIdentities(roles *Roles) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode(roles.Identities()) }
+	return func(w http.ResponseWriter, r *http.Request) {
+		pattern := pathBase(r.URL.Path)
+		identities := map[Identity]string{}
+		for id, policy := range roles.Identities() {
+			if ok, err := path.Match(pattern, id.String()); ok && err == nil {
+				identities[id] = policy
+			}
+		}
+		json.NewEncoder(w).Encode(identities)
+	}
 }
 
 func HandleForgetIdentity(roles *Roles) http.HandlerFunc {

@@ -40,7 +40,7 @@ func policy(args []string) {
 		addPolicy(args)
 	case "show":
 		showPolicy(args)
-	case "ls", "list":
+	case "list":
 		listPolicies(args)
 	case "delete":
 		deletePolicy(args)
@@ -154,11 +154,17 @@ func showPolicy(args []string) {
 	}
 }
 
-const listPoliciesCmdUsage = `List all named policies.
+const listPoliciesCmdUsage = `List named policies.
 
-It prints the name of each policy to STDOUT. By default,
-the policy definition is printed in a human-readable
-format to a terminal or as JSON to a UNIX pipe / file.
+It prints the name of each policy that matches the pattern
+to STDOUT. If no pattern is specified the default pattern
+which matches any policy name is used. By default, the
+policy definition is printed in a human-readable format
+to a terminal or as JSON to a UNIX pipe / file.
+
+usage: %s [<pattern>]
+
+  -h, --help           Show list of command-line options
 `
 
 func listPolicies(args []string) {
@@ -168,9 +174,13 @@ func listPolicies(args []string) {
 	}
 
 	cli.Parse(args[1:])
-	if cli.NArg() != 0 {
+	if args = cli.Args(); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
+	}
+	policy := "*"
+	if len(args) == 1 {
+		policy = args[0]
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
@@ -178,7 +188,7 @@ func listPolicies(args []string) {
 		Certificates:       loadClientCertificates(),
 	})
 
-	policies, err := client.ListPolicies()
+	policies, err := client.ListPolicies(policy)
 	if err != nil {
 		failf(cli.Output(), "Failed to list policies: %v", err)
 	}

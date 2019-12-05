@@ -71,8 +71,8 @@ func assignIdentity(args []string) {
 	}
 }
 
-const listIdentityCmdUsage = `usage: %s
-  
+const listIdentityCmdUsage = `usage: %s [<pattern>]
+
   -h, --help           Show list of command-line options
 `
 
@@ -83,16 +83,20 @@ func listIdentity(args []string) {
 	}
 
 	cli.Parse(args[1:])
-	if cli.NArg() != 0 {
+	if args = cli.Args(); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
+	}
+	pattern := "*"
+	if len(args) == 1 {
+		pattern = args[0]
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       loadClientCertificates(),
 	})
-	identityRoles, err := client.ListIdentities()
+	identityRoles, err := client.ListIdentities(pattern)
 	if err != nil {
 		failf(cli.Output(), "Cannot list identities: %v", err)
 	}

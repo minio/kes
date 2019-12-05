@@ -148,11 +148,11 @@ func server(args []string) {
 
 	mux.Handle("/v1/policy/write/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleWritePolicy(roles)))))
 	mux.Handle("/v1/policy/read/", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleReadPolicy(roles)))))
-	mux.Handle("/v1/policy/list", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListPolicies(roles)))))
+	mux.Handle("/v1/policy/list/", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListPolicies(roles)))))
 	mux.Handle("/v1/policy/delete/", key.RequireMethod(http.MethodDelete, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleDeletePolicy(roles)))))
 
 	mux.Handle("/v1/identity/assign/", key.RequireMethod(http.MethodPost, key.LimitRequestBody(maxBody, key.EnforcePolicies(roles, key.HandleAssignIdentity(roles)))))
-	mux.Handle("/v1/identity/list", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListIdentities(roles)))))
+	mux.Handle("/v1/identity/list/", key.RequireMethod(http.MethodGet, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleListIdentities(roles)))))
 	mux.Handle("/v1/identity/forget/", key.RequireMethod(http.MethodDelete, key.LimitRequestBody(0, key.EnforcePolicies(roles, key.HandleForgetIdentity(roles)))))
 
 	server := http.Server{
