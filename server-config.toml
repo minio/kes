@@ -1,0 +1,85 @@
+# The HTTPS address of the key server
+address = "https://127.0.0.1:7373"
+
+# The root identity. Root is the identity that can perform
+# any operation. A root identity must be specified - either
+# here as part of the config file or via a CLI argument.
+root = "c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d"
+
+# Cache expiry specifies when cache entries expire
+[cache.expiry]
+# Period after which all cache entries are discarded.
+# It determines how often the key server has to fetch
+# a secret key from the backend storage.
+all    = "1h" 
+# Period after which all unused cache entries are discarded.
+# It determines how often "not frequently" used secret keys
+# must be fetched from the backend storage.
+unused = "30s" 
+
+# The TLS configuration of the key server.
+# A key server only speaks HTTP over TLS (HTTPS).
+# Therefore, a TLS private key and public certificate must be specified -
+# either here as part of the config file or via CLI arguments.
+[tls]
+key  = "./private.key" # Path to the TLS private key
+cert = "./public.crt"  # Path to the TLS certificate
+
+# Policy definitions. A policy must have an unique name
+# (i.e. [policy.<name>]) and specifies which APIs can
+# be accessed with this policies (i.e. paths = [ ... ]).
+#
+# Each key server API has an unique path. For instance the
+# API for creating new secret keys is available under: /v1/key/create/
+# Therefore, a policy granting access to /v1/key/create/* 
+# allows all identities assigned to that policy to create 
+# secret keys with arbitrary names (observe the glob pattern *).
+# Now, you can restrict the policy to allow only creating secret
+# keys that start with "my-app" by: /v1/key/create/my-app*
+#
+# In general, each user/applicaton should only have the minimal
+# set of policy permissions to accomplish whatever it needs to do.
+# Therefore, it is recommended to define policies based on workflows
+# and then assign them to the identities.
+#
+# The following policies are just dummy policies. Please adjust them to
+# your needs:
+[policy.prod-app] # Policy that allows data key generation and decryption with secret keys starting with "prod-*"
+paths      = [ "/v1/key/generate/prod-*" , "/v1/key/decrypt/prod-*" ]
+identities = [ "df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258" , 
+               "c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731" 
+             ]
+
+[policy.prod-ops] # Policy that allows creating and deleting secret keys starting with "prod-*"
+paths      = [ "/v1/key/create/prod-*" , "/v1/key/delete/prod-*" ]
+identities = [ "c956add675567b7a2e5011c6efe6106bc2504a71ce406299a8dd7e292d1610da" ]
+
+[policy.prod-admin] # Policy that allows displaying policies and identity management operations.
+paths      = [ "/v1/policy/show/prod-*",
+               "/v1/policy/list/prod-*",
+               "/v1/identity/assign/*", 
+               "/v1/identity/list/*", 
+               "/v1/identity/forget/*"
+             ]
+identities = [ "7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127" ]
+ 
+# Backend storage. Only one of the following may be enabled.
+# If none is enabled the key server will use a non-persistant
+# in-memory storage backend.
+
+# The file system backend. The key server will store secret keys
+# as files in the directory specified by path.
+[fs]
+# path = "/home/andreas/keys" 
+
+# The Vault K/V backend. The key server will store secret keys
+# as K/V entries at the key-value backend provided by Vault. 
+[vault]
+# address = "http://127.0.0.1:8200"
+# name = "demo"
+[vault.approle]
+# id     = "2d6b6b67-514c-6841-ffcb-322e3ba8437a"
+# secret = "6f85e4d0-9af0-d784-718e-86caef0cb0a8"
+# retry  = "15s"
+[vault.status]
+# ping = "10s"
