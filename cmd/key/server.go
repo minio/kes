@@ -98,25 +98,32 @@ func server(args []string) {
 			}
 		}
 		store = &fs.KeyStore{
-			Dir: config.Fs.Dir,
+			Dir:                    config.Fs.Dir,
+			CacheExpireAfter:       config.Cache.Expiry.All,
+			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 		}
 	case config.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
-			Addr: config.Vault.Addr,
-			Name: config.Vault.Name,
-			AppRole: &vault.AppRole{
+			Addr:     config.Vault.Addr,
+			Location: config.Vault.Name,
+			AppRole: vault.AppRole{
 				ID:     config.Vault.AppRole.ID,
 				Secret: config.Vault.AppRole.Secret,
 				Retry:  config.Vault.AppRole.Retry,
 			},
-			StatusPing: config.Vault.Status.Ping,
+			CacheExpireAfter:       config.Cache.Expiry.All,
+			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
+			StatusPingAfter:        config.Vault.Status.Ping,
 		}
 		if err = vaultStore.Authenticate(context.Background()); err != nil {
 			failf(cli.Output(), "Failed to connect to Vault: %v", err)
 		}
 		store = vaultStore
 	default:
-		store = &mem.KeyStore{}
+		store = &mem.KeyStore{
+			CacheExpireAfter:       config.Cache.Expiry.All,
+			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
+		}
 	}
 
 	roles := &key.Roles{

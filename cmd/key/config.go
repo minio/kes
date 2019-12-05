@@ -22,6 +22,13 @@ type serverConfig struct {
 		Identities []key.Identity `toml:"identities"`
 	} `toml:"policy"`
 
+	Cache struct {
+		Expiry struct {
+			All    time.Duration `toml:"all"`
+			Unused time.Duration `toml:"unused"`
+		} `toml:"expiry"`
+	} `toml:"cache"`
+
 	Fs struct {
 		Dir string `toml:"path"`
 	} `toml:"fs"`
