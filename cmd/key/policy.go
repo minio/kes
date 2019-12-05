@@ -60,6 +60,8 @@ usage: %s <policy> <file>
   
   --json               Encode policy as JSON instead of TOML. 
 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+
   -h, --help           Show list of command-line options
 `
 
@@ -69,6 +71,9 @@ func addPolicy(args []string) {
 		fmt.Fprintf(cli.Output(), addPolicyCmdUsage, cli.Name())
 	}
 
+	var insecureSkipVerify bool
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+
 	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) != 2 {
 		cli.Usage()
@@ -76,7 +81,7 @@ func addPolicy(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 
@@ -105,6 +110,8 @@ format to a terminal or as TOML to a UNIX pipe / file.
 usage: %s <policy>
   
   --json               Encode policy as JSON instead of TOML. 
+ 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -116,7 +123,9 @@ func showPolicy(args []string) {
 	}
 
 	var formatJSON bool
+	var insecureSkipVerify bool
 	cli.BoolVar(&formatJSON, "json", false, "")
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
 
 	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) == 0 {
@@ -134,7 +143,7 @@ func showPolicy(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 
@@ -164,6 +173,8 @@ to a terminal or as JSON to a UNIX pipe / file.
 
 usage: %s [<pattern>]
 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+
   -h, --help           Show list of command-line options
 `
 
@@ -172,6 +183,9 @@ func listPolicies(args []string) {
 	cli.Usage = func() {
 		fmt.Print(cli.Output(), listPoliciesCmdUsage)
 	}
+
+	var insecureSkipVerify bool
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
 
 	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) > 1 {
@@ -184,7 +198,7 @@ func listPolicies(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 
@@ -208,6 +222,8 @@ const deletePolicyCmdUsage = `Deletes a named policy.
 
 usage: %s <policy>
 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+
   -h, --help           Show list of command-line options
 `
 
@@ -217,6 +233,9 @@ func deletePolicy(args []string) {
 		fmt.Fprintf(cli.Output(), deletePolicyCmdUsage, cli.Name())
 	}
 
+	var insecureSkipVerify bool
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+
 	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) != 1 {
 		cli.Usage()
@@ -224,7 +243,7 @@ func deletePolicy(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 

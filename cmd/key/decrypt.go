@@ -12,6 +12,9 @@ import (
 
 const decryptCmdUsage = `usage: %s <name> <ciphertext> [<context>]
 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+
+  -h, --help           Show list of command-line options
 `
 
 func decryptKey(args []string) {
@@ -19,8 +22,11 @@ func decryptKey(args []string) {
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), decryptCmdUsage, cli.Name())
 	}
-	cli.Parse(args[1:])
 
+	var insecureSkipVerify bool
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+
+	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) != 2 && len(args) != 3 {
 		cli.Usage()
 		os.Exit(2)
@@ -44,7 +50,7 @@ func decryptKey(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 	plaintext, err := client.DecryptDataKey(name, ciphertext, context)

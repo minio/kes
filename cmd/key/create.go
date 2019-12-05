@@ -12,6 +12,9 @@ import (
 
 const createCmdUsage = `usage: %s name [key]
 
+  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+
+  -h, --help           Show list of command-line options
 `
 
 func createKey(args []string) {
@@ -19,8 +22,11 @@ func createKey(args []string) {
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), createCmdUsage, cli.Name())
 	}
-	cli.Parse(args[1:])
 
+	var insecureSkipVerify bool
+	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+
+	cli.Parse(args[1:])
 	if args = cli.Args(); len(args) != 1 && len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
@@ -39,7 +45,7 @@ func createKey(args []string) {
 	}
 
 	client := key.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
 

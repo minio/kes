@@ -275,16 +275,9 @@ func (r *Roles) enforce(req *http.Request) error {
 		return NewError(http.StatusBadRequest, "too many identities: more than one certificate is present")
 	}
 
-	var cert *x509.Certificate
-	if len(req.TLS.PeerCertificates) > 0 {
-		cert = req.TLS.PeerCertificates[0]
-	}
-
-	var identity Identity
-	if r.Identify == nil {
-		identity = defaultIdentify(cert)
-	} else {
-		identity = r.Identify(cert)
+	identity := Identify(req, r.Identify)
+	if identity.IsUnknown() {
+		return errForbidden
 	}
 	if identity == r.Root {
 		return nil
@@ -303,6 +296,31 @@ func (r *Roles) enforce(req *http.Request) error {
 		return errForbidden
 	}
 	return policy.Verify(req)
+}
+
+// Identify computes the idenitiy of the X.509
+// certificate presented by the peer who sent
+// the request.
+//
+// It returns IdentityUnknown if no TLS connection
+// state is present, more than one certificate
+// is present or when f returns IdentityUnknown.
+func Identify(req *http.Request, f IdentityFunc) Identity {
+	if req.TLS == nil {
+		return IdentityUnknown
+	}
+	if len(req.TLS.PeerCertificates) > 1 {
+		return IdentityUnknown
+	}
+
+	var cert *x509.Certificate
+	if len(req.TLS.PeerCertificates) > 0 {
+		cert = req.TLS.PeerCertificates[0]
+	}
+	if f == nil {
+		return defaultIdentify(cert)
+	}
+	return f(cert)
 }
 
 // defaultIdentify computes the SHA-256 of the

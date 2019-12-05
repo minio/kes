@@ -257,6 +257,10 @@ func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 			http.Error(w, "identity is root", http.StatusBadRequest)
 			return
 		}
+		if identity == Identify(r, roles.Identify) {
+			http.Error(w, "invalid identity: you cannot assign a policy to yourself", http.StatusBadRequest)
+			return
+		}
 		if err := roles.Assign(req.Policy, identity); err != nil {
 			http.Error(w, "policy does not exists", http.StatusNotFound)
 			return
