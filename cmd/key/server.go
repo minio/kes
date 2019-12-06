@@ -30,6 +30,14 @@ const serverCmdUsage = `usage: %s [options]
                        the config file. 
   --tls-cert           Path to the TLS certificate. It takes precedence over
                        the config file.
+
+  --mtls-auth          Controls how the server handles client certificates.
+                       Valid options are:
+                          Require and verify      : --mtls-auth=verify (default)
+                          Require but don't verify: --mtls-auth=ignore
+                       By default, the server will verify that the certificate
+                       presented by the client during the TLS handshake has been
+                       signed by a trusted CA.
 `
 
 func server(args []string) {
@@ -45,14 +53,16 @@ func server(args []string) {
 
 		tlsKeyPath  string
 		tlsCertPath string
+		mtlsAuth    string
 	)
 	cli.StringVar(&addr, "addr", "127.0.0.1:7373", "The address of the server")
 	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
 	cli.StringVar(&rootIdentity, "root", "", "The identity of root - who can perform any operation")
 	cli.StringVar(&tlsKeyPath, "tls-key", "", "Path to the TLS private key")
 	cli.StringVar(&tlsCertPath, "tls-cert", "", "Path to the TLS certificate")
-	cli.Parse(args[1:])
+	cli.StringVar(&mtlsAuth, "mtls-auth", "verify", "Controls how the server handles client certificates.")
 
+	cli.Parse(args[1:])
 	if cli.NArg() != 0 {
 		cli.Usage()
 		os.Exit(2)
@@ -160,8 +170,15 @@ func server(args []string) {
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS13,
-			ClientAuth: tls.RequireAnyClientCert,
 		},
+	}
+	switch mtlsAuth {
+	case "verify":
+		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	case "ignore":
+		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
+	default:
+		failf(cli.Output(), "Invalid option for --mtls-auth: %s", mtlsAuth)
 	}
 
 	sigCh := make(chan os.Signal)
