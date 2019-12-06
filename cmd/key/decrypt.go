@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 const decryptCmdUsage = `usage: %s <name> <ciphertext> [<context>]

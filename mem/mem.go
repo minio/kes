@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/key"
-	"github.com/minio/key/internal/cache"
+	key "github.com/minio/keys"
+	"github.com/minio/keys/internal/cache"
 )
 
 // KeyStore is an in-memory secret key store.

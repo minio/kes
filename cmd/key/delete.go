@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 const deleteCmdUsage = `usage: %s name

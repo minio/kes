@@ -21,8 +21,8 @@ import (
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
-	"github.com/minio/key"
-	"github.com/minio/key/internal/cache"
+	key "github.com/minio/keys"
+	"github.com/minio/keys/internal/cache"
 )
 
 // AppRole holds the Vault AppRole

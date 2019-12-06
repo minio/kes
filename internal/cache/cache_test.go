@@ -7,7 +7,7 @@ package cache
 import (
 	"testing"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 func TestCacheSet(t *testing.T) {

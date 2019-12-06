@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 // An Entry holds a cached secret key and additional

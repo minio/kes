@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 const generateCmdUsage = `usage: %s name [context]

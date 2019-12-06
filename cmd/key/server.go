@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/minio/key"
-	"github.com/minio/key/fs"
-	"github.com/minio/key/mem"
-	"github.com/minio/key/vault"
+	key "github.com/minio/keys"
+	"github.com/minio/keys/fs"
+	"github.com/minio/keys/mem"
+	"github.com/minio/keys/vault"
 )
 
 const serverCmdUsage = `usage: %s [options]

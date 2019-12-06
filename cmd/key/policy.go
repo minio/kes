@@ -13,7 +13,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 )
 
 const policyCmdUsage = `Manage named key policies.

@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/minio/key"
+	key "github.com/minio/keys"
 	"github.com/pelletier/go-toml"
 )
 
