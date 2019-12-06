@@ -1,3 +1,7 @@
+// Copyright 2019 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPL
+// license that can be found in the LICENSE file.
+
 package main
 
 import (
@@ -11,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aead/key"
-	"github.com/aead/key/fs"
-	"github.com/aead/key/mem"
-	"github.com/aead/key/vault"
+	"github.com/minio/key"
+	"github.com/minio/key/fs"
+	"github.com/minio/key/mem"
+	"github.com/minio/key/vault"
 )
 
 const serverCmdUsage = `usage: %s [options]

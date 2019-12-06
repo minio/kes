@@ -1,4 +1,4 @@
-module github.com/aead/key
+module github.com/minio/key
 
 go 1.13
 

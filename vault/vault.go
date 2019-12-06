@@ -1,3 +1,7 @@
+// Copyright 2019 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPL
+// license that can be found in the LICENSE file.
+
 // Package vault implements a secret key store that
 // stores secret keys as key-value entries on the
 // Hashicorp Vault K/V secret backend.
@@ -16,9 +20,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aead/key"
-	"github.com/aead/key/internal/cache"
 	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/minio/key"
+	"github.com/minio/key/internal/cache"
 )
 
 // AppRole holds the Vault AppRole

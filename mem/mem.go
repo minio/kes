@@ -1,3 +1,7 @@
+// Copyright 2019 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPL
+// license that can be found in the LICENSE file.
+
 // Package mem implements an in-memory secret key store.
 package mem
 
@@ -6,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aead/key"
-	"github.com/aead/key/internal/cache"
+	"github.com/minio/key"
+	"github.com/minio/key/internal/cache"
 )
 
 // KeyStore is an in-memory secret key store.

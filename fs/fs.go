@@ -1,3 +1,7 @@
+// Copyright 2019 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPL
+// license that can be found in the LICENSE file.
+
 // Package fs implements a secret key store that
 // stores secret keys as files on the file system.
 package fs
@@ -14,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aead/key"
-	"github.com/aead/key/internal/cache"
+	"github.com/minio/key"
+	"github.com/minio/key/internal/cache"
 )
 
 // KeyStore is a file system secret key store
