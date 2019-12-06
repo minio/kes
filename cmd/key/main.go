@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -66,6 +67,18 @@ func main() {
 func failf(w io.Writer, format string, args ...interface{}) {
 	fmt.Fprintf(w, format, args...)
 	os.Exit(1)
+}
+
+func parseCommandFlags(f *flag.FlagSet, args []string) []string {
+	var parsedArgs []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			f.Parse([]string{arg})
+		} else {
+			parsedArgs = append(parsedArgs, arg)
+		}
+	}
+	return parsedArgs
 }
 
 func serverAddr() string {

@@ -11,7 +11,7 @@ import (
 
 const deleteCmdUsage = `usage: %s name
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -23,10 +23,10 @@ func deleteKey(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) != 1 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
 		cli.Usage()
 		os.Exit(2)
 	}

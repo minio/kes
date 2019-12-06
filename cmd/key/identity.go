@@ -47,7 +47,7 @@ func identity(args []string) {
 
 const assignIdentityCmdUsage = `usage: %s <identity> <policy>
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
 
   -h, --help           Show list of command-line options
 `
@@ -59,10 +59,10 @@ func assignIdentity(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) != 2 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
 	}
@@ -78,7 +78,7 @@ func assignIdentity(args []string) {
 
 const listIdentityCmdUsage = `usage: %s [<pattern>]
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
 
   -h, --help           Show list of command-line options
 `
@@ -90,10 +90,10 @@ func listIdentity(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) > 1 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
@@ -137,7 +137,7 @@ func listIdentity(args []string) {
 
 const forgetIdentityCmdUsage = `usage: %s <identity>
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
   
   -h, --help           Show list of command-line options
 `
@@ -149,10 +149,10 @@ func forgetIdentity(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) != 1 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
 		cli.Usage()
 		os.Exit(2)
 	}

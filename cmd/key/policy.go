@@ -58,9 +58,7 @@ be available under the specified policy name.
 
 usage: %s <policy> <file>
   
-  --json               Encode policy as JSON instead of TOML. 
-
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -72,10 +70,10 @@ func addPolicy(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) != 2 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
 	}
@@ -111,7 +109,7 @@ usage: %s <policy>
   
   --json               Encode policy as JSON instead of TOML. 
  
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -125,10 +123,10 @@ func showPolicy(args []string) {
 	var formatJSON bool
 	var insecureSkipVerify bool
 	cli.BoolVar(&formatJSON, "json", false, "")
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) == 0 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) == 0 {
 		cli.Usage()
 		os.Exit(2)
 	}
@@ -173,7 +171,7 @@ to a terminal or as JSON to a UNIX pipe / file.
 
 usage: %s [<pattern>]
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -185,10 +183,10 @@ func listPolicies(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) > 1 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
@@ -222,7 +220,7 @@ const deletePolicyCmdUsage = `Deletes a named policy.
 
 usage: %s <policy>
 
-  --tls-skip-verify    Skip X.509 certificate validation during TLS handshake
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -234,10 +232,10 @@ func deletePolicy(args []string) {
 	}
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "tls-skip-verify", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) != 1 {
+	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
