@@ -65,7 +65,6 @@ func server(args []string) {
 	cli.StringVar(&tlsKeyPath, "tls-key", "", "Path to the TLS private key")
 	cli.StringVar(&tlsCertPath, "tls-cert", "", "Path to the TLS certificate")
 	cli.StringVar(&mtlsAuth, "mtls-auth", "verify", "Controls how the server handles client certificates.")
-
 	cli.Parse(args[1:])
 	if cli.NArg() != 0 {
 		cli.Usage()
@@ -76,19 +75,25 @@ func server(args []string) {
 	if err != nil {
 		failf(cli.Output(), "Cannot read config file: %v", err)
 	}
-	if addr == "" {
+	if !isFlagPresent(cli, "addr") && config.Addr != "" {
 		addr = config.Addr
 	}
 	if rootIdentity == "" {
 		if config.Root == "" {
-			failf(cli.Output(), "No root identity is present")
+			failf(cli.Output(), "No root identity has been specified")
 		}
-		rootIdentity = string(config.Root)
+		rootIdentity = config.Root.String()
 	}
 	if tlsKeyPath == "" {
+		if config.TLS.KeyPath == "" {
+			failf(cli.Output(), "No private key file has been specified")
+		}
 		tlsKeyPath = config.TLS.KeyPath
 	}
 	if tlsCertPath == "" {
+		if config.TLS.CertPath == "" {
+			failf(cli.Output(), "No certificate file has been specified")
+		}
 		tlsCertPath = config.TLS.CertPath
 	}
 
@@ -129,7 +134,7 @@ func server(args []string) {
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 			StatusPingAfter:        config.Vault.Status.Ping,
 		}
-		if err = vaultStore.Authenticate(context.Background()); err != nil {
+		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			failf(cli.Output(), "Failed to connect to Vault: %v", err)
 		}
 		store = vaultStore
@@ -199,7 +204,7 @@ func server(args []string) {
 			failf(cli.Output(), "Abnormal server shutdown: %v", err)
 		}
 	}()
-	if err = server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
+	if err := server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
 		failf(cli.Output(), "Cannot start server: %v", err)
 	}
 }

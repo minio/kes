@@ -85,6 +85,16 @@ func parseCommandFlags(f *flag.FlagSet, args []string) []string {
 	return parsedArgs
 }
 
+func isFlagPresent(set *flag.FlagSet, name string) bool {
+	found := false
+	set.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
+
 func serverAddr() string {
 	if addr, ok := os.LookupEnv("KEY_SERVER"); ok {
 		return addr

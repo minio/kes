@@ -53,21 +53,17 @@ type serverConfig struct {
 	} `toml:"vault"`
 }
 
-func loadServerConfig(path string) (*serverConfig, error) {
-	var config serverConfig
-
-	// Set config defaults
-	config.Vault.AppRole.Retry = 15 * time.Second
-	config.Vault.Status.Ping = 10 * time.Second
+func loadServerConfig(path string) (config serverConfig, err error) {
+	if path == "" {
+		return config, nil
+	}
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return config, err
 	}
 	defer file.Close()
 
-	if err = toml.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
-	}
-	return &config, nil
+	err = toml.NewDecoder(file).Decode(&config)
+	return config, err
 }

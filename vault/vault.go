@@ -275,6 +275,9 @@ func (store *KeyStore) authenticate(login AppRole) (token string, ttl time.Durat
 }
 
 func (store *KeyStore) checkStatus(ctx context.Context, delay time.Duration) {
+	if delay == 0 {
+		delay = 10 * time.Second
+	}
 	var timer *time.Timer
 	for {
 		status, err := store.client.Sys().Health()
@@ -300,6 +303,9 @@ func (store *KeyStore) checkStatus(ctx context.Context, delay time.Duration) {
 }
 
 func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl time.Duration) {
+	if login.Retry == 0 {
+		login.Retry = 5 * time.Second
+	}
 	for {
 		// If Vault is sealed we have to wait
 		// until it is unsealed again.
