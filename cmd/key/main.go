@@ -22,12 +22,13 @@ const usage = `usage: %s <command>
     create               Create a new master key at a key server.
     delete               Delete a master key from a key server.
 
-    gen                  Generate a new data key from a master key.
-    dec                  Decrypt a encrypted data key using a master key.
+    derive               Derives a new data key from a master key.
+    decrypt              Decrypt a encrypted data key using a master key.
 
-    identify             Compute the identity of a TLS certificate.
     identity             Assign policies to identities.
     policy               Manage the key server policies.
+
+    tool                 Run specific key and identity management tools.
 
   -h, --help             Show this list of command line optios.
 `
@@ -52,16 +53,16 @@ func main() {
 		createKey(args)
 	case "delete":
 		deleteKey(args)
-	case "gen":
+	case "derive":
 		generateKey(args)
-	case "dec":
+	case "decrypt":
 		decryptKey(args)
-	case "identify":
-		identify(args)
 	case "identity":
 		identity(args)
 	case "policy":
 		policy(args)
+	case "tool":
+		tool(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
