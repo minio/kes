@@ -6,7 +6,7 @@ address = "https://127.0.0.1:7373"
 # here as part of the config file or via a CLI argument.
 root = "c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d"
 
-# Cache expiry specifies when cache entries expire
+# Cache expiry specifies when cache entries expire.
 [cache.expiry]
 # Period after which all cache entries are discarded.
 # It determines how often the key server has to fetch
@@ -27,16 +27,23 @@ cert = "./public.crt"  # Path to the TLS certificate
 
 # Policy definitions. A policy must have an unique name
 # (i.e. [policy.<name>]) and specifies which APIs can
-# be accessed with this policies (i.e. paths = [ ... ]).
+# be accessed (i.e. paths = [ ... ]).
 #
-# Each key server API has an unique path. For instance the
-# API for creating new secret keys is available under: /v1/key/create/
-# Therefore, a policy granting access to /v1/key/create/* 
-# allows all identities assigned to that policy to create 
-# secret keys with arbitrary names (observe the glob pattern *).
-# Now, you can restrict the policy to allow only creating secret
-# keys that start with "my-app" by: /v1/key/create/my-app*
+# Each server API has an unique path. For instance,
+# /v1/key/create/. A policy specifies which API paths
+# can be accessed. Therefore, a policy compares the
+# request URL path with all of its API path patterns.
+# If the URL path matches one pattern the policy allows
+# the request. 
+# A policy pattern is a glob pattern - e.g. /v1/key/create/abc*
 #
+# A policy has zero (by default) or more assigned identities.
+# When a key server receives a request it first extracts the
+# identity from the TLS certificate sent by the client when
+# establishing the connection. Based on this extracted identity
+# the server finds the policy assigned to the identity and then
+# checks whether the request is valid.
+
 # In general, each user/applicaton should only have the minimal
 # set of policy permissions to accomplish whatever it needs to do.
 # Therefore, it is recommended to define policies based on workflows
@@ -46,7 +53,7 @@ cert = "./public.crt"  # Path to the TLS certificate
 # your needs:
 [policy.prod-app] # Policy that allows data key generation and decryption with secret keys starting with "prod-*"
 paths      = [ "/v1/key/generate/prod-*" , "/v1/key/decrypt/prod-*" ]
-identities = [ "df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258" , 
+identities = [ "df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258", 
                "c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731" 
              ]
 
@@ -63,23 +70,34 @@ paths      = [ "/v1/policy/show/prod-*",
              ]
 identities = [ "7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127" ]
  
-# Backend storage. Only one of the following may be enabled.
-# If none is enabled the key server will use a non-persistant
-# in-memory storage backend.
+# Key stores configuration. A key store holds secret keys.
+# A server can only be configured to use one key store at
+# the same time.
+# If no store is explicitly specified the server will use
+# a a non-persistent in-memory key store.
 
-# The file system backend. The key server will store secret keys
-# as files in the directory specified by path.
+# A file system key store. The secret keys will be stored
+# as files in a directory. The path must be a path to a
+# directory. If it doesn't exist the server will create
+# a new one.
 [fs]
-# path = "/home/andreas/keys" 
+# path = "<path-to-a-directory>" # Uncomment to enable
 
-# The Vault K/V backend. The key server will store secret keys
-# as K/V entries at the key-value backend provided by Vault. 
+# A Vault K/V key store. The server will store secret keys
+# at Vault's key-value backend. For more information see:
+# https://www.vaultproject.io/api/secret/kv/kv-v1.html
 [vault]
-# address = "http://127.0.0.1:8200"
-# name = "demo"
+# address = "https://127.0.0.1:8200" # Uncomment to enable
+name = "<your-prefix>" # An optional K/V prefix. The server will store keys under /kv/<your-prefix>/... 
+
+# Vault AppRole access credentials.
+# See: https://www.vaultproject.io/docs/auth/approle.html 
 [vault.approle]
-# id     = "2d6b6b67-514c-6841-ffcb-322e3ba8437a"
-# secret = "6f85e4d0-9af0-d784-718e-86caef0cb0a8"
-# retry  = "15s"
+id     = "<approle-role-id>"
+secret = "<approle-secret-id>"
+retry  = "15s" # Duration until the server tries to re-authenticate after connection loss.
+
+# Vault status configuration. The key server will periodically
+# reach out to Vault to check its status. 
 [vault.status]
-# ping = "10s"
+ping = "10s" # Duration until the server checks Vault's status again.
