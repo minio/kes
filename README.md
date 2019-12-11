@@ -16,7 +16,8 @@ You need to setup [Go](https://golang.org/doc/install) first.
 For your first steps you can start a (dev) server by:
  1. Clone the repo: `git clone git@github.com:minio/keys.git && cd keys`
  2. Create a TLS private key and certificate for the key server:  
-    `go run ./cmd/key tool identity new --key="./server.key" --cert="server.cert" localhost` 
+    - `openssl ecparam -genkey -name prime256v1 | openssl ec -out server.key`
+    - `openssl req -new -x509 -days 365 -key server.key -out server.cert -subj "/C=/ST=/L=/O=/CN=localhost"`
  3. Create a new identity (named `root`):  
     `go run ./cmd/key tool identity new --key="./root.key" --cert="root.cert" root`
  4. Switch to a new terminal window but stay in the same directory and start the server by:
