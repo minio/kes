@@ -180,6 +180,10 @@ func server(args []string) {
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS13,
 		},
+
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      20 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 	switch mtlsAuth {
 	case "verify":
