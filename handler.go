@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"strings"
 
 	"github.com/secure-io/sio-go/sioutil"
 )
@@ -242,16 +243,6 @@ func HandleDeletePolicy(roles *Roles) http.HandlerFunc {
 
 func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		type Request struct {
-			Policy string `json:"policy"`
-		}
-
-		var req Request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-
 		identity := Identity(pathBase(r.URL.Path))
 		if identity.IsUnknown() {
 			http.Error(w, "invalid identity", http.StatusBadRequest)
@@ -265,7 +256,9 @@ func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 			http.Error(w, "invalid identity: you cannot assign a policy to yourself", http.StatusBadRequest)
 			return
 		}
-		if err := roles.Assign(req.Policy, identity); err != nil {
+
+		policy := pathBase(strings.TrimSuffix(r.URL.Path, identity.String()))
+		if err := roles.Assign(policy, identity); err != nil {
 			http.Error(w, "policy does not exists", http.StatusNotFound)
 			return
 		}

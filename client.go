@@ -220,18 +220,8 @@ func (c *Client) DeletePolicy(name string) error {
 }
 
 func (c *Client) AssignIdentity(policy string, id Identity) error {
-	type Request struct {
-		Policy string `json:"policy"`
-	}
-	body, err := json.Marshal(Request{
-		Policy: policy,
-	})
-	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf("%s/v1/identity/assign/%s", c.addr, id.String())
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	url := fmt.Sprintf("%s/v1/identity/assign/%s/%s", c.addr, policy, id.String())
+	resp, err := c.httpClient.Post(url, "application/json", nil)
 	if err != nil {
 		return err
 	}

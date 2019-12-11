@@ -64,10 +64,11 @@ identities = [ "c956add675567b7a2e5011c6efe6106bc2504a71ce406299a8dd7e292d1610da
 [policy.prod-admin] # Policy that allows displaying policies and identity management operations.
 paths      = [ "/v1/policy/show/prod-*",
                "/v1/policy/list/prod-*",
-               "/v1/identity/assign/*", 
+               "/v1/identity/assign/prod-ops/*", 
+               "/v1/identity/assign/prod-app/*", 
                "/v1/identity/list/*", 
                "/v1/identity/forget/*"
-             ]
+             ] # Observe that the pod-admin can assign identities to prod-ops / prod-app but not to prod-admin 
 identities = [ "7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127" ]
  
 # Key stores configuration. A key store holds secret keys.
