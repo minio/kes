@@ -44,6 +44,6 @@ For your first steps you can start a (dev) server by:
  8. Of course you can decrypt the ciphertext again by passing it to: `key decrypt my-key -k <base64-ciphertext>`
 
 **Note:** You just started a key server with a non-permanent in-memory key store. Therefore, by restarting
-the server all keys created in between will be destroyed. For durable key stores take a look at the config
-file [documentation](https://github.com/minio/keys/blob/master/server-config.toml)
-
+the server all keys created in between will be destroyed. For durable key stores take a look at the 
+[toml](https://github.com/minio/keys/blob/master/server-config.toml) or [yaml](https://github.com/minio/keys/blob/master/server-config.yaml)
+config file.

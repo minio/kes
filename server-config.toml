@@ -1,5 +1,5 @@
-# The HTTPS address of the key server
-address = "https://127.0.0.1:7373"
+# The address of the key server
+address = "127.0.0.1:7373"
 
 # The root identity. Root is the identity that can perform
 # any operation. A root identity must be specified - either
