@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/minio/keys/fs"
 	"github.com/minio/keys/mem"
 	"github.com/minio/keys/vault"
+	"golang.org/x/sys/unix"
 )
 
 const serverCmdUsage = `usage: %s [options]
@@ -29,6 +31,9 @@ const serverCmdUsage = `usage: %s [options]
                        A root identity must be specified - either via this 
                        flag or within the config file. This flag takes 
                        precedence over the config file.
+
+  --mlock              Lock all allocated memory pages to prevent the OS from
+                       swapping them to the disk and eventually leak secrets.
 
   --tls-key            Path to the TLS private key. It takes precedence over
                        the config file. 
@@ -54,6 +59,7 @@ func server(args []string) {
 		addr         string
 		configPath   string
 		rootIdentity string
+		mlock        bool
 
 		tlsKeyPath  string
 		tlsCertPath string
@@ -62,6 +68,7 @@ func server(args []string) {
 	cli.StringVar(&addr, "addr", "127.0.0.1:7373", "The address of the server")
 	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
 	cli.StringVar(&rootIdentity, "root", "", "The identity of root - who can perform any operation")
+	cli.BoolVar(&mlock, "mlock", false, "Lock all allocated memory pages")
 	cli.StringVar(&tlsKeyPath, "tls-key", "", "Path to the TLS private key")
 	cli.StringVar(&tlsCertPath, "tls-cert", "", "Path to the TLS certificate")
 	cli.StringVar(&mtlsAuth, "mtls-auth", "verify", "Controls how the server handles client certificates.")
@@ -99,6 +106,15 @@ func server(args []string) {
 
 	if config.Fs.Dir != "" && config.Vault.Addr != "" {
 		failf(cli.Output(), "Ambiguous configuration: more than one key store specified")
+	}
+
+	if mlock {
+		if runtime.GOOS != "linux" {
+			failf(cli.Output(), "Cannot lock memory: syscall requires a linux system")
+		}
+		if err := unix.Mlockall(syscall.MCL_CURRENT | syscall.MCL_FUTURE); err != nil {
+			failf(cli.Output(), "Cannot lock memory: %v - See: 'man mlockall'", err)
+		}
 	}
 
 	var store key.Store
