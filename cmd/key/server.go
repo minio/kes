@@ -20,7 +20,6 @@ import (
 	"github.com/minio/keys/fs"
 	"github.com/minio/keys/mem"
 	"github.com/minio/keys/vault"
-	"golang.org/x/sys/unix"
 )
 
 const serverCmdUsage = `usage: %s [options]
@@ -112,7 +111,7 @@ func server(args []string) {
 		if runtime.GOOS != "linux" {
 			failf(cli.Output(), "Cannot lock memory: syscall requires a linux system")
 		}
-		if err := unix.Mlockall(syscall.MCL_CURRENT | syscall.MCL_FUTURE); err != nil {
+		if err := mlockall(); err != nil {
 			failf(cli.Output(), "Cannot lock memory: %v - See: 'man mlockall'", err)
 		}
 	}
