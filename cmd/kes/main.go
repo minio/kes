@@ -6,9 +6,9 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -39,39 +39,39 @@ func main() {
 		fmt.Fprintf(cli.Output(), usage, cli.Name())
 	}
 	cli.Parse(os.Args[1:])
-
 	args := cli.Args()
+
 	if len(args) < 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
+	var err error
 	switch args[0] {
 	case "server":
-		server(args)
+		err = server(args)
 	case "create":
-		createKey(args)
+		err = createKey(args)
 	case "delete":
-		deleteKey(args)
+		err = deleteKey(args)
 	case "derive":
-		generateKey(args)
+		err = deriveKey(args)
 	case "decrypt":
-		decryptKey(args)
+		err = decryptKey(args)
 	case "identity":
-		identity(args)
+		err = identity(args)
 	case "policy":
-		policy(args)
+		err = policy(args)
 	case "tool":
-		tool(args)
+		err = tool(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
 	}
-}
-
-func failf(w io.Writer, format string, args ...interface{}) {
-	fmt.Fprintf(w, format, args...)
-	os.Exit(1)
+	if err != nil {
+		fmt.Fprintln(cli.Output(), err)
+		os.Exit(1)
+	}
 }
 
 func parseCommandFlags(f *flag.FlagSet, args []string) []string {
@@ -103,17 +103,20 @@ func serverAddr() string {
 	return "https://127.0.0.1:7373"
 }
 
-func loadClientCertificates() []tls.Certificate {
+func loadClientCertificates() ([]tls.Certificate, error) {
 	certPath := os.Getenv("KEY_CLIENT_TLS_CERT_FILE")
 	keyPath := os.Getenv("KEY_CLIENT_TLS_KEY_FILE")
-	if certPath != "" || keyPath != "" {
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-		if err != nil {
-			failf(os.Stderr, "Cannot load TLS key or cert for client auth: %s", err.Error())
-		}
-		return []tls.Certificate{cert}
+	if certPath == "" {
+		return nil, errors.New("No client TLS certificate: env KEY_CLIENT_TLS_CERT_FILE is not set or empty")
 	}
-	return nil
+	if keyPath == "" {
+		return nil, errors.New("No client TLS private key: env KEY_CLIENT_TLS_KEY_FILE is not set or empty")
+	}
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load TLS key or cert for client: %v", err)
+	}
+	return []tls.Certificate{cert}, nil
 }
 
 func isTerm(f *os.File) bool { return terminal.IsTerminal(int(f.Fd())) }

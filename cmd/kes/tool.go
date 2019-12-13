@@ -17,7 +17,7 @@ const toolCmdUsage = `usage: %s <command>
   -h, --help           Show list of command-line options
 `
 
-func tool(args []string) {
+func tool(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), toolCmdUsage, cli.Name())
@@ -31,9 +31,10 @@ func tool(args []string) {
 
 	switch args[0] {
 	case "identity":
-		toolIdentity(args)
+		return toolIdentity(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
+		return nil // for the compiler
 	}
 }

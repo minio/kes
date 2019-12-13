@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ const serverCmdUsage = `usage: %s [options]
                        signed by a trusted CA.
 `
 
-func server(args []string) {
+func server(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), serverCmdUsage, cli.Name())
@@ -79,40 +80,40 @@ func server(args []string) {
 
 	config, err := loadServerConfig(configPath)
 	if err != nil {
-		failf(cli.Output(), "Cannot read config file: %v", err)
+		return fmt.Errorf("Cannot read config file: %v", err)
 	}
 	if !isFlagPresent(cli, "addr") && config.Addr != "" {
 		addr = config.Addr
 	}
 	if rootIdentity == "" {
 		if config.Root == "" {
-			failf(cli.Output(), "No root identity has been specified")
+			return errors.New("No root identity has been specified")
 		}
 		rootIdentity = config.Root.String()
 	}
 	if tlsKeyPath == "" {
 		if config.TLS.KeyPath == "" {
-			failf(cli.Output(), "No private key file has been specified")
+			return errors.New("No private key file has been specified")
 		}
 		tlsKeyPath = config.TLS.KeyPath
 	}
 	if tlsCertPath == "" {
 		if config.TLS.CertPath == "" {
-			failf(cli.Output(), "No certificate file has been specified")
+			return errors.New("No certificate file has been specified")
 		}
 		tlsCertPath = config.TLS.CertPath
 	}
 
 	if config.Fs.Dir != "" && config.Vault.Addr != "" {
-		failf(cli.Output(), "Ambiguous configuration: more than one key store specified")
+		return errors.New("Ambiguous configuration: more than one key store specified")
 	}
 
 	if mlock {
 		if runtime.GOOS != "linux" {
-			failf(cli.Output(), "Cannot lock memory: syscall requires a linux system")
+			return errors.New("Cannot lock memory: syscall requires a linux system")
 		}
 		if err := mlockall(); err != nil {
-			failf(cli.Output(), "Cannot lock memory: %v - See: 'man mlockall'", err)
+			return fmt.Errorf("Cannot lock memory: %v - See: 'man mlockall'", err)
 		}
 	}
 
@@ -121,14 +122,14 @@ func server(args []string) {
 	case config.Fs.Dir != "":
 		f, err := os.Stat(config.Fs.Dir)
 		if err != nil && !os.IsNotExist(err) {
-			failf(cli.Output(), "Failed to open %s: %v", config.Fs.Dir, err)
+			return fmt.Errorf("Failed to open %s: %v", config.Fs.Dir, err)
 		}
 		if err == nil && !f.IsDir() {
-			failf(cli.Output(), "%s is not a directory", config.Fs.Dir)
+			return fmt.Errorf("%s is not a directory", config.Fs.Dir)
 		}
 		if os.IsNotExist(err) {
 			if err = os.MkdirAll(config.Fs.Dir, 0700); err != nil {
-				failf(cli.Output(), "Failed to create directory %s: %v", config.Fs.Dir, err)
+				return fmt.Errorf("Failed to create directory %s: %v", config.Fs.Dir, err)
 			}
 		}
 		store = &fs.KeyStore{
@@ -150,7 +151,7 @@ func server(args []string) {
 			StatusPingAfter:        config.Vault.Status.Ping,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
-			failf(cli.Output(), "Failed to connect to Vault: %v", err)
+			return fmt.Errorf("Failed to connect to Vault: %v", err)
 		}
 		store = vaultStore
 	default:
@@ -167,7 +168,7 @@ func server(args []string) {
 		roles.Set(name, kes.NewPolicy(policy.Paths...))
 		for _, identity := range policy.Identities {
 			if roles.IsAssigned(identity) {
-				failf(cli.Output(), "Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
+				return fmt.Errorf("Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
 			}
 			roles.Assign(name, identity)
 		}
@@ -206,7 +207,7 @@ func server(args []string) {
 	case "ignore":
 		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
 	default:
-		failf(cli.Output(), "Invalid option for --mtls-auth: %s", mtlsAuth)
+		return fmt.Errorf("Invalid option for --mtls-auth: %s", mtlsAuth)
 	}
 
 	sigCh := make(chan os.Signal)
@@ -220,10 +221,11 @@ func server(args []string) {
 			err = server.Close()
 		}
 		if err != nil {
-			failf(cli.Output(), "Abnormal server shutdown: %v", err)
+			fmt.Fprintf(cli.Output(), "Abnormal server shutdown: %v\n", err)
 		}
 	}()
 	if err := server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
-		failf(cli.Output(), "Cannot start server: %v", err)
+		return fmt.Errorf("Cannot start server: %v", err)
 	}
+	return nil
 }

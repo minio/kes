@@ -21,7 +21,7 @@ const decryptCmdUsage = `usage: %s <name> <ciphertext> [<context>]
   -h, --help           Show list of command-line options
 `
 
-func decryptKey(args []string) {
+func decryptKey(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), decryptCmdUsage, cli.Name())
@@ -30,7 +30,6 @@ func decryptKey(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 && len(args) != 3 {
 		cli.Usage()
 		os.Exit(2)
@@ -44,22 +43,27 @@ func decryptKey(args []string) {
 	)
 	ciphertext, err = base64.StdEncoding.DecodeString(args[1])
 	if err != nil {
-		failf(cli.Output(), "Invalid ciphertext: %s", err.Error())
+		return fmt.Errorf("Invalid ciphertext: %v", err)
 	}
 	if len(args) == 3 {
 		context, err = base64.StdEncoding.DecodeString(args[2])
 		if err != nil {
-			failf(cli.Output(), "Invalid context: %s", err.Error())
+			return fmt.Errorf("Invalid context: %v", err)
 		}
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
+
 	plaintext, err := client.DecryptDataKey(name, ciphertext, context)
 	if err != nil {
-		failf(cli.Output(), "Failed to decrypt data key: %s", err.Error())
+		return fmt.Errorf("Failed to decrypt data key: %v", err)
 	}
 
 	if isTerm(os.Stdout) {
@@ -67,4 +71,5 @@ func decryptKey(args []string) {
 	} else {
 		fmt.Printf(`{"plaintext":"%s"}`, base64.StdEncoding.EncodeToString(plaintext))
 	}
+	return nil
 }

@@ -28,7 +28,7 @@ usage: %s <command>
   -h, --help           Show list of command-line options
 `
 
-func policy(args []string) {
+func policy(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), policyCmdUsage, cli.Name())
@@ -41,16 +41,17 @@ func policy(args []string) {
 	}
 	switch args[0] {
 	case "add":
-		addPolicy(args)
+		return addPolicy(args)
 	case "show":
-		showPolicy(args)
+		return showPolicy(args)
 	case "list":
-		listPolicies(args)
+		return listPolicies(args)
 	case "delete":
-		deletePolicy(args)
+		return deletePolicy(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
+		return nil // for the compiler
 	}
 }
 
@@ -67,7 +68,7 @@ usage: %s <policy> <file>
   -h, --help           Show list of command-line options
 `
 
-func addPolicy(args []string) {
+func addPolicy(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), addPolicyCmdUsage, cli.Name())
@@ -76,31 +77,35 @@ func addPolicy(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 
 	data, err := ioutil.ReadFile(args[1])
 	if err != nil {
-		failf(cli.Output(), "Cannot read policy file '%s': %v", args[1], err)
+		return fmt.Errorf("Cannot read policy file '%s': %v", args[1], err)
 	}
 	var policy kes.Policy
 	if err = policy.UnmarshalTOML(data); err != nil {
 		if err = policy.UnmarshalJSON(data); err != nil {
-			failf(cli.Output(), "Policy file contains neither valid TOML nor valid JSON")
+			return fmt.Errorf("Policy file contains neither valid TOML nor valid JSON")
 		}
 	}
 
 	if err := client.WritePolicy(args[0], &policy); err != nil {
-		failf(cli.Output(), "Failed to add policy '%s': %v", args[0], err)
+		return fmt.Errorf("Failed to add policy '%s': %v", args[0], err)
 	}
+	return nil
 }
 
 const showPolicyCmdUsage = `Downloads and prints key policies.
@@ -118,7 +123,7 @@ usage: %s <policy>
   -h, --help           Show list of command-line options
 `
 
-func showPolicy(args []string) {
+func showPolicy(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), showPolicyCmdUsage, cli.Name())
@@ -144,14 +149,18 @@ func showPolicy(args []string) {
 		}
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 
 	policy, err := client.ReadPolicy(name)
 	if err != nil {
-		failf(cli.Output(), "Failed to fetch policy '%s': %v", args[0], err)
+		return fmt.Errorf("Failed to fetch policy '%s': %v", args[0], err)
 	}
 	switch {
 	case isTerm(os.Stdout) && !formatJSON:
@@ -163,6 +172,7 @@ func showPolicy(args []string) {
 		output, _ := policy.MarshalTOML()
 		os.Stdout.Write(output)
 	}
+	return nil
 }
 
 const listPoliciesCmdUsage = `List named policies.
@@ -180,7 +190,7 @@ usage: %s [<pattern>]
   -h, --help           Show list of command-line options
 `
 
-func listPolicies(args []string) {
+func listPolicies(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Print(cli.Output(), listPoliciesCmdUsage)
@@ -189,7 +199,6 @@ func listPolicies(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
@@ -199,14 +208,18 @@ func listPolicies(args []string) {
 		policy = args[0]
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 
 	policies, err := client.ListPolicies(policy)
 	if err != nil {
-		failf(cli.Output(), "Failed to list policies: %v", err)
+		return fmt.Errorf("Failed to list policies: %v", err)
 	}
 	sort.Strings(policies)
 	if isTerm(os.Stdout) {
@@ -218,6 +231,7 @@ func listPolicies(args []string) {
 	} else {
 		json.NewEncoder(os.Stdout).Encode(policies)
 	}
+	return nil
 }
 
 const deletePolicyCmdUsage = `Deletes a named policy.
@@ -229,7 +243,7 @@ usage: %s <policy>
   -h, --help           Show list of command-line options
 `
 
-func deletePolicy(args []string) {
+func deletePolicy(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), deletePolicyCmdUsage, cli.Name())
@@ -244,12 +258,17 @@ func deletePolicy(args []string) {
 		os.Exit(2)
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 
 	if err := client.DeletePolicy(args[0]); err != nil {
-		failf(cli.Output(), "Failed to delete policy '%s': %v", args[0], err)
+		return fmt.Errorf("Failed to delete policy '%s': %v", args[0], err)
 	}
+	return nil
 }

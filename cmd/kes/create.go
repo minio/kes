@@ -21,7 +21,7 @@ const createCmdUsage = `usage: %s name [key]
   -h, --help           Show list of command-line options
 `
 
-func createKey(args []string) {
+func createKey(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), createCmdUsage, cli.Name())
@@ -30,7 +30,6 @@ func createKey(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 && len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
@@ -43,17 +42,22 @@ func createKey(args []string) {
 	if len(args) == 2 {
 		b, err := base64.StdEncoding.DecodeString(args[1])
 		if err != nil {
-			failf(cli.Output(), "Invalid key: %s", err.Error())
+			return fmt.Errorf("Invalid key: %v", err)
 		}
 		bytes = b
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 
 	if err := client.CreateKey(name, bytes); err != nil {
-		failf(cli.Output(), "Failed to create %s: %s", name, err.Error())
+		return fmt.Errorf("Failed to create %s: %v", name, err)
 	}
+	return nil
 }

@@ -20,7 +20,7 @@ const deleteCmdUsage = `usage: %s name
   -h, --help           Show list of command-line options
 `
 
-func deleteKey(args []string) {
+func deleteKey(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), deleteCmdUsage, cli.Name())
@@ -29,18 +29,22 @@ func deleteKey(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
 	name := args[0]
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 	if err := client.DeleteKey(name); err != nil {
-		failf(cli.Output(), "Failed to delete %s: %s", name, err.Error())
+		return fmt.Errorf("Failed to delete %s: %v", name, err)
 	}
+	return nil
 }

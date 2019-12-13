@@ -24,7 +24,7 @@ const identityCmdUsage = `usage: %s <command>
   -h, --help           Show list of command-line options
 `
 
-func identity(args []string) {
+func identity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), identityCmdUsage, cli.Name())
@@ -38,14 +38,15 @@ func identity(args []string) {
 
 	switch args[0] {
 	case "assign":
-		assignIdentity(args)
+		return assignIdentity(args)
 	case "list":
-		listIdentity(args)
+		return listIdentity(args)
 	case "forget":
-		forgetIdentity(args)
+		return forgetIdentity(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
+		return nil // for the compiler
 	}
 }
 
@@ -56,7 +57,7 @@ const assignIdentityCmdUsage = `usage: %s <identity> <policy>
   -h, --help           Show list of command-line options
 `
 
-func assignIdentity(args []string) {
+func assignIdentity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), assignIdentityCmdUsage, cli.Name())
@@ -65,19 +66,23 @@ func assignIdentity(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 	if err := client.AssignIdentity(args[1], kes.Identity(args[0])); err != nil {
-		failf(cli.Output(), "Failed to assign policy '%s' to '%s': %v", args[1], args[0], err)
+		return fmt.Errorf("Failed to assign policy '%s' to '%s': %v", args[1], args[0], err)
 	}
+	return nil
 }
 
 const listIdentityCmdUsage = `usage: %s [<pattern>]
@@ -87,7 +92,7 @@ const listIdentityCmdUsage = `usage: %s [<pattern>]
   -h, --help           Show list of command-line options
 `
 
-func listIdentity(args []string) {
+func listIdentity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), listIdentityCmdUsage, cli.Name())
@@ -96,7 +101,6 @@ func listIdentity(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
 		cli.Usage()
 		os.Exit(2)
@@ -106,13 +110,17 @@ func listIdentity(args []string) {
 		pattern = args[0]
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 	identityRoles, err := client.ListIdentities(pattern)
 	if err != nil {
-		failf(cli.Output(), "Cannot list identities: %v", err)
+		return fmt.Errorf("Cannot list identities: %v", err)
 	}
 	identities := make([]string, 0, len(identityRoles))
 	for id := range identityRoles {
@@ -137,6 +145,7 @@ func listIdentity(args []string) {
 		}
 		fmt.Print("}")
 	}
+	return nil
 }
 
 const forgetIdentityCmdUsage = `usage: %s <identity>
@@ -146,7 +155,7 @@ const forgetIdentityCmdUsage = `usage: %s <identity>
   -h, --help           Show list of command-line options
 `
 
-func forgetIdentity(args []string) {
+func forgetIdentity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), forgetIdentityCmdUsage, cli.Name())
@@ -155,17 +164,21 @@ func forgetIdentity(args []string) {
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
+	certificates, err := loadClientCertificates()
+	if err != nil {
+		return err
+	}
 	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       loadClientCertificates(),
+		Certificates:       certificates,
 	})
 	if err := client.ForgetIdentity(kes.Identity(args[0])); err != nil {
-		failf(cli.Output(), "Cannot forget '%s': %v", args[0], err)
+		return fmt.Errorf("Cannot forget '%s': %v", args[0], err)
 	}
+	return nil
 }

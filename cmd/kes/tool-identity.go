@@ -35,7 +35,7 @@ const toolIdentityCmdUsage = `usage: %s <command>
   -h, --help           Show list of command-line options
 `
 
-func toolIdentity(args []string) {
+func toolIdentity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), toolIdentityCmdUsage, cli.Name())
@@ -49,12 +49,13 @@ func toolIdentity(args []string) {
 
 	switch args[0] {
 	case "of":
-		identityOf(args)
+		return identityOf(args)
 	case "new":
-		newIdentity(args)
+		return newIdentity(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
+		return nil // for the compiler
 	}
 }
 
@@ -70,7 +71,7 @@ const newIdentityCmdUsage = `usage: %s [options] <name>
   -h, --help           Show list of command-line options
 `
 
-func newIdentity(args []string) {
+func newIdentity(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), newIdentityCmdUsage, cli.Name())
@@ -96,13 +97,13 @@ func newIdentity(args []string) {
 
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		failf(cli.Output(), "Failed to generate Ed25519 key pair: %v", err)
+		return fmt.Errorf("Failed to generate Ed25519 key pair: %v", err)
 	}
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		failf(cli.Output(), "Failed to certificate serial number: %v", err)
+		return fmt.Errorf("Failed to certificate serial number: %v", err)
 	}
 
 	now := time.Now()
@@ -120,11 +121,11 @@ func newIdentity(args []string) {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, public, private)
 	if err != nil {
-		failf(cli.Output(), "Failed to create certificate: %v", err)
+		return fmt.Errorf("Failed to create certificate: %v", err)
 	}
 	privBytes, err := x509.MarshalPKCS8PrivateKey(private)
 	if err != nil {
-		failf(cli.Output(), "Failed to encode private key: %v", err)
+		return fmt.Errorf("Failed to encode private key: %v", err)
 	}
 
 	fileFlags := os.O_CREATE | os.O_WRONLY
@@ -141,38 +142,41 @@ func newIdentity(args []string) {
 	keyFile, err = os.OpenFile(keyPath, fileFlags, 0600)
 	if err != nil {
 		if os.IsExist(err) {
-			failf(cli.Output(), "%s already exists: Use --force to overwrite the private key", keyPath)
+			return fmt.Errorf("%s already exists: Use --force to overwrite the private key", keyPath)
 		}
-		failf(cli.Output(), "Failed to create private key: %v", err)
+		return fmt.Errorf("Failed to create private key: %v", err)
 	}
+	defer keyFile.Close()
 
 	certFile, err = os.OpenFile(certPath, fileFlags, 0600)
 	if err != nil {
 		if os.IsExist(err) {
-			failf(cli.Output(), "%s already exists: Use --force to overwrite the certificate", certPath)
+			return fmt.Errorf("%s already exists: Use --force to overwrite the certificate", certPath)
 		}
-		failf(cli.Output(), "Failed to create certificate: %v", err)
+		return fmt.Errorf("Failed to create certificate: %v", err)
 	}
+	defer certFile.Close()
 
 	if err = pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
 		os.Remove(certPath)
-		failf(cli.Output(), "Failed to create certificate: %v", err)
+		return fmt.Errorf("Failed to create certificate: %v", err)
 	}
 	if err = certFile.Close(); err != nil {
 		os.Remove(certPath)
-		failf(cli.Output(), "Failed to close %s: %v", certPath, err)
+		return fmt.Errorf("Failed to close %s: %v", certPath, err)
 	}
 
 	if err = pem.Encode(keyFile, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
 		os.Remove(certPath)
 		os.Remove(keyPath)
-		failf(cli.Output(), "Failed to create private key: %v", err)
+		return fmt.Errorf("Failed to create private key: %v", err)
 	}
 	if err = keyFile.Close(); err != nil {
 		os.Remove(certPath)
 		os.Remove(keyPath)
-		failf(cli.Output(), "Failed to close %s: %v", keyPath, err)
+		return fmt.Errorf("Failed to close %s: %v", keyPath, err)
 	}
+	return nil
 }
 
 const identityOfCmdUsage = `usage: %s [options] <certificate>
@@ -183,7 +187,7 @@ const identityOfCmdUsage = `usage: %s [options] <certificate>
   -h, --help           Show list of command-line options
 `
 
-func identityOf(args []string) {
+func identityOf(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), identityOfCmdUsage, cli.Name())
@@ -205,18 +209,18 @@ func identityOf(args []string) {
 	case "SHA512", "SHA-512":
 		h = crypto.SHA512.New()
 	default:
-		failf(cli.Output(), "Unsupported hash function: %s", hashFunc)
+		return fmt.Errorf("Unsupported hash function: %s", hashFunc)
 	}
 
 	file, err := os.Open(args[0])
 	if err != nil {
-		failf(cli.Output(), "Failed open '%s': %v", args[0], err)
+		return fmt.Errorf("Failed open '%s': %v", args[0], err)
 	}
 	defer file.Close()
 
 	cert, err := parseCertificate(file)
 	if err != nil {
-		failf(cli.Output(), "Failed to parse certificate: %v", err)
+		return fmt.Errorf("Failed to parse certificate: %v", err)
 	}
 	h.Write(cert.RawSubjectPublicKeyInfo)
 
@@ -225,6 +229,7 @@ func identityOf(args []string) {
 	} else {
 		fmt.Print(hex.EncodeToString(h.Sum(nil)))
 	}
+	return nil
 }
 
 func parseCertificate(r io.Reader) (*x509.Certificate, error) {
