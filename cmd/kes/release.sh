@@ -1,6 +1,6 @@
 #!/bin/bash
 
-binaryName="key"
+binaryName="kes"
 platforms=("linux/amd64" "linux/arm"  "windows/amd64" "darwin/amd64" )
 
 for platform in "${platforms[@]}"

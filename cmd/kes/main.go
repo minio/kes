@@ -17,16 +17,11 @@ import (
 
 const usage = `usage: %s <command>
 
-    server               Start a key server.
+    server               Start a kes server.
 
-    create               Create a new master key at a key server.
-    delete               Delete a master key from a key server.
-
-    derive               Derives a new data key from a master key.
-    decrypt              Decrypt a encrypted data key using a master key.
-
+    key                  Manage secret keys.
+    policy               Manage the kes server policies.
     identity             Assign policies to identities.
-    policy               Manage the key server policies.
 
     tool                 Run specific key and identity management tools.
 
@@ -50,14 +45,8 @@ func main() {
 	switch args[0] {
 	case "server":
 		err = server(args)
-	case "create":
-		err = createKey(args)
-	case "delete":
-		err = deleteKey(args)
-	case "derive":
-		err = deriveKey(args)
-	case "decrypt":
-		err = decryptKey(args)
+	case "key":
+		err = key(args)
 	case "identity":
 		err = identity(args)
 	case "policy":
