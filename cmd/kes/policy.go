@@ -13,7 +13,7 @@ import (
 	"os"
 	"sort"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 )
 
 const policyCmdUsage = `Manage named key policies.
@@ -82,7 +82,7 @@ func addPolicy(args []string) {
 		os.Exit(2)
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
@@ -91,7 +91,7 @@ func addPolicy(args []string) {
 	if err != nil {
 		failf(cli.Output(), "Cannot read policy file '%s': %v", args[1], err)
 	}
-	var policy key.Policy
+	var policy kes.Policy
 	if err = policy.UnmarshalTOML(data); err != nil {
 		if err = policy.UnmarshalJSON(data); err != nil {
 			failf(cli.Output(), "Policy file contains neither valid TOML nor valid JSON")
@@ -144,7 +144,7 @@ func showPolicy(args []string) {
 		}
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
@@ -199,7 +199,7 @@ func listPolicies(args []string) {
 		policy = args[0]
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
@@ -244,7 +244,7 @@ func deletePolicy(args []string) {
 		os.Exit(2)
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})

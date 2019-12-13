@@ -21,8 +21,8 @@ import (
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
-	key "github.com/minio/keys"
-	"github.com/minio/keys/internal/cache"
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/cache"
 )
 
 // AppRole holds the Vault AppRole
@@ -118,16 +118,16 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 }
 
 // Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns key.ErrKeyNotFound.
+// If no entry for name exists, Get returns kes.ErrKeyNotFound.
 //
 // In particular, Get reads the secret key from the corresponding
 // entry at the Vault K/V store.
-func (store *KeyStore) Get(name string) (key.Secret, error) {
+func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	if store.client == nil {
 		panic("vault: key store is not connected to vault")
 	}
 	if store.sealed {
-		return key.Secret{}, key.ErrStoreSealed
+		return kes.Secret{}, kes.ErrStoreSealed
 	}
 
 	store.initialize()
@@ -142,26 +142,26 @@ func (store *KeyStore) Get(name string) (key.Secret, error) {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
 		if err == nil && entry == nil {
-			return key.Secret{}, key.ErrKeyNotFound
+			return kes.Secret{}, kes.ErrKeyNotFound
 		}
-		return key.Secret{}, err
+		return kes.Secret{}, err
 	}
 
 	// Verify that we got a well-formed secret key from Vault
 	v, ok := entry.Data[name]
 	if !ok || v == nil {
-		return key.Secret{}, errors.New("vault: missing secret key")
+		return kes.Secret{}, errors.New("vault: missing secret key")
 	}
 	s, ok := v.(string)
 	if !ok {
-		return key.Secret{}, errors.New("vault: malformed secret key")
+		return kes.Secret{}, errors.New("vault: malformed secret key")
 	}
 	decodedSecret, err := base64.StdEncoding.DecodeString(s)
 	if err != nil || len(decodedSecret) != 32 {
-		return key.Secret{}, errors.New("vault: malformed secret key")
+		return kes.Secret{}, errors.New("vault: malformed secret key")
 	}
 
-	var secret key.Secret
+	var secret kes.Secret
 	copy(secret[:], decodedSecret)
 	secret, _ = store.cache.Add(name, secret)
 	return secret, nil
@@ -169,21 +169,21 @@ func (store *KeyStore) Get(name string) (key.Secret, error) {
 
 // Create adds the given secret key to the store if and only
 // if no entry for name exists. If an entry already exists
-// it returns key.ErrKeyExists.
+// it returns kes.ErrKeyExists.
 //
 // In particular, Create creates a new K/V entry on the Vault
 // key store.
-func (store *KeyStore) Create(name string, secret key.Secret) error {
+func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	if store.client == nil {
 		panic("vault: key store is not connected to vault")
 	}
 	if store.sealed {
-		return key.ErrStoreSealed
+		return kes.ErrStoreSealed
 	}
 
 	store.initialize()
 	if _, ok := store.cache.Get(name); ok {
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	}
 
 	// We try to check whether key exists on the K/V store.
@@ -209,7 +209,7 @@ func (store *KeyStore) Create(name string, secret key.Secret) error {
 	// network error) occurred.
 	switch s, err := store.client.Logical().Read(location); {
 	case err == nil && s != nil:
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	case err != nil:
 		return err
 	}
@@ -238,7 +238,7 @@ func (store *KeyStore) Delete(name string) error {
 		panic("vault: key store is not connected to vault")
 	}
 	if store.sealed {
-		return key.ErrStoreSealed
+		return kes.ErrStoreSealed
 	}
 
 	// Vault will not return an error if an entry does not

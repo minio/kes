@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPL
 // license that can be found in the LICENSE file.
 
-package key
+package kes
 
 import (
 	"encoding/json"

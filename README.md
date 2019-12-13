@@ -7,4 +7,4 @@ Almost every large-scale system deals with sensitive information that must be pr
 
 ### Getting Started
 
-For your first steps checkout our [Getting Started](https://github.com/minio/keys/wiki/Getting-Started) guide.
+For your first steps checkout our [Getting Started](https://github.com/minio/kes/wiki/Getting-Started) guide.

@@ -11,20 +11,20 @@ import (
 	"fmt"
 	"os"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 )
 
-const createCmdUsage = `usage: %s name [key]
+const generateCmdUsage = `usage: %s name [context]
 
   -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
 
-func createKey(args []string) {
+func generateKey(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), createCmdUsage, cli.Name())
+		fmt.Fprintf(cli.Output(), generateCmdUsage, cli.Name())
 	}
 
 	var insecureSkipVerify bool
@@ -37,23 +37,33 @@ func createKey(args []string) {
 	}
 
 	var (
-		name  string = args[0]
-		bytes []byte
+		name    string = args[0]
+		context []byte
 	)
 	if len(args) == 2 {
 		b, err := base64.StdEncoding.DecodeString(args[1])
 		if err != nil {
-			failf(cli.Output(), "Invalid key: %s", err.Error())
+			failf(cli.Output(), "Invalid context: %s", err.Error())
 		}
-		bytes = b
+		context = b
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
+	plaintext, ciphertext, err := client.GenerateDataKey(name, context)
+	if err != nil {
+		failf(cli.Output(), "Failed to generate data key: %s", err.Error())
+	}
 
-	if err := client.CreateKey(name, bytes); err != nil {
-		failf(cli.Output(), "Failed to create %s: %s", name, err.Error())
+	if isTerm(os.Stdout) {
+		fmt.Println("{")
+		fmt.Printf("  plaintext : %s\n", base64.StdEncoding.EncodeToString(plaintext))
+		fmt.Printf("  ciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
+		fmt.Println("}")
+	} else {
+		const format = `{"plaintext":"%s","ciphertext":"%s"}`
+		fmt.Printf(format, base64.StdEncoding.EncodeToString(plaintext), base64.StdEncoding.EncodeToString(ciphertext))
 	}
 }

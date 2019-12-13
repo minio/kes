@@ -7,11 +7,11 @@ package cache
 import (
 	"testing"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 )
 
 func TestCacheSet(t *testing.T) {
-	var secret key.Secret
+	var secret kes.Secret
 	secret[0] = 0xff
 
 	var c Cache
@@ -29,7 +29,7 @@ func TestCacheSet(t *testing.T) {
 }
 
 func TestCacheAdd(t *testing.T) {
-	var secret key.Secret
+	var secret kes.Secret
 	secret[0] = 0xff
 
 	var c Cache
@@ -47,7 +47,7 @@ func TestCacheAdd(t *testing.T) {
 }
 
 func TestCacheGet(t *testing.T) {
-	var secret key.Secret
+	var secret kes.Secret
 	secret[0] = 0xff
 
 	var c Cache
@@ -61,7 +61,7 @@ func TestCacheGet(t *testing.T) {
 }
 
 func TestCacheDelete(t *testing.T) {
-	var secret key.Secret
+	var secret kes.Secret
 	secret[0] = 0xff
 
 	var c Cache
@@ -79,7 +79,7 @@ func TestCacheDelete(t *testing.T) {
 }
 
 func TestCacheClear(t *testing.T) {
-	var secret key.Secret
+	var secret kes.Secret
 	secret[0] = 0xff
 
 	var c Cache

@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	key "github.com/minio/keys"
-	"github.com/minio/keys/internal/cache"
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/cache"
 )
 
 // KeyStore is a file system secret key store
@@ -48,20 +48,20 @@ type KeyStore struct {
 
 // Create adds the given secret key to the store if and only
 // if no entry for name exists. If an entry already exists
-// it returns key.ErrKeyExists.
+// it returns kes.ErrKeyExists.
 //
 // In particular, Create creates a new file in KeyStore.Dir
 // and writes the secret key to it.
-func (store *KeyStore) Create(name string, secret key.Secret) error {
+func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	store.initialize()
 	if _, ok := store.cache.Get(name); ok {
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	}
 
 	path := filepath.Join(store.Dir, name)
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil && os.IsExist(err) {
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	}
 	if err != nil {
 		return err
@@ -84,11 +84,11 @@ func (store *KeyStore) Create(name string, secret key.Secret) error {
 }
 
 // Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns key.ErrKeyNotFound.
+// If no entry for name exists, Get returns kes.ErrKeyNotFound.
 //
 // In particular, Get reads the secret key from the associated
 // file in KeyStore.Dir.
-func (store *KeyStore) Get(name string) (key.Secret, error) {
+func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	store.initialize()
 	if secret, ok := store.cache.Get(name); ok {
 		return secret, nil
@@ -98,10 +98,10 @@ func (store *KeyStore) Get(name string) (key.Secret, error) {
 	// we reach out to the disk to fetch it from there.
 	file, err := os.Open(filepath.Join(store.Dir, name))
 	if err != nil && os.IsNotExist(err) {
-		return key.Secret{}, key.ErrKeyNotFound
+		return kes.Secret{}, kes.ErrKeyNotFound
 	}
 	if err != nil {
-		return key.Secret{}, err
+		return kes.Secret{}, err
 	}
 	defer file.Close()
 
@@ -110,13 +110,13 @@ func (store *KeyStore) Get(name string) (key.Secret, error) {
 		Secret []byte `json:"secret"`
 	}
 	if err = json.NewDecoder(file).Decode(&content); err != nil {
-		return key.Secret{}, err
+		return kes.Secret{}, err
 	}
 	if len(content.Secret) != 256/8 {
-		return key.Secret{}, errors.New("fs: malformed secret key")
+		return kes.Secret{}, errors.New("fs: malformed secret key")
 	}
 
-	var secret key.Secret
+	var secret kes.Secret
 	copy(secret[:], content.Secret)
 	secret, _ = store.cache.Add(name, secret)
 	return secret, nil

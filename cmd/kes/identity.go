@@ -11,7 +11,7 @@ import (
 	"os"
 	"sort"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 )
 
 const identityCmdUsage = `usage: %s <command>
@@ -71,11 +71,11 @@ func assignIdentity(args []string) {
 		os.Exit(2)
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
-	if err := client.AssignIdentity(args[1], key.Identity(args[0])); err != nil {
+	if err := client.AssignIdentity(args[1], kes.Identity(args[0])); err != nil {
 		failf(cli.Output(), "Failed to assign policy '%s' to '%s': %v", args[1], args[0], err)
 	}
 }
@@ -106,7 +106,7 @@ func listIdentity(args []string) {
 		pattern = args[0]
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
@@ -123,16 +123,16 @@ func listIdentity(args []string) {
 	if isTerm(os.Stdout) {
 		fmt.Println("{")
 		for _, id := range identities {
-			fmt.Printf("  %s => %s\n", id, identityRoles[key.Identity(id)])
+			fmt.Printf("  %s => %s\n", id, identityRoles[kes.Identity(id)])
 		}
 		fmt.Println("}")
 	} else {
 		fmt.Print("{")
 		for i, id := range identities {
 			if i < len(identities)-1 {
-				fmt.Printf(`"%s":"%s",`, id, identityRoles[key.Identity(id)])
+				fmt.Printf(`"%s":"%s",`, id, identityRoles[kes.Identity(id)])
 			} else {
-				fmt.Printf(`"%s":"%s"`, id, identityRoles[key.Identity(id)])
+				fmt.Printf(`"%s":"%s"`, id, identityRoles[kes.Identity(id)])
 			}
 		}
 		fmt.Print("}")
@@ -161,11 +161,11 @@ func forgetIdentity(args []string) {
 		os.Exit(2)
 	}
 
-	client := key.NewClient(serverAddr(), &tls.Config{
+	client := kes.NewClient(serverAddr(), &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify,
 		Certificates:       loadClientCertificates(),
 	})
-	if err := client.ForgetIdentity(key.Identity(args[0])); err != nil {
+	if err := client.ForgetIdentity(kes.Identity(args[0])); err != nil {
 		failf(cli.Output(), "Cannot forget '%s': %v", args[0], err)
 	}
 }

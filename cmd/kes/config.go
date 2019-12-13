@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 	"github.com/pelletier/go-toml"
 	"gopkg.in/yaml.v2"
 )
 
 type serverConfig struct {
 	Addr string       `toml:"address" yaml:"address"`
-	Root key.Identity `toml:"root" yaml:"root"`
+	Root kes.Identity `toml:"root" yaml:"root"`
 
 	TLS struct {
 		KeyPath  string `toml:"key" yaml:"key"`
@@ -26,7 +26,7 @@ type serverConfig struct {
 
 	Policies map[string]struct {
 		Paths      []string       `toml:"paths" yaml:"paths"`
-		Identities []key.Identity `toml:"identities" yaml:"identities"`
+		Identities []kes.Identity `toml:"identities" yaml:"identities"`
 	} `toml:"policy" yaml:"policy"`
 
 	Cache struct {

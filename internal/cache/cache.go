@@ -12,14 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	key "github.com/minio/keys"
+	"github.com/minio/kes"
 )
 
 // An Entry holds a cached secret key and additional
 // cache-related metadata. For instance, whether the
 // entry has been used recently.
 type Entry struct {
-	Secret key.Secret
+	Secret kes.Secret
 
 	used *uint32
 }
@@ -34,7 +34,7 @@ type Cache struct {
 // Set adds the given secret key to the cache.
 // If there is already an entry for the given
 // name then Set replaces this entry.
-func (c *Cache) Set(name string, secret key.Secret) {
+func (c *Cache) Set(name string, secret kes.Secret) {
 	var used uint32 = 1
 
 	c.lock.Lock()
@@ -56,7 +56,7 @@ func (c *Cache) Set(name string, secret key.Secret) {
 // In particular, Add returns the secret that
 // is in the cache - either the one that existed
 // before or the one added by Add.
-func (c *Cache) Add(name string, secret key.Secret) (key.Secret, bool) {
+func (c *Cache) Add(name string, secret kes.Secret) (kes.Secret, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -78,7 +78,7 @@ func (c *Cache) Add(name string, secret key.Secret) (key.Secret, bool) {
 // Get returns the secret key for the
 // given name. It returns true if and
 // only if a cache entry exists.
-func (c *Cache) Get(name string) (key.Secret, bool) {
+func (c *Cache) Get(name string) (kes.Secret, bool) {
 	c.lock.RLock()
 	entry, ok := c.store[name]
 	c.lock.RUnlock()

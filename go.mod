@@ -1,4 +1,4 @@
-module github.com/minio/keys
+module github.com/minio/kes
 
 go 1.13
 

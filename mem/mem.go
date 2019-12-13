@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	key "github.com/minio/keys"
-	"github.com/minio/keys/internal/cache"
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/cache"
 )
 
 // KeyStore is an in-memory secret key store.
@@ -31,23 +31,23 @@ type KeyStore struct {
 	cache cache.Cache
 
 	lock  sync.RWMutex
-	store map[string]key.Secret
+	store map[string]kes.Secret
 
 	once sync.Once // initializes the store and starts cache GCs
 }
 
 // Create adds the given secret key to the store if and only
 // if no entry for name exists. If an entry already exists
-// it returns key.ErrKeyExists.
-func (store *KeyStore) Create(name string, secret key.Secret) error {
+// it returns kes.ErrKeyExists.
+func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
 	if _, ok := store.cache.Get(name); ok {
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	}
 	if _, ok := store.store[name]; ok {
-		return key.ErrKeyExists
+		return kes.ErrKeyExists
 	}
 	if store.store == nil {
 		store.once.Do(store.initialize)
@@ -68,8 +68,8 @@ func (store *KeyStore) Delete(name string) error {
 }
 
 // Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns key.ErrKeyNotFound.
-func (store *KeyStore) Get(name string) (key.Secret, error) {
+// If no entry for name exists, Get returns kes.ErrKeyNotFound.
+func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	secret, ok := store.cache.Get(name)
 	if ok {
 		return secret, nil
@@ -83,7 +83,7 @@ func (store *KeyStore) Get(name string) (key.Secret, error) {
 
 	secret, ok = store.store[name]
 	if !ok {
-		return key.Secret{}, key.ErrKeyNotFound
+		return kes.Secret{}, kes.ErrKeyNotFound
 	}
 	store.cache.Set(name, secret)
 	return secret, nil
@@ -94,7 +94,7 @@ func (store *KeyStore) initialize() {
 	// since once.Do may modify the in-memory
 	// store.
 	if store.store == nil {
-		store.store = map[string]key.Secret{}
+		store.store = map[string]kes.Secret{}
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
 	}
