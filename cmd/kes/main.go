@@ -25,7 +25,7 @@ const usage = `usage: %s <command>
 
     tool                 Run specific key and identity management tools.
 
-  -h, --help             Show this list of command line optios.
+  -h, --help             Show this list of command line options.
 `
 
 func main() {
@@ -86,20 +86,20 @@ func isFlagPresent(set *flag.FlagSet, name string) bool {
 }
 
 func serverAddr() string {
-	if addr, ok := os.LookupEnv("KEY_SERVER"); ok {
+	if addr, ok := os.LookupEnv("KES_SERVER"); ok {
 		return addr
 	}
 	return "https://127.0.0.1:7373"
 }
 
 func loadClientCertificates() ([]tls.Certificate, error) {
-	certPath := os.Getenv("KEY_CLIENT_TLS_CERT_FILE")
-	keyPath := os.Getenv("KEY_CLIENT_TLS_KEY_FILE")
+	certPath := os.Getenv("KES_CLIENT_TLS_CERT_FILE")
+	keyPath := os.Getenv("KES_CLIENT_TLS_KEY_FILE")
 	if certPath == "" {
-		return nil, errors.New("No client TLS certificate: env KEY_CLIENT_TLS_CERT_FILE is not set or empty")
+		return nil, errors.New("No client TLS certificate: env KES_CLIENT_TLS_CERT_FILE is not set or empty")
 	}
 	if keyPath == "" {
-		return nil, errors.New("No client TLS private key: env KEY_CLIENT_TLS_KEY_FILE is not set or empty")
+		return nil, errors.New("No client TLS private key: env KES_CLIENT_TLS_KEY_FILE is not set or empty")
 	}
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
