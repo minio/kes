@@ -1,16 +1,31 @@
-# The address of the key server
+# The address of the kes server
 address: 127.0.0.1:7373 
+
 # The root identity. Root is the identity that can perform
 # any operation. A root identity must be specified - either
 # here as part of the config file or via a CLI argument.
 root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
-# The TLS configuration of the key server.
-# A key server only speaks HTTP over TLS (HTTPS).
+
+cache:
+  # Cache expiry specifies when cache entries expire.
+  expiry:
+    # Period after which all cache entries are discarded.
+    # It determines how often the kes server has to fetch
+    # a secret key from the key storage.
+    all: 1h0m0s
+    # Period after which all unused cache entries are discarded.
+    # It determines how often "not frequently" used secret keys
+    # must be fetched from the key storage.
+    unused: 30s
+
+# The TLS configuration of the kes server.
+# A kes server speaks HTTP only over TLS (HTTPS).
 # Therefore, a TLS private key and public certificate must be specified -
 # either here as part of the config file or via CLI arguments.
 tls:
   key: ./private.key # Path to the TLS private key
   cert: ./public.crt # Path to the TLS cipertificate
+
 # Policy definitions. A policy must have an unique name
 # (i.e. [policy.<name>]) and specifies which APIs can
 # be accessed (i.e. paths = [ ... ]).
@@ -61,17 +76,7 @@ policy:
     - /v1/key/delete/prod-*
     identities:
     - c956add675567b7a2e5011c6efe6106bc2504a71ce406299a8dd7e292d1610da
-cache:
-  # Cache expiry specifies when cache entries expire.
-  expiry:
-    # Period after which all cache entries are discarded.
-    # It determines how often the key server has to fetch
-    # a secret key from the backend storage.
-    all: 1h0m0s
-    # Period after which all unused cache entries are discarded.
-    # It determines how often "not frequently" used secret keys
-    # must be fetched from the backend storage.
-    unused: 30s
+
 # Key stores configuration. A key store holds secret keys.
 # A server can only be configured to use one key store at
 # the same time.
@@ -83,20 +88,21 @@ cache:
 # directory. If it doesn't exist the server will create
 # a new one.
 fs:
-  path: ""
+  path: "" # Path to your key store
+
 # A Vault K/V key store. The server will store secret keys
 # at Vault's key-value backend. For more information see:
 # https://www.vaultproject.io/api/secret/kv/kv-v1.html
 vault:
-  address: ""
-  name: <your-prefix> # An optional K/V prefix. The server will store keys under /kv/<your-prefix>/... 
+  address: "" # The Vault endpoint - e.g. https://127.0.0.1:8200
+  name: ""    # An optional K/V prefix. The server will store keys under /kv/name/... 
   # Vault AppRole access credentials.
   # See: https://www.vaultproject.io/docs/auth/approle.html 
   approle:
-    id: <approle-role-id>
-    secret: <approle-secret-id>
+    id: ""     # Your Approle Role ID
+    secret: "" # Your AppRole Secret ID
     retry: 15s # Duration until the server tries to re-authenticate after connection loss.
-  # Vault status configuration. The key server will periodically
+  # Vault status configuration. The kes server will periodically
   # reach out to Vault to check its status.
   status:
     ping: 10s # Duration until the server checks Vault's status again.
