@@ -7,10 +7,85 @@ package kes
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/secure-io/sio-go/sioutil"
 )
+
+var secretStringTests = []struct {
+	Secret Secret
+	String string
+}{
+	{Secret: Secret{}, String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`},
+	{Secret: mustDecodeSecret("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
+	{Secret: mustDecodeSecret("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
+}
+
+func TestSecretString(t *testing.T) {
+	for i, test := range secretStringTests {
+		if s := test.Secret.String(); s != test.String {
+			t.Fatalf("Test %d: got %s - want %s", i, s, test.String)
+		}
+	}
+}
+
+func TestSecretWriteTo(t *testing.T) {
+	for i, test := range secretStringTests {
+		var sb strings.Builder
+		test.Secret.WriteTo(&sb)
+		if s := sb.String(); s != test.String {
+			t.Fatalf("Test %d: got %s - want %s", i, s, test.String)
+		}
+	}
+}
+
+var secretParseStringTests = []struct {
+	Secret     Secret
+	String     string
+	ShouldFail bool
+}{
+	{Secret: Secret{}, String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`},
+	{Secret: mustDecodeSecret("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
+	{Secret: mustDecodeSecret("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
+	{Secret: Secret{}, String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: {
+	{Secret: Secret{}, String: `{bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing first: "
+	{Secret: Secret{}, String: `{"bytes""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: :
+	{Secret: Secret{}, String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="`, ShouldFail: true},  // Missing final }
+}
+
+func TestSecretParseString(t *testing.T) {
+	for i, test := range secretParseStringTests {
+		var secret Secret
+		err := secret.ParseString(test.String)
+		if err != nil && !test.ShouldFail {
+			t.Fatalf("Test %d: Failed to parse string: %v", i, err)
+		}
+		if err == nil && test.ShouldFail {
+			t.Fatalf("Test %d: Parsing should have failed but it succeeded", i)
+		}
+		if err == nil && secret != test.Secret {
+			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)
+		}
+	}
+}
+
+func TestSecretReadFrom(t *testing.T) {
+	for i, test := range secretParseStringTests {
+		var secret Secret
+		_, err := secret.ReadFrom(strings.NewReader(test.String))
+		if err != nil && !test.ShouldFail {
+			t.Fatalf("Test %d: Failed to parse string: %v", i, err)
+		}
+		if err == nil && test.ShouldFail {
+			t.Fatalf("Test %d: Parsing should have failed but it succeeded", i)
+		}
+		if err == nil && secret != test.Secret {
+			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)
+		}
+	}
+}
 
 var secretWrapTests = []struct {
 	KeyLen         int
@@ -174,4 +249,15 @@ func mustDecodeHex(s string) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func mustDecodeSecret(s string) Secret {
+	b := mustDecodeHex(s)
+
+	var secret Secret
+	if len(b) != len(secret) {
+		panic(fmt.Sprintf("invalid secret length - got: %d want: %d", len(b), len(secret)))
+	}
+	copy(secret[:], b)
+	return secret
 }

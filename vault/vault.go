@@ -14,7 +14,6 @@ package vault
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -156,13 +155,11 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	if !ok {
 		return kes.Secret{}, errors.New("vault: malformed secret key")
 	}
-	decodedSecret, err := base64.StdEncoding.DecodeString(s)
-	if err != nil || len(decodedSecret) != 32 {
-		return kes.Secret{}, errors.New("vault: malformed secret key")
-	}
 
 	var secret kes.Secret
-	copy(secret[:], decodedSecret)
+	if err = secret.ParseString(s); err != nil {
+		return secret, err
+	}
 	secret, _ = store.cache.Add(name, secret)
 	return secret, nil
 }
@@ -221,7 +218,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	// that whoever has the permission to create keys does that in
 	// a non-racy way.
 	_, err := store.client.Logical().Write(location, map[string]interface{}{
-		name: base64.StdEncoding.EncodeToString(secret[:]),
+		name: secret.String(),
 	})
 	if err != nil {
 		return err

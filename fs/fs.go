@@ -8,11 +8,6 @@ package fs
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -68,9 +63,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	}
 	defer file.Close()
 
-	const format = `{"name":"%s","secret":"%s"}`
-	encoded := fmt.Sprintf(format, name, base64.StdEncoding.EncodeToString(secret[:]))
-	if _, err = io.WriteString(file, encoded); err != nil {
+	if _, err = secret.WriteTo(file); err != nil {
 		os.Remove(path)
 		return err
 	}
@@ -78,7 +71,6 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 		os.Remove(path)
 		return err
 	}
-
 	store.cache.Set(name, secret)
 	return nil
 }
@@ -105,19 +97,10 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	}
 	defer file.Close()
 
-	var content struct {
-		Name   string `json:"name"`
-		Secret []byte `json:"secret"`
-	}
-	if err = json.NewDecoder(file).Decode(&content); err != nil {
-		return kes.Secret{}, err
-	}
-	if len(content.Secret) != 256/8 {
-		return kes.Secret{}, errors.New("fs: malformed secret key")
-	}
-
 	var secret kes.Secret
-	copy(secret[:], content.Secret)
+	if _, err := secret.ReadFrom(file); err != nil {
+		return secret, err
+	}
 	secret, _ = store.cache.Add(name, secret)
 	return secret, nil
 }

@@ -7,11 +7,15 @@ package kes
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
@@ -29,6 +33,66 @@ type sealed struct {
 // It can wrap and unwrap session
 // or data keys.
 type Secret [32]byte
+
+// String returns the string representation
+// of the secret key.
+//
+// It is guaranteed that the returned string
+// is valid JSON.
+func (s Secret) String() string {
+	return fmt.Sprintf(`{"bytes":"%s"}`, base64.StdEncoding.EncodeToString(s[:]))
+}
+
+// ParseString parses v and sets the secret
+// key to the parsed value, on success.
+//
+// ParseString will always be able to successfully
+// parse a string produced by Secret.String().
+func (s *Secret) ParseString(v string) error {
+	const prefix = `{"bytes":"`
+	const suffix = `"}`
+
+	if !strings.HasPrefix(v, prefix) || !strings.HasSuffix(v, suffix) {
+		return errors.New("kes: malformed secret")
+	}
+
+	v = strings.TrimPrefix(v, prefix)
+	v = strings.TrimSuffix(v, suffix)
+
+	b, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		return errors.New("kes: malformed secret")
+	}
+	if len(b) != 32 {
+		return errors.New("kes: malformed secret")
+	}
+	copy(s[:], b)
+	return nil
+}
+
+// WriteTo writes the string representation of the
+// secret to w. It returns the first error encountered
+// during writing, if any, and the number of bytes
+// written to w.
+func (s Secret) WriteTo(w io.Writer) (int64, error) {
+	n, err := io.WriteString(w, s.String())
+	return int64(n), err
+}
+
+// ReadFrom sets the secret to the value read from r,
+// if it could successfully parse whatever data r
+// returns. It returns the first error encountered
+// during reading, if any, and the number of bytes
+// read from r.
+func (s *Secret) ReadFrom(r io.Reader) (int64, error) {
+	const fileSize = 56 // base64.DecodeLen + 12 JSON bytes
+	var sb strings.Builder
+	n, err := io.Copy(&sb, io.LimitReader(r, fileSize))
+	if err != nil {
+		return n, err
+	}
+	return n, s.ParseString(sb.String())
+}
 
 // Wrap encrypts and authenticates the plaintext,
 // authenticates the associatedData and returns

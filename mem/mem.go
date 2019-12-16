@@ -31,7 +31,7 @@ type KeyStore struct {
 	cache cache.Cache
 
 	lock  sync.RWMutex
-	store map[string]kes.Secret
+	store map[string]string
 
 	once sync.Once // initializes the store and starts cache GCs
 }
@@ -53,7 +53,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 		store.once.Do(store.initialize)
 	}
 	store.cache.Set(name, secret)
-	store.store[name] = secret
+	store.store[name] = secret.String()
 	return nil
 }
 
@@ -81,9 +81,12 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
-	secret, ok = store.store[name]
+	s, ok := store.store[name]
 	if !ok {
 		return kes.Secret{}, kes.ErrKeyNotFound
+	}
+	if err := secret.ParseString(s); err != nil {
+		return secret, err
 	}
 	store.cache.Set(name, secret)
 	return secret, nil
@@ -94,7 +97,7 @@ func (store *KeyStore) initialize() {
 	// since once.Do may modify the in-memory
 	// store.
 	if store.store == nil {
-		store.store = map[string]kes.Secret{}
+		store.store = map[string]string{}
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
 	}
