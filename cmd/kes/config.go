@@ -55,6 +55,20 @@ type serverConfig struct {
 				Ping time.Duration `toml:"ping" yaml:"ping"`
 			} `toml:"status" yaml:"status"`
 		} `toml:"vault" yaml:"vault"`
+
+		Aws struct {
+			SecretsManager struct {
+				Addr     string `toml:"address" yaml:"address"`
+				Region   string `toml:"region" yaml:"region"`
+				KmsKeyID string `toml:"kms_key_id" yaml:"kms_key_id"`
+
+				Login struct {
+					AccessKey    string `toml:"access_key" yaml:"access_key"`
+					SecretKey    string `toml:"secret_key" yaml:"secret_key"`
+					SessionToken string `toml:"session_token" yaml:"session_token"`
+				} `toml:"credentials" yaml:"credentials"`
+			} `toml:"secrets_manager" yaml:"secrets_manager"`
+		} `toml:"aws" yaml:"aws"`
 	} `toml:"keystore" yaml:"keystore"`
 }
 

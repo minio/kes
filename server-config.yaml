@@ -101,3 +101,17 @@ keystore:
       retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
     status:       # Vault status configuration. The kes server will periodically reach out to Vault to check its status. 
       ping: 10s   # Duration until the server checks Vault's status again.
+  aws:
+    # The AWS Secrets Manager key store. The server will store
+    # secret keys at the AWS Secrets Manager encrypted with
+    # AWS-KMS. See: https://aws.amazon.com/secrets-manager
+    secrets_manager:
+      address: ""    # The AWS Secrets Manager endpoint - e.g.: secretsmanager.us-east-2.amazonaws.com
+      region: ""     # The AWS region of the Secrets Manager - e.g.: "us-east-2"
+      kms_key_id: "" # The AWS-KMS key ID used to en/decrypt secrets at the Secrets Manager. By default (if not set) the default AWS-KMS key will be used.
+      # The AWS credentials to authenticate for accessing
+      # secrets at AWS Secrets Manager.
+      credentials:
+        access_key: ""    # Your AWS Access Key
+        secret_key: ""    # Your AWS Secret Key
+        session_token: "" # Your AWS session token (usually optional)

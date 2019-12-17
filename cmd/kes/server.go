@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/awsecret"
 	"github.com/minio/kes/fs"
 	"github.com/minio/kes/mem"
 	"github.com/minio/kes/vault"
@@ -104,8 +105,13 @@ func server(args []string) error {
 		tlsCertPath = config.TLS.CertPath
 	}
 
-	if config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "" {
-		return errors.New("Ambiguous configuration: more than one key store specified")
+	switch {
+	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "":
+		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
+	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
+		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager key store are specified at the same time")
+	case config.KeyStore.Vault.Addr != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
+		return errors.New("Ambiguous configuration: Vault and AWS Secrets Manager key store are specified at the same time")
 	}
 
 	if mlock {
@@ -154,6 +160,21 @@ func server(args []string) error {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)
 		}
 		store = vaultStore
+	case config.KeyStore.Aws.SecretsManager.Addr != "":
+		awsStore := &awsecret.KeyStore{
+			Addr:     config.KeyStore.Aws.SecretsManager.Addr,
+			Region:   config.KeyStore.Aws.SecretsManager.Region,
+			KmsKeyID: config.KeyStore.Aws.SecretsManager.KmsKeyID,
+			Login: awsecret.Credentials{
+				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
+				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
+				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken,
+			},
+		}
+		if err := awsStore.Authenticate(); err != nil {
+			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
+		}
+		store = awsStore
 	default:
 		store = &mem.KeyStore{
 			CacheExpireAfter:       config.Cache.Expiry.All,
