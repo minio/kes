@@ -36,24 +36,26 @@ type serverConfig struct {
 		} `toml:"expiry" yaml:"expiry"`
 	} `toml:"cache" yaml:"cache"`
 
-	Fs struct {
-		Dir string `toml:"path" yaml:"path"`
-	} `toml:"fs" yaml:"fs"`
+	KeyStore struct {
+		Fs struct {
+			Dir string `toml:"path" yaml:"path"`
+		} `toml:"fs" yaml:"fs"`
 
-	Vault struct {
-		Addr string `toml:"address" yaml:"address"`
-		Name string `toml:"name" yaml:"name"`
+		Vault struct {
+			Addr string `toml:"address" yaml:"address"`
+			Name string `toml:"name" yaml:"name"`
 
-		AppRole struct {
-			ID     string        `toml:"id" yaml:"id"`
-			Secret string        `toml:"secret" yaml:"secret"`
-			Retry  time.Duration `toml:"retry" yaml:"retry"`
-		} `toml:"approle" yaml:"approle"`
+			AppRole struct {
+				ID     string        `toml:"id" yaml:"id"`
+				Secret string        `toml:"secret" yaml:"secret"`
+				Retry  time.Duration `toml:"retry" yaml:"retry"`
+			} `toml:"approle" yaml:"approle"`
 
-		Status struct {
-			Ping time.Duration `toml:"ping" yaml:"ping"`
-		} `toml:"status" yaml:"status"`
-	} `toml:"vault" yaml:"vault"`
+			Status struct {
+				Ping time.Duration `toml:"ping" yaml:"ping"`
+			} `toml:"status" yaml:"status"`
+		} `toml:"vault" yaml:"vault"`
+	} `toml:"keystore" yaml:"keystore"`
 }
 
 func loadServerConfig(path string) (config serverConfig, err error) {

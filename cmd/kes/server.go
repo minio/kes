@@ -104,7 +104,7 @@ func server(args []string) error {
 		tlsCertPath = config.TLS.CertPath
 	}
 
-	if config.Fs.Dir != "" && config.Vault.Addr != "" {
+	if config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "" {
 		return errors.New("Ambiguous configuration: more than one key store specified")
 	}
 
@@ -119,36 +119,36 @@ func server(args []string) error {
 
 	var store kes.Store
 	switch {
-	case config.Fs.Dir != "":
-		f, err := os.Stat(config.Fs.Dir)
+	case config.KeyStore.Fs.Dir != "":
+		f, err := os.Stat(config.KeyStore.Fs.Dir)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("Failed to open %s: %v", config.Fs.Dir, err)
+			return fmt.Errorf("Failed to open %s: %v", config.KeyStore.Fs.Dir, err)
 		}
 		if err == nil && !f.IsDir() {
-			return fmt.Errorf("%s is not a directory", config.Fs.Dir)
+			return fmt.Errorf("%s is not a directory", config.KeyStore.Fs.Dir)
 		}
 		if os.IsNotExist(err) {
-			if err = os.MkdirAll(config.Fs.Dir, 0700); err != nil {
-				return fmt.Errorf("Failed to create directory %s: %v", config.Fs.Dir, err)
+			if err = os.MkdirAll(config.KeyStore.Fs.Dir, 0700); err != nil {
+				return fmt.Errorf("Failed to create directory %s: %v", config.KeyStore.Fs.Dir, err)
 			}
 		}
 		store = &fs.KeyStore{
-			Dir:                    config.Fs.Dir,
+			Dir:                    config.KeyStore.Fs.Dir,
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 		}
-	case config.Vault.Addr != "":
+	case config.KeyStore.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
-			Addr:     config.Vault.Addr,
-			Location: config.Vault.Name,
+			Addr:     config.KeyStore.Vault.Addr,
+			Location: config.KeyStore.Vault.Name,
 			AppRole: vault.AppRole{
-				ID:     config.Vault.AppRole.ID,
-				Secret: config.Vault.AppRole.Secret,
-				Retry:  config.Vault.AppRole.Retry,
+				ID:     config.KeyStore.Vault.AppRole.ID,
+				Secret: config.KeyStore.Vault.AppRole.Secret,
+				Retry:  config.KeyStore.Vault.AppRole.Retry,
 			},
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			StatusPingAfter:        config.Vault.Status.Ping,
+			StatusPingAfter:        config.KeyStore.Vault.Status.Ping,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)
