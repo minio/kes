@@ -225,19 +225,19 @@ func server(args []string) error {
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", kes.RequireMethod(http.MethodPost, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleCreateKey(store)))))
-	mux.Handle("/v1/key/delete/", kes.RequireMethod(http.MethodDelete, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store)))))
-	mux.Handle("/v1/key/generate/", kes.RequireMethod(http.MethodPost, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store)))))
-	mux.Handle("/v1/key/decrypt/", kes.RequireMethod(http.MethodPost, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store)))))
+	mux.Handle("/v1/key/create/", kes.RequireMethod(http.MethodPost, kes.LimitPathSegments(4, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleCreateKey(store))))))
+	mux.Handle("/v1/key/delete/", kes.RequireMethod(http.MethodDelete, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store))))))
+	mux.Handle("/v1/key/generate/", kes.RequireMethod(http.MethodPost, kes.LimitPathSegments(4, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store))))))
+	mux.Handle("/v1/key/decrypt/", kes.RequireMethod(http.MethodPost, kes.LimitPathSegments(4, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store))))))
 
-	mux.Handle("/v1/policy/write/", kes.RequireMethod(http.MethodPost, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles)))))
-	mux.Handle("/v1/policy/read/", kes.RequireMethod(http.MethodGet, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles)))))
-	mux.Handle("/v1/policy/list/", kes.RequireMethod(http.MethodGet, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles)))))
-	mux.Handle("/v1/policy/delete/", kes.RequireMethod(http.MethodDelete, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles)))))
+	mux.Handle("/v1/policy/write/", kes.RequireMethod(http.MethodPost, kes.LimitPathSegments(4, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles))))))
+	mux.Handle("/v1/policy/read/", kes.RequireMethod(http.MethodGet, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles))))))
+	mux.Handle("/v1/policy/list/", kes.RequireMethod(http.MethodGet, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles))))))
+	mux.Handle("/v1/policy/delete/", kes.RequireMethod(http.MethodDelete, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles))))))
 
-	mux.Handle("/v1/identity/assign/", kes.RequireMethod(http.MethodPost, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles)))))
-	mux.Handle("/v1/identity/list/", kes.RequireMethod(http.MethodGet, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles)))))
-	mux.Handle("/v1/identity/forget/", kes.RequireMethod(http.MethodDelete, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles)))))
+	mux.Handle("/v1/identity/assign/", kes.RequireMethod(http.MethodPost, kes.LimitPathSegments(5, kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles))))))
+	mux.Handle("/v1/identity/list/", kes.RequireMethod(http.MethodGet, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles))))))
+	mux.Handle("/v1/identity/forget/", kes.RequireMethod(http.MethodDelete, kes.LimitPathSegments(4, kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles))))))
 
 	server := http.Server{
 		Addr:    addr,

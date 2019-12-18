@@ -25,6 +25,29 @@ func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func LimitPathSegments(n int, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.EscapedPath() != r.URL.Path {
+			http.Error(w, "request URL contains invalid characters", http.StatusBadRequest)
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, `/`) {
+			r.URL.Path = `/` + r.URL.Path
+		}
+
+		seg := strings.Count(r.URL.Path, `/`)
+		if seg < n {
+			http.Error(w, "request url path contains too few segments", http.StatusBadRequest)
+			return
+		}
+		if seg > n {
+			http.Error(w, "request url path contains too many segments", http.StatusBadRequest)
+			return
+		}
+		f(w, r)
+	}
+}
+
 func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, n)
