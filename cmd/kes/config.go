@@ -36,6 +36,12 @@ type serverConfig struct {
 		} `toml:"expiry" yaml:"expiry"`
 	} `toml:"cache" yaml:"cache"`
 
+	Log struct {
+		Error struct {
+			Files []string `toml:"file" yaml:"file"`
+		} `toml:"error" yaml:"error"`
+	} `toml:"log" yaml:"log"`
+
 	KeyStore struct {
 		Fs struct {
 			Dir string `toml:"path" yaml:"path"`

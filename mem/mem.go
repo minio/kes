@@ -7,6 +7,7 @@ package mem
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -27,6 +28,13 @@ type KeyStore struct {
 	// backend storage again.
 	// Not recently is defined as: CacheExpireUnusedAfter / 2
 	CacheExpireUnusedAfter time.Duration
+
+	// ErrorLog specifies an optional logger for errors
+	// when files cannot be opened, deleted or contain
+	// invalid content.
+	// If nil, logging is done via the log package's
+	// standard logger.
+	ErrorLog *log.Logger
 
 	cache cache.Cache
 
@@ -86,6 +94,7 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 		return kes.Secret{}, kes.ErrKeyNotFound
 	}
 	if err := secret.ParseString(s); err != nil {
+		store.logf("mem: failed to read secret '%s': %v", name, err)
 		return secret, err
 	}
 	store.cache.Set(name, secret)
@@ -100,5 +109,13 @@ func (store *KeyStore) initialize() {
 		store.store = map[string]string{}
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
+	}
+}
+
+func (store *KeyStore) logf(format string, v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Printf(format, v...)
+	} else {
+		store.ErrorLog.Printf(format, v...)
 	}
 }

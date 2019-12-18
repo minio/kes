@@ -71,6 +71,19 @@ all    = "1h"
 # must be fetched from the key storage.
 unused = "30s" 
 
+# Log configuration. In general, the server distinguishes
+# between (operational) errors and audit events. Therefore,
+# there are separate error and audit logs.
+#
+# Errors:
+# The server can log error events to files and you can specify
+# multiple log files. The server will write each error event to
+# each log file. 
+# If no log file (path) is specified the server will log errors
+# to stderr.
+[log]
+error.file = [ ] # Add one or more log file paths here.
+
 # Key stores configuration. A key store holds secret keys.
 # A server can only be configured to use one key store at
 # the same time.

@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -74,6 +75,13 @@ type KeyStore struct {
 	// has been sealed resp. unsealed again.
 	StatusPingAfter time.Duration
 
+	// ErrorLog specifies an optional logger for errors
+	// when files cannot be opened, deleted or contain
+	// invalid content.
+	// If nil, logging is done via the log package's
+	// standard logger.
+	ErrorLog *log.Logger
+
 	cache cache.Cache
 	once  uint32
 
@@ -123,7 +131,8 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 // entry at the Vault K/V store.
 func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	if store.client == nil {
-		panic("vault: key store is not connected to vault")
+		store.log(errNoConnection)
+		return kes.Secret{}, errNoConnection
 	}
 	if store.sealed {
 		return kes.Secret{}, kes.ErrStoreSealed
@@ -136,28 +145,33 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 
 	// Since we haven't found the requested secret key in the cache
 	// we reach out to Vault's K/V store and fetch it from there.
-	entry, err := store.client.Logical().Read(fmt.Sprintf("/kv/%s/%s", store.Location, name))
+	location := fmt.Sprintf("/kv/%s/%s", store.Location, name)
+	entry, err := store.client.Logical().Read(location)
 	if err != nil || entry == nil {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
 		if err == nil && entry == nil {
 			return kes.Secret{}, kes.ErrKeyNotFound
 		}
+		store.logf("vault: failed to read secret '%s': %v", location, err)
 		return kes.Secret{}, err
 	}
 
 	// Verify that we got a well-formed secret key from Vault
 	v, ok := entry.Data[name]
 	if !ok || v == nil {
-		return kes.Secret{}, errors.New("vault: missing secret key")
+		store.logf("vault: failed to read secret '%s': entry exists but no secret key is present", location)
+		return kes.Secret{}, errors.New("vault: K/V entry does not contain any value")
 	}
 	s, ok := v.(string)
 	if !ok {
-		return kes.Secret{}, errors.New("vault: malformed secret key")
+		store.logf("vault: failed to read secret '%s': invalid K/V format", location)
+		return kes.Secret{}, errors.New("vault: invalid K/V entry format")
 	}
 
 	var secret kes.Secret
 	if err = secret.ParseString(s); err != nil {
+		store.logf("vault: failed to read secret '%s': %v", location, err)
 		return secret, err
 	}
 	secret, _ = store.cache.Add(name, secret)
@@ -172,7 +186,8 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 // key store.
 func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	if store.client == nil {
-		panic("vault: key store is not connected to vault")
+		store.log(errNoConnection)
+		return errNoConnection
 	}
 	if store.sealed {
 		return kes.ErrStoreSealed
@@ -208,6 +223,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	case err == nil && s != nil:
 		return kes.ErrKeyExists
 	case err != nil:
+		store.logf("vault: failed to create '%s': %v", location, err)
 		return err
 	}
 
@@ -221,6 +237,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 		name: secret.String(),
 	})
 	if err != nil {
+		store.logf("vault: failed to create '%s': %v", location, err)
 		return err
 	}
 	store.cache.Set(name, secret)
@@ -232,7 +249,8 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 // K/V entry, if it exists.
 func (store *KeyStore) Delete(name string) error {
 	if store.client == nil {
-		panic("vault: key store is not connected to vault")
+		store.log(errNoConnection)
+		return errNoConnection
 	}
 	if store.sealed {
 		return kes.ErrStoreSealed
@@ -242,8 +260,12 @@ func (store *KeyStore) Delete(name string) error {
 	// exist. Instead, it responds with 204 No Content and
 	// no body. In this case the client also returns a nil-error
 	// Therefore, we can just try to delete it in any case.
-	_, err := store.client.Logical().Delete(fmt.Sprintf("/kv/%s/%s", store.Location, name))
+	location := fmt.Sprintf("/kv/%s/%s", store.Location, name)
+	_, err := store.client.Logical().Delete(location)
 	store.cache.Delete(name)
+	if err != nil {
+		store.logf("vault: failed to delete '%s': %v", location, err)
+	}
 	return err
 }
 
@@ -370,9 +392,33 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 	}
 }
 
+// errNoConnection is the error returned and logged by
+// the key store if the vault client hasn't been initialized.
+//
+// This error is returned by Create, Get, Delete, a.s.o.
+// in case of an invalid configuration - i.e. when Authenticate()
+// hasn't been called.
+var errNoConnection = errors.New("vault: no connection to vault server")
+
 func (store *KeyStore) initialize() {
 	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
+	}
+}
+
+func (store *KeyStore) log(v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Println(v...)
+	} else {
+		store.ErrorLog.Println(v...)
+	}
+}
+
+func (store *KeyStore) logf(format string, v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Printf(format, v...)
+	} else {
+		store.ErrorLog.Printf(format, v...)
 	}
 }

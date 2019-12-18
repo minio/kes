@@ -6,8 +6,13 @@ package awsecret
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -47,8 +52,28 @@ type KeyStore struct {
 	// Login contains the AWS credentials (access/secret key).
 	Login Credentials
 
+	// CacheExpireAfter is the duration after which
+	// cache entries expire such that they have to
+	// be loaded from the backend storage again.
+	CacheExpireAfter time.Duration
+
+	// CacheExpireUnusedAfter is the duration after
+	// which not recently used cache entries expire
+	// such that they have to be loaded from the
+	// backend storage again.
+	// Not recently is defined as: CacheExpireUnusedAfter / 2
+	CacheExpireUnusedAfter time.Duration
+
+	// ErrorLog specifies an optional logger for errors
+	// when files cannot be opened, deleted or contain
+	// invalid content.
+	// If nil, logging is done via the log package's
+	// standard logger.
+	ErrorLog *log.Logger
+
 	cache  cache.Cache
 	client *secretsmanager.SecretsManager
+	once   uint32
 }
 
 // Create adds the given secret key to the store if and only
@@ -59,8 +84,10 @@ type KeyStore struct {
 // Manager with the given name containing the secret.
 func (store *KeyStore) Create(name string, secret kes.Secret) error {
 	if store.client == nil {
-		panic("awsecret: key store is not connected to AWS secret manager")
+		store.log(errNoConnection)
+		return errNoConnection
 	}
+	store.initialize()
 	if _, ok := store.cache.Get(name); ok {
 		return kes.ErrKeyExists
 	}
@@ -79,7 +106,9 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 				return kes.ErrKeyExists
 			}
 		}
-		return fmt.Errorf("aws: Failed to create secret: %v", err)
+		err = fmt.Errorf("aws: failed to create secret '%s': %v", name, err)
+		store.log(err)
+		return err
 	}
 	store.cache.Set(name, secret)
 	return nil
@@ -92,8 +121,10 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 // entry at AWS Secrets Manager.
 func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	if store.client == nil {
-		panic("awsecret: key store is not connected to AWS secret manager")
+		store.log(errNoConnection)
+		return kes.Secret{}, errNoConnection
 	}
+	store.initialize()
 	if secret, ok := store.cache.Get(name); ok {
 		return secret, nil
 	}
@@ -105,12 +136,14 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeDecryptionFailure:
-				return kes.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf(""))
+				return kes.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
 			case secretsmanager.ErrCodeResourceNotFoundException:
 				return kes.Secret{}, kes.ErrKeyNotFound
 			}
 		}
-		return kes.Secret{}, fmt.Errorf("aws: Failed to load secret: %v", err)
+		err = fmt.Errorf("aws: failed to read secret '%s': %v", name, err)
+		store.log(err)
+		return kes.Secret{}, err
 	}
 
 	// AWS has two different ways to store a secret. Either as
@@ -123,10 +156,12 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	var secret kes.Secret
 	if response.SecretString != nil {
 		if err = secret.ParseString(*response.SecretString); err != nil {
+			store.logf("aws: failed to read secret '%s': %v", name, err)
 			return secret, err
 		}
 	} else {
 		if _, err = secret.ReadFrom(bytes.NewReader(response.SecretBinary)); err != nil {
+			store.logf("aws: failed to read secret '%s': %v", name, err)
 			return secret, err
 		}
 	}
@@ -139,7 +174,8 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 // Secrets Manager entry, if it exists.
 func (store *KeyStore) Delete(name string) error {
 	if store.client == nil {
-		panic("awsecret: key store is not connected to AWS secret manager")
+		store.log(errNoConnection)
+		return errNoConnection
 	}
 	store.cache.Delete(name)
 
@@ -153,7 +189,9 @@ func (store *KeyStore) Delete(name string) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("aws: Failed to create secret: %v", err)
+		err = fmt.Errorf("aws: failed to delete secret '%s': %v", name, err)
+		store.log(err)
+		return err
 	}
 	return nil
 }
@@ -178,4 +216,36 @@ func (store *KeyStore) Authenticate() error {
 	}
 	store.client = secretsmanager.New(session)
 	return nil
+}
+
+// errNoConnection is the error returned and logged by
+// the key store if the AWS Secrets Manager client hasn't
+// been initialized.
+//
+// This error is returned by Create, Get, Delete, a.s.o.
+// in case of an invalid configuration - i.e. when Authenticate()
+// hasn't been called.
+var errNoConnection = errors.New("aws: no connection to AWS secrets manager")
+
+func (store *KeyStore) initialize() {
+	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
+		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
+		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
+	}
+}
+
+func (store *KeyStore) log(v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Println(v...)
+	} else {
+		store.ErrorLog.Println(v...)
+	}
+}
+
+func (store *KeyStore) logf(format string, v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Printf(format, v...)
+	} else {
+		store.ErrorLog.Printf(format, v...)
+	}
 }

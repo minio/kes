@@ -8,6 +8,7 @@ package fs
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -37,6 +38,13 @@ type KeyStore struct {
 	// Not recently is defined as: CacheExpireUnusedAfter / 2
 	CacheExpireUnusedAfter time.Duration
 
+	// ErrorLog specifies an optional logger for errors
+	// when files cannot be opened, deleted or contain
+	// invalid content.
+	// If nil, logging is done via the log package's
+	// standard logger.
+	ErrorLog *log.Logger
+
 	cache cache.Cache
 	once  uint32
 }
@@ -59,16 +67,23 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 		return kes.ErrKeyExists
 	}
 	if err != nil {
+		store.logf("fs: cannot open %s: %v", path, err)
 		return err
 	}
 	defer file.Close()
 
 	if _, err = secret.WriteTo(file); err != nil {
-		os.Remove(path)
+		store.logf("fs: failed to write to %s: %v", path, err)
+		if rmErr := os.Remove(path); rmErr != nil {
+			store.logf("fs: cannot remove %s: %v", path, err)
+		}
 		return err
 	}
 	if err = file.Sync(); err != nil { // Ensure that we wrote the secret key to disk
-		os.Remove(path)
+		store.logf("fs: cannot to flush and sync %s: %v", path, err)
+		if rmErr := os.Remove(path); rmErr != nil {
+			store.logf("fs: cannot remove %s: %v", path, err)
+		}
 		return err
 	}
 	store.cache.Set(name, secret)
@@ -88,17 +103,20 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 
 	// Since we haven't found the requested secret key in the cache
 	// we reach out to the disk to fetch it from there.
-	file, err := os.Open(filepath.Join(store.Dir, name))
+	path := filepath.Join(store.Dir, name)
+	file, err := os.Open(path)
 	if err != nil && os.IsNotExist(err) {
 		return kes.Secret{}, kes.ErrKeyNotFound
 	}
 	if err != nil {
+		store.logf("fs: cannot open '%s': %v", path, err)
 		return kes.Secret{}, err
 	}
 	defer file.Close()
 
 	var secret kes.Secret
 	if _, err := secret.ReadFrom(file); err != nil {
+		store.logf("fs: failed to read secret from '%s': %v", path, err)
 		return secret, err
 	}
 	secret, _ = store.cache.Add(name, secret)
@@ -109,11 +127,15 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 // from the key store and deletes the associated file,
 // if it exists.
 func (store *KeyStore) Delete(name string) error {
-	err := os.Remove(filepath.Join(store.Dir, name))
+	path := filepath.Join(store.Dir, name)
+	err := os.Remove(path)
 	if err != nil && os.IsNotExist(err) {
 		err = nil // Ignore the error if the file does not exist
 	}
 	store.cache.Delete(name)
+	if err != nil {
+		store.logf("fs: failed to delete '%s': %v", path, err)
+	}
 	return err
 }
 
@@ -121,5 +143,13 @@ func (store *KeyStore) initialize() {
 	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
+	}
+}
+
+func (store *KeyStore) logf(format string, v ...interface{}) {
+	if store.ErrorLog == nil {
+		log.Printf(format, v...)
+	} else {
+		store.ErrorLog.Printf(format, v...)
 	}
 }

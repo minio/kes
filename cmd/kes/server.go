@@ -10,6 +10,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -123,6 +125,26 @@ func server(args []string) error {
 		}
 	}
 
+	var errorLog *log.Logger
+	if len(config.Log.Error.Files) > 0 {
+		var files []io.Writer
+		for _, path := range config.Log.Error.Files {
+			if path == "" { // ignore empty entries in the config file
+				continue
+			}
+
+			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+			if err != nil {
+				return fmt.Errorf("Failed to open error log file '%s': %v", path, err)
+			}
+			defer file.Close()
+			files = append(files, file)
+		}
+		if len(files) > 0 { // only create non-default error log if we have files
+			errorLog = log.New(io.MultiWriter(files...), "", log.LstdFlags)
+		}
+	}
+
 	var store kes.Store
 	switch {
 	case config.KeyStore.Fs.Dir != "":
@@ -142,6 +164,7 @@ func server(args []string) error {
 			Dir:                    config.KeyStore.Fs.Dir,
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
+			ErrorLog:               errorLog,
 		}
 	case config.KeyStore.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
@@ -155,6 +178,7 @@ func server(args []string) error {
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 			StatusPingAfter:        config.KeyStore.Vault.Status.Ping,
+			ErrorLog:               errorLog,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)
@@ -162,9 +186,12 @@ func server(args []string) error {
 		store = vaultStore
 	case config.KeyStore.Aws.SecretsManager.Addr != "":
 		awsStore := &awsecret.KeyStore{
-			Addr:     config.KeyStore.Aws.SecretsManager.Addr,
-			Region:   config.KeyStore.Aws.SecretsManager.Region,
-			KmsKeyID: config.KeyStore.Aws.SecretsManager.KmsKeyID,
+			Addr:                   config.KeyStore.Aws.SecretsManager.Addr,
+			Region:                 config.KeyStore.Aws.SecretsManager.Region,
+			KmsKeyID:               config.KeyStore.Aws.SecretsManager.KmsKeyID,
+			CacheExpireAfter:       config.Cache.Expiry.All,
+			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
+			ErrorLog:               errorLog,
 			Login: awsecret.Credentials{
 				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
 				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
@@ -179,6 +206,7 @@ func server(args []string) error {
 		store = &mem.KeyStore{
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
+			ErrorLog:               errorLog,
 		}
 	}
 
