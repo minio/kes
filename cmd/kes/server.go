@@ -179,6 +179,9 @@ func server(args []string) error {
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 			StatusPingAfter:        config.KeyStore.Vault.Status.Ping,
 			ErrorLog:               errorLog,
+			ClientKeyPath:          config.KeyStore.Vault.TLS.KeyPath,
+			ClientCertPath:         config.KeyStore.Vault.TLS.CertPath,
+			CAPath:                 config.KeyStore.Vault.TLS.CAPath,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)

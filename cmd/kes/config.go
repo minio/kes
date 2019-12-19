@@ -57,6 +57,12 @@ type serverConfig struct {
 				Retry  time.Duration `toml:"retry" yaml:"retry"`
 			} `toml:"approle" yaml:"approle"`
 
+			TLS struct {
+				KeyPath  string `toml:"key" yaml:"key"`
+				CertPath string `toml:"cert" yaml:"cert"`
+				CAPath   string `toml:"ca" yaml:"ca"`
+			} `toml:"tls" yaml:"tls"`
+
 			Status struct {
 				Ping time.Duration `toml:"ping" yaml:"ping"`
 			} `toml:"status" yaml:"status"`

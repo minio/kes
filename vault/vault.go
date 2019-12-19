@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -82,6 +83,19 @@ type KeyStore struct {
 	// standard logger.
 	ErrorLog *log.Logger
 
+	// Path to the mTLS client private key to authenticate to
+	// the Vault server.
+	ClientKeyPath string
+
+	// Path to the mTLS client certificate to authenticate to
+	// the Vault server.
+	ClientCertPath string
+
+	// Path to the root CA certificate(s) used to verify the
+	// TLS certificate of the Vault server. If empty, the
+	// host's root CA set is used.
+	CAPath string
+
 	cache cache.Cache
 	once  uint32
 
@@ -95,9 +109,26 @@ type KeyStore struct {
 // established - for instance because of invalid
 // authentication credentials.
 func (store *KeyStore) Authenticate(context context.Context) error {
-	client, err := vaultapi.NewClient(&vaultapi.Config{
-		Address: store.Addr,
-	})
+	tlsConfig := &vaultapi.TLSConfig{
+		ClientKey:  store.ClientKeyPath,
+		ClientCert: store.ClientCertPath,
+	}
+	if store.CAPath != "" {
+		stat, err := os.Stat(store.CAPath)
+		if err != nil {
+			return fmt.Errorf("Failed to open '%s': %v", store.CAPath, err)
+		}
+		if stat.IsDir() {
+			tlsConfig.CAPath = store.CAPath
+		} else {
+			tlsConfig.CACert = store.CAPath
+		}
+	}
+
+	config := vaultapi.DefaultConfig()
+	config.Address = store.Addr
+	config.ConfigureTLS(tlsConfig)
+	client, err := vaultapi.NewClient(config)
 	if err != nil {
 		return err
 	}
