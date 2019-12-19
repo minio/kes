@@ -2,3 +2,5 @@
 *.cert
 *.key
 *.crt
+.idea
+kes
