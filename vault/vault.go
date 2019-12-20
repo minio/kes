@@ -96,6 +96,14 @@ type KeyStore struct {
 	// host's root CA set is used.
 	CAPath string
 
+	// The Vault namespace used to separate and isolate different
+	// organizations / tenants at the same Vault instance. If
+	// non-empty, the Vault client will send the
+	//   X-Vault-Namespace: Namespace
+	// HTTP header on each request. For more information see:
+	// https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+	Namespace string
+
 	cache cache.Cache
 	once  uint32
 
@@ -132,6 +140,14 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 	if err != nil {
 		return err
 	}
+	if store.Namespace != "" {
+		// We must only set the namespace if it is not
+		// empty. If namespace == "" the vault client
+		// will send an empty namespace HTTP header -
+		// which is not what we want.
+		client.SetNamespace(store.Namespace)
+	}
+
 	store.client = client
 
 	status, err := store.client.Sys().Health()
