@@ -48,8 +48,9 @@ type serverConfig struct {
 		} `toml:"fs" yaml:"fs"`
 
 		Vault struct {
-			Addr string `toml:"address" yaml:"address"`
-			Name string `toml:"name" yaml:"name"`
+			Addr      string `toml:"address" yaml:"address"`
+			Name      string `toml:"name" yaml:"name"`
+			Namespace string `toml:"namespace" yaml:"namespace"`
 
 			AppRole struct {
 				ID     string        `toml:"id" yaml:"id"`

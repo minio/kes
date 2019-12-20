@@ -168,8 +168,9 @@ func server(args []string) error {
 		}
 	case config.KeyStore.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
-			Addr:     config.KeyStore.Vault.Addr,
-			Location: config.KeyStore.Vault.Name,
+			Addr:      config.KeyStore.Vault.Addr,
+			Location:  config.KeyStore.Vault.Name,
+			Namespace: config.KeyStore.Vault.Namespace,
 			AppRole: vault.AppRole{
 				ID:     config.KeyStore.Vault.AppRole.ID,
 				Secret: config.KeyStore.Vault.AppRole.Secret,

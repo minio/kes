@@ -108,8 +108,9 @@ keystore:
   # at Vault's key-value backend. For more information see:
   # https://www.vaultproject.io/api/secret/kv/kv-v1.html
   vault:
-    address: "" # The Vault endpoint - e.g. https://127.0.0.1:8200
-    name: ""    # An optional K/V prefix. The server will store keys under /kv/name/... 
+    address: ""   # The Vault endpoint - e.g. https://127.0.0.1:8200
+    name: ""      # An optional K/V prefix. The server will store keys under /kv/name/... 
+    namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
       id: ""      # Your AppRole Role ID
       secret: ""  # Your AppRole Secret ID
