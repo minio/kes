@@ -40,6 +40,9 @@ type serverConfig struct {
 		Error struct {
 			Files []string `toml:"file" yaml:"file"`
 		} `toml:"error" yaml:"error"`
+		Audit struct {
+			Files []string `toml:"file" yaml:"file"`
+		} `toml:"audit" yaml:"audit"`
 	} `toml:"log" yaml:"log"`
 
 	KeyStore struct {

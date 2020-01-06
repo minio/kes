@@ -7,6 +7,7 @@ package kes
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -58,6 +59,22 @@ func EnforcePolicies(roles *Roles, f http.HandlerFunc) http.HandlerFunc {
 		if err := roles.enforce(r); err != nil {
 			http.Error(w, err.Error(), statusCode(err))
 			return
+		}
+		f(w, r)
+	}
+}
+
+// AuditLog returns an handler function that wraps f and logs the
+// HTTP request and response before sending the response status code
+// back to the client.
+func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w = &auditResponseWriter{
+			ResponseWriter: w,
+			URL:            *r.URL,
+			Identity:       Identify(r, roles.Identify),
+			RequestHeader:  r.Header.Clone(),
+			logger:         logger,
 		}
 		f(w, r)
 	}
