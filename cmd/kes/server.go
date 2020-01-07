@@ -183,6 +183,7 @@ func server(args []string) error {
 			ClientKeyPath:          config.KeyStore.Vault.TLS.KeyPath,
 			ClientCertPath:         config.KeyStore.Vault.TLS.CertPath,
 			CAPath:                 config.KeyStore.Vault.TLS.CAPath,
+			Insecure:               config.KeyStore.Vault.Insecure == "true",
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)

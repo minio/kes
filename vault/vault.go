@@ -109,6 +109,9 @@ type KeyStore struct {
 
 	client *vaultapi.Client
 	sealed bool
+
+	// Insecure enables or disables SSL verification
+	Insecure bool
 }
 
 // Authenticate tries to establish a connection to
@@ -120,6 +123,7 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 	tlsConfig := &vaultapi.TLSConfig{
 		ClientKey:  store.ClientKeyPath,
 		ClientCert: store.ClientCertPath,
+		Insecure:   store.Insecure,
 	}
 	if store.CAPath != "" {
 		stat, err := os.Stat(store.CAPath)

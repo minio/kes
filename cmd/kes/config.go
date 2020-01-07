@@ -51,6 +51,7 @@ type serverConfig struct {
 			Addr      string `toml:"address" yaml:"address"`
 			Name      string `toml:"name" yaml:"name"`
 			Namespace string `toml:"namespace" yaml:"namespace"`
+			Insecure  string `toml:"insecure" yaml:"insecure"`
 
 			AppRole struct {
 				ID     string        `toml:"id" yaml:"id"`
