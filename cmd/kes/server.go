@@ -223,7 +223,9 @@ func server(args []string) error {
 			if roles.IsAssigned(identity) {
 				return fmt.Errorf("Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
 			}
-			roles.Assign(name, identity)
+			if identity != kes.IdentityUnknown {
+				roles.Assign(name, identity)
+			}
 		}
 	}
 
