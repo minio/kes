@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -187,7 +188,7 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 }
 
 func (c *Client) ListPolicies(pattern string) ([]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.addr, pattern))
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.addr, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +233,7 @@ func (c *Client) AssignIdentity(policy string, id Identity) error {
 }
 
 func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.addr, pattern))
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.addr, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
