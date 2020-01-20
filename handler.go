@@ -25,23 +25,21 @@ func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func LimitPathSegments(n int, f http.HandlerFunc) http.HandlerFunc {
+// ValidatePath returns an handler function that verifies that the
+// request URL.Path matches apiPattern before calling f. If the
+// path does not match the apiPattern it returns the bad request status
+// code (400) to the client.
+//
+// ValidatePath uses the standard library path glob matching for pattern
+// matching.
+func ValidatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.EscapedPath() != r.URL.Path {
-			http.Error(w, "request URL contains invalid characters", http.StatusBadRequest)
-			return
-		}
 		if !strings.HasPrefix(r.URL.Path, `/`) {
-			r.URL.Path = `/` + r.URL.Path
+			r.URL.Path = `/` + r.URL.Path // URL.Path may omit leading slash
 		}
 
-		seg := strings.Count(r.URL.Path, `/`)
-		if seg < n {
-			http.Error(w, "request url path contains too few segments", http.StatusBadRequest)
-			return
-		}
-		if seg > n {
-			http.Error(w, "request url path contains too many segments", http.StatusBadRequest)
+		if ok, err := path.Match(apiPattern, r.URL.Path); !ok || err != nil {
+			http.Error(w, fmt.Sprintf("request URL path does not match API pattern: %s", apiPattern), http.StatusBadRequest)
 			return
 		}
 		f(w, r)
