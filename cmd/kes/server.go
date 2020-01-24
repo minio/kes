@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -125,7 +126,7 @@ func server(args []string) error {
 		}
 	}
 
-	var errorLog *log.Logger
+	errorLog := kes.NewLogger(os.Stderr, "", log.LstdFlags)
 	if len(config.Log.Error.Files) > 0 {
 		var files []io.Writer
 		for _, path := range config.Log.Error.Files {
@@ -141,7 +142,27 @@ func server(args []string) error {
 			files = append(files, file)
 		}
 		if len(files) > 0 { // only create non-default error log if we have files
-			errorLog = log.New(io.MultiWriter(files...), "", log.LstdFlags)
+			errorLog.SetOutput(files...)
+		}
+	}
+
+	auditLog := kes.NewLogger(ioutil.Discard, "", 0)
+	if len(config.Log.Audit.Files) > 0 {
+		var files []io.Writer
+		for _, path := range config.Log.Audit.Files {
+			if path == "" { // ignore empty entries in the config file
+				continue
+			}
+
+			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+			if err != nil {
+				return fmt.Errorf("Failed to open audit log file '%s': %v", path, err)
+			}
+			defer file.Close()
+			files = append(files, file)
+		}
+		if len(files) > 0 { // only create non-default audit log if we have files
+			auditLog.SetOutput(files...)
 		}
 	}
 
@@ -164,7 +185,7 @@ func server(args []string) error {
 			Dir:                    config.KeyStore.Fs.Dir,
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog,
+			ErrorLog:               errorLog.Log(),
 		}
 	case config.KeyStore.Vault.Addr != "":
 		vaultStore := &vault.KeyStore{
@@ -179,7 +200,7 @@ func server(args []string) error {
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 			StatusPingAfter:        config.KeyStore.Vault.Status.Ping,
-			ErrorLog:               errorLog,
+			ErrorLog:               errorLog.Log(),
 			ClientKeyPath:          config.KeyStore.Vault.TLS.KeyPath,
 			ClientCertPath:         config.KeyStore.Vault.TLS.CertPath,
 			CAPath:                 config.KeyStore.Vault.TLS.CAPath,
@@ -195,7 +216,7 @@ func server(args []string) error {
 			KmsKeyID:               config.KeyStore.Aws.SecretsManager.KmsKeyID,
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog,
+			ErrorLog:               errorLog.Log(),
 			Login: awsecret.Credentials{
 				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
 				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
@@ -210,7 +231,7 @@ func server(args []string) error {
 		store = &mem.KeyStore{
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog,
+			ErrorLog:               errorLog.Log(),
 		}
 	}
 
@@ -231,19 +252,20 @@ func server(args []string) error {
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleCreateKey(store))))))
-	mux.Handle("/v1/key/delete/", kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/key/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store))))))
-	mux.Handle("/v1/key/generate/", kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/generate/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store))))))
-	mux.Handle("/v1/key/decrypt/", kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/decrypt/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store))))))
+	mux.Handle("/v1/key/create/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleCreateKey(store)))))))
+	mux.Handle("/v1/key/delete/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/key/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store)))))))
+	mux.Handle("/v1/key/generate/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/generate/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store)))))))
+	mux.Handle("/v1/key/decrypt/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/decrypt/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store)))))))
 
-	mux.Handle("/v1/policy/write/", kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/policy/write/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles))))))
-	mux.Handle("/v1/policy/read/", kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/read/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles))))))
-	mux.Handle("/v1/policy/list/", kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles))))))
-	mux.Handle("/v1/policy/delete/", kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/policy/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles))))))
+	mux.Handle("/v1/policy/write/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/policy/write/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles)))))))
+	mux.Handle("/v1/policy/read/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/read/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles)))))))
+	mux.Handle("/v1/policy/list/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles)))))))
+	mux.Handle("/v1/policy/delete/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/policy/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles)))))))
 
-	mux.Handle("/v1/identity/assign/", kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/identity/assign/*/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles))))))
-	mux.Handle("/v1/identity/list/", kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/identity/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles))))))
-	mux.Handle("/v1/identity/forget/", kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/identity/forget/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles))))))
+	mux.Handle("/v1/identity/assign/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/identity/assign/*/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles)))))))
+	mux.Handle("/v1/identity/list/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/identity/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles)))))))
+	mux.Handle("/v1/identity/forget/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/identity/forget/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles)))))))
+	mux.Handle("/", kes.AuditLog(auditLog.Log(), roles, http.NotFound))
 
 	server := http.Server{
 		Addr:    addr,
@@ -251,6 +273,7 @@ func server(args []string) error {
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS13,
 		},
+		ErrorLog: errorLog.Log(),
 
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      20 * time.Second,

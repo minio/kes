@@ -74,15 +74,35 @@ unused = "30s"
 # Log configuration. In general, the server distinguishes
 # between (operational) errors and audit events. Therefore,
 # there are separate error and audit logs.
-#
-# Errors:
-# The server can log error events to files and you can specify
-# multiple log files. The server will write each error event to
-# each log file. 
-# If no log file (path) is specified the server will log errors
-# to stderr.
 [log]
-error.file = [ ] # Add one or more log file paths here.
+
+# Error log. The server can log error events to one or multiple
+# log files. If one or multiple log files already exist, the 
+# server will truncate them. If no log file (path) is specified
+# the server will log errors to stderr.
+[error]
+file = [ "" ] # Add one or more log file paths here.
+
+# Audit log. The server can log audit events to one or multiple
+# log files. Each audit event is a JSON object representing a
+# request-response pair that contains the time, client identity, the
+# API path, HTTP response status code etc.
+# {
+#   "time": "2006-01-02T15:04:05Z07:00",
+#   "request": {
+#     "path":     "/v1/key/create/my-app-key",
+#     "identity": "4067503933d4a78358f908a2df7ec14e554c612acf8a9d1aa29b7da4aa018ec9",
+#   },
+#   "response": {
+#     "status": 200
+#   }
+# }
+# The server will write such an audit log entry for every HTTP
+# request-response pair - including invalid requests. If no audit
+# file (path) is specifed the server will not log audit events.
+# In contrast to error log, audit logging has to be enabled explicitly.
+[audit]
+file = [ "" ] # Add one or more log file paths here
 
 # Key stores configuration. A key store holds secret keys.
 # A server can only be configured to use one key store at
