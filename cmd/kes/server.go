@@ -252,7 +252,8 @@ func server(args []string) error {
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleCreateKey(store)))))))
+	mux.Handle("/v1/key/create/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleCreateKey(store)))))))
+	mux.Handle("/v1/key/import/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/import/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleImportKey(store)))))))
 	mux.Handle("/v1/key/delete/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/key/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store)))))))
 	mux.Handle("/v1/key/generate/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/generate/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store)))))))
 	mux.Handle("/v1/key/decrypt/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/decrypt/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store)))))))
