@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/aws/aws-sdk-go v1.26.3
+	github.com/fatih/color v1.7.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/pelletier/go-toml v1.6.0
 	github.com/secure-io/sio-go v0.3.0

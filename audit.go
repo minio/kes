@@ -64,7 +64,7 @@ func (l *SystemLog) RemoveOutput(out io.Writer) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	var output = make([]io.Writer, 0, len(l.output))
+	output := make([]io.Writer, 0, len(l.output))
 	for i := range l.output {
 		if out != l.output[i] {
 			output = append(output, l.output[i])
@@ -90,6 +90,7 @@ type auditResponseWriter struct {
 	URL           url.URL     // The request URL
 	Identity      Identity    // The request X.509 identity
 	RequestHeader http.Header // The request headers
+	Time          time.Time   // The time when we receive the request
 
 	logger  *log.Logger
 	written bool // Set to true on first write
@@ -100,11 +101,15 @@ func (w *auditResponseWriter) Header() http.Header {
 }
 
 func (w *auditResponseWriter) WriteHeader(statusCode int) {
-	const format = `{"time":"%s","request":{"path":"%s","identity":"%s"},"response":{"code":%d}}`
-	w.logger.Printf(format, time.Now().Format(time.RFC3339), w.URL.Path, w.Identity, statusCode)
+	if !w.written {
+		w.written = true
 
-	w.ResponseWriter.WriteHeader(statusCode)
-	w.written = true
+		now := time.Now().UTC()
+		const format = `{"time":"%s","request":{"path":"%s","identity":"%s"},"response":{"code":%d, "time":%d}}`
+		w.logger.Printf(format, now.Format(time.RFC3339), w.URL.Path, w.Identity, statusCode, now.Sub(w.Time.UTC()))
+
+		w.ResponseWriter.WriteHeader(statusCode)
+	}
 }
 
 func (w *auditResponseWriter) Write(b []byte) (int, error) {
@@ -118,4 +123,44 @@ func (w *auditResponseWriter) Flush() {
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
+}
+
+// A flushWriter wraps and io.Writer and performs
+// a flush operation after every write call if the
+// wrapped io.Writer implements http.Flusher.
+//
+// A flushWriter is useful when (even small) data
+// should reach the receiver as soon as possible.
+// For example, in case of audit logging.
+type flushWriter struct {
+	io.Writer
+	http.Flusher
+}
+
+// newFlushWriter returns a new flushWriter that
+// wraps w and flushes everything written to it
+// as soon as possible if w implements http.Flusher.
+func newFlushWriter(w io.Writer) flushWriter {
+	fw := flushWriter{Writer: w}
+	if flusher, ok := w.(http.Flusher); ok {
+		fw.Flusher = flusher
+	}
+	return fw
+}
+
+func (w flushWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	if w.Flusher != nil {
+		// TODO(aead): Flushing after every write may
+		// be not very efficient (benchmarks required!)
+		// since we perform one/multiple system calls
+		// per write.
+		// However, buffering does not seem possible
+		// since a flushWriter is in particularly used for
+		// audit log tracing and we cannot afford loosing
+		// an audit event.
+		// Therefore, no (more) efficient solution known, yet.
+		w.Flusher.Flush()
+	}
+	return n, err
 }
