@@ -65,11 +65,11 @@ identities = [ "7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127
 # Period after which all cache entries are discarded.
 # It determines how often the kes server has to fetch
 # a secret key from the key storage.
-all    = "1h" 
+all    = "5m" 
 # Period after which all unused cache entries are discarded.
 # It determines how often "not frequently" used secret keys
 # must be fetched from the key storage.
-unused = "30s" 
+unused = "20s" 
 
 # Log configuration. In general, the server distinguishes
 # between (operational) errors and audit events. Therefore,
