@@ -46,7 +46,30 @@ func NewClient(addr string, config *tls.Config) *Client {
 
 func (c *Client) Transport(transport http.RoundTripper) { c.httpClient.Transport = transport }
 
-func (c *Client) CreateKey(name string, key []byte) error {
+// CreateKey tries to create a new master key with
+// the specified name. The master key will be generated
+// by the KES server.
+func (c *Client) CreateKey(name string) error {
+	url := fmt.Sprintf("%s/v1/key/create/%s", c.addr, name)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseErrorResponse(resp)
+	}
+	return nil
+}
+
+// ImportKey tries to import key as new master key with
+// the specified name. In contrast to CreateKey, the client
+// specifies, and therefore, knows the value of the master
+// key.
+func (c *Client) ImportKey(name string, key []byte) error {
 	type Request struct {
 		Bytes []byte `json:"bytes"`
 	}
@@ -57,7 +80,7 @@ func (c *Client) CreateKey(name string, key []byte) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/v1/key/create/%s", c.addr, name)
+	url := fmt.Sprintf("%s/v1/key/import/%s", c.addr, name)
 	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err

@@ -64,7 +64,7 @@ func EnforcePolicies(roles *Roles, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// AuditLog returns an handler function that wraps f and logs the
+// AuditLog returns a handler function that wraps f and logs the
 // HTTP request and response before sending the response status code
 // back to the client.
 func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.HandlerFunc {
@@ -80,7 +80,43 @@ func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.Handler
 	}
 }
 
+// HandleCreateKey returns a handler function that generates a new
+// random Secret and stores in the Store under the request name, if
+// it doesn't exist.
+//
+// It infers the name of the new Secret from the request URL - in
+// particular from the URL's path base.
+// See: https://golang.org/pkg/path/#Base
 func HandleCreateKey(store Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			http.Error(w, "invalid key name", http.StatusBadRequest)
+			return
+		}
+
+		var secret Secret
+		bytes, err := sioutil.Random(len(secret))
+		if err != nil {
+			http.Error(w, err.Error(), statusCode(err))
+			return
+		}
+		copy(secret[:], bytes)
+
+		if err := store.Create(name, secret); err != nil {
+			http.Error(w, err.Error(), statusCode(err))
+		}
+	}
+}
+
+// HandleImportKey returns a handler function that reads a secret
+// value from the request body and stores in the Store under the
+// request name, if it doesn't exist.
+//
+// It infers the name of the new Secret from the request URL - in
+// particular from the URL's path base.
+// See: https://golang.org/pkg/path/#Base
+func HandleImportKey(store Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type request struct {
 			Bytes []byte `json:"bytes"`
@@ -99,21 +135,12 @@ func HandleCreateKey(store Store) http.HandlerFunc {
 		}
 
 		var secret Secret
-		if len(req.Bytes) > 0 && len(req.Bytes) != len(secret) {
+		if len(req.Bytes) != len(secret) {
 			http.Error(w, "invalid key", http.StatusBadRequest)
 			return
 		}
+		copy(secret[:], req.Bytes)
 
-		if len(req.Bytes) != len(secret) {
-			bytes, err := sioutil.Random(len(secret))
-			if err != nil {
-				http.Error(w, err.Error(), statusCode(err))
-				return
-			}
-			copy(secret[:], bytes)
-		} else {
-			copy(secret[:], req.Bytes)
-		}
 		if err := store.Create(name, secret); err != nil {
 			http.Error(w, err.Error(), statusCode(err))
 		}

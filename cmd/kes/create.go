@@ -56,8 +56,14 @@ func createKey(args []string) error {
 		Certificates:       certificates,
 	})
 
-	if err := client.CreateKey(name, bytes); err != nil {
-		return fmt.Errorf("Failed to create %s: %v", name, err)
+	if len(bytes) > 0 {
+		if err = client.ImportKey(name, bytes); err != nil {
+			return fmt.Errorf("Failed to import %s: %v", name, err)
+		}
+	} else {
+		if err = client.CreateKey(name); err != nil {
+			return fmt.Errorf("Failed to create %s: %v", name, err)
+		}
 	}
 	return nil
 }
