@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/secure-io/sio-go/sioutil"
 )
@@ -74,7 +75,9 @@ func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.Handler
 			URL:            *r.URL,
 			Identity:       Identify(r, roles.Identify),
 			RequestHeader:  r.Header.Clone(),
-			logger:         logger,
+			Time:           time.Now(),
+
+			logger: logger,
 		}
 		f(w, r)
 	}
@@ -106,6 +109,7 @@ func HandleCreateKey(store Store) http.HandlerFunc {
 		if err := store.Create(name, secret); err != nil {
 			http.Error(w, err.Error(), statusCode(err))
 		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -144,6 +148,7 @@ func HandleImportKey(store Store) http.HandlerFunc {
 		if err := store.Create(name, secret); err != nil {
 			http.Error(w, err.Error(), statusCode(err))
 		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -357,6 +362,30 @@ func HandleForgetIdentity(roles *Roles) http.HandlerFunc {
 		}
 		roles.Forget(identity)
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// HandleTraceAuditLog returns a HTTP handler that
+// writes whatever log logs to the client.
+//
+// The returned handler is a long-running server task
+// that will wait for the client to close the connection
+// resp. until the request context is done.
+// Therefore, it will not work properly with (write) timeouts.
+func HandleTraceAuditLog(log *SystemLog) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		out := newFlushWriter(w)
+		log.AddOutput(out)
+		defer log.RemoveOutput(out)
+
+		// TODO(aead): set appropriate content-type.
+		// For audit logs we could either set "application/x-ndjson"
+		// or "application/octet-stream". However, for error logs
+		// "application/x-ndjson" would be incorrect unless/until we
+		// implement JSON error logging.
+		w.WriteHeader(http.StatusOK)
+
+		<-r.Context().Done() // Wait for the client to close the connection
 	}
 }
 

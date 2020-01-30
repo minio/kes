@@ -287,6 +287,21 @@ func (c *Client) ForgetIdentity(id Identity) error {
 	return nil
 }
 
+func (c *Client) TraceAuditLog() (io.ReadCloser, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/audit/trace", c.addr), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseErrorResponse(resp)
+	}
+	return resp.Body, nil
+}
+
 func (c *Client) parseErrorResponse(resp *http.Response) error {
 	if resp.Body == nil {
 		return nil

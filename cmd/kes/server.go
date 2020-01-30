@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -252,21 +253,23 @@ func server(args []string) error {
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleCreateKey(store)))))))
-	mux.Handle("/v1/key/import/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/import/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleImportKey(store)))))))
-	mux.Handle("/v1/key/delete/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/key/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store)))))))
-	mux.Handle("/v1/key/generate/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/generate/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store)))))))
-	mux.Handle("/v1/key/decrypt/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/decrypt/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store)))))))
+	mux.Handle("/v1/key/create/", timeout(15*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/create/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleCreateKey(store))))))))
+	mux.Handle("/v1/key/import/", timeout(15*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/import/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleImportKey(store))))))))
+	mux.Handle("/v1/key/delete/", timeout(15*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/key/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeleteKey(store))))))))
+	mux.Handle("/v1/key/generate/", timeout(15*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/generate/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleGenerateKey(store))))))))
+	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/key/decrypt/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleDecryptKey(store))))))))
 
-	mux.Handle("/v1/policy/write/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/policy/write/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles)))))))
-	mux.Handle("/v1/policy/read/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/read/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles)))))))
-	mux.Handle("/v1/policy/list/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles)))))))
-	mux.Handle("/v1/policy/delete/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/policy/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles)))))))
+	mux.Handle("/v1/policy/write/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/policy/write/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleWritePolicy(roles))))))))
+	mux.Handle("/v1/policy/read/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/read/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleReadPolicy(roles))))))))
+	mux.Handle("/v1/policy/list/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/policy/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListPolicies(roles))))))))
+	mux.Handle("/v1/policy/delete/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/policy/delete/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleDeletePolicy(roles))))))))
 
-	mux.Handle("/v1/identity/assign/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/identity/assign/*/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles)))))))
-	mux.Handle("/v1/identity/list/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/identity/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles)))))))
-	mux.Handle("/v1/identity/forget/", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/identity/forget/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles)))))))
-	mux.Handle("/", kes.AuditLog(auditLog.Log(), roles, http.NotFound))
+	mux.Handle("/v1/identity/assign/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodPost, kes.ValidatePath("/v1/identity/assign/*/*", kes.LimitRequestBody(maxBody, kes.EnforcePolicies(roles, kes.HandleAssignIdentity(roles))))))))
+	mux.Handle("/v1/identity/list/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/identity/list/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleListIdentities(roles))))))))
+	mux.Handle("/v1/identity/forget/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/identity/forget/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles))))))))
+
+	mux.Handle("/v1/log/audit/trace", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/log/audit/trace", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleTraceAuditLog(auditLog)))))))
+	mux.Handle("/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, http.NotFound)))
 
 	server := http.Server{
 		Addr:    addr,
@@ -276,9 +279,8 @@ func server(args []string) error {
 		},
 		ErrorLog: errorLog.Log(),
 
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      20 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 0 * time.Second, // explicitly set no write timeout - see timeout handler.
 	}
 	switch mtlsAuth {
 	case "verify":
@@ -307,4 +309,153 @@ func server(args []string) error {
 		return fmt.Errorf("Cannot start server: %v", err)
 	}
 	return nil
+}
+
+// timeout returns and HTTP handler that runs f
+// with the given time limit.
+//
+// If the time limit exceeds before f has written
+// any response to the client, timeout will return
+// http.StatusServiceUnavailable (503) to the client.
+//
+// If the time limit exceeds after f has written
+// a response to the client timeout will not write
+// any response to the client. However, it will return
+// such that the HTTP server eventually closes the
+// underlying connection.
+// Any further attempt by f to write to the client after
+// the timeout limit has been exceeded will fail with
+// http.ErrHandlerTimeout.
+//
+// If f implements a long-running job then it should either
+// stop once request.Context().Done() completes or once
+// if a responseWriter.Write(...) call returns http.ErrHandlerTimeout.
+func timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancelCtx := context.WithTimeout(r.Context(), after)
+		defer cancelCtx()
+
+		r = r.WithContext(ctx)
+		tw := newTimeoutWriter(w)
+
+		done := make(chan struct{})
+		panicChan := make(chan interface{}, 1)
+		go func() {
+			defer func() {
+				if p := recover(); p != nil {
+					panicChan <- p
+				}
+			}()
+			f(tw, r)
+			close(done)
+		}()
+
+		select {
+		case p := <-panicChan:
+			panic(p)
+		case <-ctx.Done():
+			tw.timeout()
+		case <-done:
+		}
+	}
+}
+
+var _ http.ResponseWriter = (*timeoutWriter)(nil)
+var _ http.Flusher = (*timeoutWriter)(nil)
+var _ http.Pusher = (*timeoutWriter)(nil)
+
+// timeoutWriter is a http.ResponseWriter that implements
+// http.Flusher and http.Pusher. It synchronizes a potential
+// timeout and the writes by the http.ResponseWriter it wraps.
+type timeoutWriter struct {
+	writer  http.ResponseWriter
+	flusher http.Flusher
+	pusher  http.Pusher
+
+	lock       sync.Mutex
+	timedOut   bool
+	hasWritten bool
+}
+
+func newTimeoutWriter(w http.ResponseWriter) *timeoutWriter {
+	tw := &timeoutWriter{
+		writer: w,
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		tw.flusher = flusher
+	}
+	if pusher, ok := w.(http.Pusher); ok {
+		tw.pusher = pusher
+	}
+	return tw
+}
+
+// timeout returns http.StatusServiceUnavailable to the client
+// if no response has been written to the client, yet.
+func (tw *timeoutWriter) timeout() {
+	tw.lock.Lock()
+	defer tw.lock.Unlock()
+
+	tw.timedOut = true
+	if !tw.hasWritten {
+		tw.hasWritten = true
+		http.Error(tw.writer, "timeout", http.StatusServiceUnavailable)
+	}
+}
+
+func (tw *timeoutWriter) Header() http.Header { return tw.writer.Header() }
+
+func (tw *timeoutWriter) WriteHeader(statusCode int) {
+	tw.lock.Lock()
+	defer tw.lock.Unlock()
+
+	if tw.timedOut {
+		if !tw.hasWritten {
+			tw.hasWritten = true
+			http.Error(tw.writer, "timeout", http.StatusServiceUnavailable)
+		}
+	} else {
+		tw.hasWritten = true
+		tw.writer.WriteHeader(statusCode)
+	}
+}
+
+func (tw *timeoutWriter) Write(p []byte) (int, error) {
+	// We must not hold the lock while writing to the
+	// underlying http.ResponseWriter (via Write([]byte))
+	// b/c e.g. a slow/malisious client would block the
+	// lock.Unlock.
+	// In this case we cannot accquire the lock when we
+	// want to mark the timeoutWriter as timed out (See: timeout()).
+	// So, the client would block the actual handler by slowly
+	// reading the response and the timeout handler since it
+	// would not be able to accquire the lock until the Write([]byte)
+	// finishes.
+	// Therefore, we must release the lock before writing
+	// the (eventually large) response body to the client.
+	tw.lock.Lock()
+	if tw.timedOut {
+		tw.lock.Unlock()
+		return 0, http.ErrHandlerTimeout
+	}
+	if !tw.hasWritten {
+		tw.hasWritten = true
+		tw.writer.WriteHeader(http.StatusOK)
+	}
+	tw.lock.Unlock()
+
+	return tw.writer.Write(p)
+}
+
+func (tw *timeoutWriter) Flush() {
+	if tw.flusher != nil {
+		tw.flusher.Flush()
+	}
+}
+
+func (tw *timeoutWriter) Push(target string, opts *http.PushOptions) error {
+	if tw.pusher != nil {
+		return tw.pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }
