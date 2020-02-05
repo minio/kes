@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/awsecret"
+	"github.com/minio/kes/aws"
 	"github.com/minio/kes/fs"
 	"github.com/minio/kes/mem"
 	"github.com/minio/kes/vault"
@@ -211,14 +211,14 @@ func server(args []string) error {
 		}
 		store = vaultStore
 	case config.KeyStore.Aws.SecretsManager.Addr != "":
-		awsStore := &awsecret.KeyStore{
+		awsStore := &aws.SecretsManager{
 			Addr:                   config.KeyStore.Aws.SecretsManager.Addr,
 			Region:                 config.KeyStore.Aws.SecretsManager.Region,
 			KmsKeyID:               config.KeyStore.Aws.SecretsManager.KmsKeyID,
 			CacheExpireAfter:       config.Cache.Expiry.All,
 			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
 			ErrorLog:               errorLog.Log(),
-			Login: awsecret.Credentials{
+			Login: aws.Credentials{
 				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
 				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
 				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken,
