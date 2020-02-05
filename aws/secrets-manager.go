@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package awsecret
+package aws
 
 import (
 	"bytes"
@@ -31,10 +31,11 @@ type Credentials struct {
 	SessionToken string // The AWS session token
 }
 
-// KeyStore is a secret key store that saves/fetches
-// secret keys on/from the AWS Secrets Manager.
+// SecretsManager is a secret key store that
+// saves/fetches secret keys on/from the AWS
+// Secrets Manager.
 // See: https://aws.amazon.com/secrets-manager
-type KeyStore struct {
+type SecretsManager struct {
 	// Addr is the HTTP address of the AWS Secret
 	// Manager. In general, you want to AWS directly.
 	// Therefore, use an address of the following
@@ -82,7 +83,7 @@ type KeyStore struct {
 //
 // In particular, Create creates a new entry on AWS Secrets
 // Manager with the given name containing the secret.
-func (store *KeyStore) Create(name string, secret kes.Secret) error {
+func (store *SecretsManager) Create(name string, secret kes.Secret) error {
 	if store.client == nil {
 		store.log(errNoConnection)
 		return errNoConnection
@@ -119,7 +120,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 //
 // In particular, Get reads the secret key from the corresponding
 // entry at AWS Secrets Manager.
-func (store *KeyStore) Get(name string) (kes.Secret, error) {
+func (store *SecretsManager) Get(name string) (kes.Secret, error) {
 	if store.client == nil {
 		store.log(errNoConnection)
 		return kes.Secret{}, errNoConnection
@@ -172,7 +173,7 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 // Delete removes a the secret key with the given name
 // from the key store and deletes the corresponding AWS
 // Secrets Manager entry, if it exists.
-func (store *KeyStore) Delete(name string) error {
+func (store *SecretsManager) Delete(name string) error {
 	if store.client == nil {
 		store.log(errNoConnection)
 		return errNoConnection
@@ -198,7 +199,7 @@ func (store *KeyStore) Delete(name string) error {
 
 // Authenticate tries to establish a connection to
 // the AWS Secrets Manager using the login credentials.
-func (store *KeyStore) Authenticate() error {
+func (store *SecretsManager) Authenticate() error {
 	session, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
 			Endpoint: aws.String(store.Addr),
@@ -227,14 +228,14 @@ func (store *KeyStore) Authenticate() error {
 // hasn't been called.
 var errNoConnection = errors.New("aws: no connection to AWS secrets manager")
 
-func (store *KeyStore) initialize() {
+func (store *SecretsManager) initialize() {
 	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
 		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
 		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
 	}
 }
 
-func (store *KeyStore) log(v ...interface{}) {
+func (store *SecretsManager) log(v ...interface{}) {
 	if store.ErrorLog == nil {
 		log.Println(v...)
 	} else {
@@ -242,7 +243,7 @@ func (store *KeyStore) log(v ...interface{}) {
 	}
 }
 
-func (store *KeyStore) logf(format string, v ...interface{}) {
+func (store *SecretsManager) logf(format string, v ...interface{}) {
 	if store.ErrorLog == nil {
 		log.Printf(format, v...)
 	} else {
