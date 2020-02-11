@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes"
+	xerrors "github.com/minio/kes/errors"
 	"github.com/minio/kes/internal/cache"
 )
 
@@ -137,7 +138,7 @@ func (store *SecretsManager) Get(name string) (kes.Secret, error) {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeDecryptionFailure:
-				return kes.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
+				return kes.Secret{}, xerrors.New(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
 			case secretsmanager.ErrCodeResourceNotFoundException:
 				return kes.Secret{}, kes.ErrKeyNotFound
 			}

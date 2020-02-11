@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	xerrors "github.com/minio/kes/errors"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -146,7 +147,7 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 			return nil, err
 		}
 	default:
-		return nil, errors.New("invalid algorithm: " + algorithm)
+		return nil, fmt.Errorf("invalid algorithm: %s", algorithm)
 	}
 
 	nonce, err := sioutil.Random(aead.NonceSize())
@@ -176,7 +177,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 		return nil, err
 	}
 	if n := len(sealedKey.IV); n != 16 {
-		return nil, NewError(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
+		return nil, xerrors.New(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
 	}
 
 	var aead cipher.AEAD
@@ -204,15 +205,15 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	default:
-		return nil, NewError(http.StatusBadRequest, "invalid algorithm: "+sealedKey.Algorithm)
+		return nil, xerrors.New(http.StatusBadRequest, "invalid algorithm: "+sealedKey.Algorithm)
 	}
 
 	if n := len(sealedKey.Nonce); n != aead.NonceSize() {
-		return nil, NewError(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
+		return nil, xerrors.New(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
 	}
 	plaintext, err := aead.Open(nil, sealedKey.Nonce, sealedKey.Bytes, associatedData)
 	if err != nil {
-		return nil, NewError(http.StatusBadRequest, "ciphertext is not authentic")
+		return nil, xerrors.New(http.StatusBadRequest, "ciphertext is not authentic")
 	}
 	return plaintext, nil
 }
@@ -231,7 +232,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 // is 128 bit long while AES-GCM-SIV uses 96 bit nonces.
 func aesDeriveKey(key, iv []byte) ([]byte, error) {
 	if n := len(iv); n != 16 {
-		return nil, errors.New("key: invalid iv size " + strconv.Itoa(n))
+		return nil, fmt.Errorf("key: invalid iv size %d", n)
 	}
 	if n := len(key); n != 128/8 && n != 256/8 {
 		return nil, aes.KeySizeError(len(key))

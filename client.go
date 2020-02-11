@@ -13,8 +13,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
+
+	xerrors "github.com/minio/kes/errors"
 )
 
 type Client struct {
@@ -54,7 +55,7 @@ func (c *Client) Version() (string, error) {
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", c.parseErrorResponse(resp)
+		return "", xerrors.ParseResponse(resp)
 	}
 
 	type Response struct {
@@ -82,7 +83,7 @@ func (c *Client) CreateKey(name string) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -108,7 +109,7 @@ func (c *Client) ImportKey(name string, key []byte) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -124,7 +125,7 @@ func (c *Client) DeleteKey(name string) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func (c *Client) GenerateDataKey(name string, context []byte) ([]byte, []byte, e
 		return nil, nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, c.parseErrorResponse(resp)
+		return nil, nil, xerrors.ParseResponse(resp)
 	}
 	defer resp.Body.Close()
 
@@ -181,7 +182,7 @@ func (c *Client) DecryptDataKey(name string, ciphertext, context []byte) ([]byte
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
+		return nil, xerrors.ParseResponse(resp)
 	}
 	defer resp.Body.Close()
 
@@ -207,7 +208,7 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -218,7 +219,7 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
+		return nil, xerrors.ParseResponse(resp)
 	}
 	defer resp.Body.Close()
 
@@ -238,7 +239,7 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
+		return nil, xerrors.ParseResponse(resp)
 	}
 	defer resp.Body.Close()
 
@@ -260,7 +261,7 @@ func (c *Client) DeletePolicy(name string) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -272,7 +273,7 @@ func (c *Client) AssignIdentity(policy string, id Identity) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -283,7 +284,7 @@ func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
+		return nil, xerrors.ParseResponse(resp)
 	}
 
 	const limit = 64 * 1024 * 1024
@@ -304,7 +305,7 @@ func (c *Client) ForgetIdentity(id Identity) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseErrorResponse(resp)
+		return xerrors.ParseResponse(resp)
 	}
 	return nil
 }
@@ -319,21 +320,7 @@ func (c *Client) TraceAuditLog() (io.ReadCloser, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseErrorResponse(resp)
+		return nil, xerrors.ParseResponse(resp)
 	}
 	return resp.Body, nil
-}
-
-func (c *Client) parseErrorResponse(resp *http.Response) error {
-	if resp.Body == nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	const limit = 32 * 1024
-	var errMsg strings.Builder
-	if _, err := io.Copy(&errMsg, io.LimitReader(resp.Body, limit)); err != nil {
-		return err
-	}
-	return fmt.Errorf("%s: %s", http.StatusText(resp.StatusCode), errMsg.String())
 }

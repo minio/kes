@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	xerrors "github.com/minio/kes/errors"
 	"github.com/pelletier/go-toml"
 )
 
@@ -148,7 +149,7 @@ func NewPolicy(patterns ...string) *Policy {
 	}
 }
 
-var errForbidden = NewError(http.StatusForbidden, "prohibited by policy")
+var errForbidden = xerrors.New(http.StatusForbidden, "prohibited by policy")
 
 func (p *Policy) Verify(r *http.Request) error {
 	for _, pattern := range p.patterns {
@@ -219,7 +220,7 @@ func (r *Roles) Assign(name string, id Identity) error {
 	}
 	_, ok := r.roles[name]
 	if !ok {
-		return errors.New("key: policy does not exists")
+		return xerrors.New(http.StatusNotFound, "policy does not exists")
 	}
 	if r.effectiveRoles == nil {
 		r.effectiveRoles = map[Identity]string{}
@@ -268,7 +269,7 @@ func (r *Roles) enforce(req *http.Request) error {
 		// connections - which violates our fundamental security
 		// assumption. Therefore, we respond with BadRequest
 		// and log that the server is not correctly configured.
-		return NewError(http.StatusBadRequest, "insecure connection: TLS required")
+		return xerrors.New(http.StatusBadRequest, "insecure connection: TLS required")
 	}
 
 	if len(req.TLS.PeerCertificates) > 1 {
@@ -276,7 +277,7 @@ func (r *Roles) enforce(req *http.Request) error {
 		// only one certificate. However, it's possible
 		// to support multiple - but we have to think
 		// about the semantics.
-		return NewError(http.StatusBadRequest, "too many identities: more than one certificate is present")
+		return xerrors.New(http.StatusBadRequest, "too many identities: more than one certificate is present")
 	}
 
 	identity := Identify(req, r.Identify)
