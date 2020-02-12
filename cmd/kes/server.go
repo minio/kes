@@ -269,6 +269,8 @@ func server(args []string) error {
 	mux.Handle("/v1/identity/forget/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodDelete, kes.ValidatePath("/v1/identity/forget/*", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleForgetIdentity(roles))))))))
 
 	mux.Handle("/v1/log/audit/trace", kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/v1/log/audit/trace", kes.LimitRequestBody(0, kes.EnforcePolicies(roles, kes.HandleTraceAuditLog(auditLog)))))))
+
+	mux.Handle("/version", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, kes.RequireMethod(http.MethodGet, kes.ValidatePath("/version", kes.LimitRequestBody(0, kes.HandleVersion(version))))))) // /version is accessible to any identity
 	mux.Handle("/", timeout(10*time.Second, kes.AuditLog(auditLog.Log(), roles, http.NotFound)))
 
 	server := http.Server{

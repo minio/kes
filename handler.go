@@ -83,6 +83,16 @@ func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.Handler
 	}
 }
 
+// HandleVersion returns a handler function that returns the
+// given version as JSON. In particular, it returns a JSON
+// object:
+//  {
+//    "version": "<version>"
+//  }
+func HandleVersion(version string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, `{"version":"%s"}`, version) }
+}
+
 // HandleCreateKey returns a handler function that generates a new
 // random Secret and stores in the Store under the request name, if
 // it doesn't exist.
