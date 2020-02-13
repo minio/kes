@@ -15,6 +15,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+// Use e.g.: go build -ldflags "-X main.version=v1.0.0"
+// to set the binary version.
+var version = "0.0.0-dev"
+
 const usage = `usage: %s <command>
 
     server               Start a kes server.
@@ -26,17 +30,27 @@ const usage = `usage: %s <command>
 
     tool                 Run specific key and identity management tools.
 
+  -v, --version          Print version information
   -h, --help             Show this list of command line options.
 `
 
 func main() {
+	var showVersion bool
+
 	cli := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	cli.Usage = func() {
 		fmt.Fprintf(cli.Output(), usage, cli.Name())
 	}
+	cli.BoolVar(&showVersion, "v", false, "Print version information")
+	cli.BoolVar(&showVersion, "version", false, "Print version information")
 	cli.Parse(os.Args[1:])
-	args := cli.Args()
 
+	if showVersion {
+		fmt.Fprintln(cli.Output(), cli.Name(), version)
+		return
+	}
+
+	args := cli.Args()
 	if len(args) < 1 {
 		cli.Usage()
 		os.Exit(2)

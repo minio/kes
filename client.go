@@ -46,6 +46,28 @@ func NewClient(addr string, config *tls.Config) *Client {
 
 func (c *Client) Transport(transport http.RoundTripper) { c.httpClient.Transport = transport }
 
+// Version tries to fetch the version information from the
+// KES server.
+func (c *Client) Version() (string, error) {
+	resp, err := http.Get(fmt.Sprintf("%s/version", c.addr))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", c.parseErrorResponse(resp)
+	}
+
+	type Response struct {
+		Version string `json:"version"`
+	}
+	const limit = 1 << 20
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+		return "", err
+	}
+	return response.Version, nil
+}
+
 // CreateKey tries to create a new master key with
 // the specified name. The master key will be generated
 // by the KES server.
