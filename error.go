@@ -4,34 +4,51 @@
 
 package kes
 
-// NewError returns an error that formats as the given text.
+import "net/http"
+
+var (
+	ErrKeyNotFound Error = NewError(http.StatusNotFound, "key does not exist")
+	ErrKeyExists   Error = NewError(http.StatusBadRequest, "key does already exist")
+	ErrNotAllowed  Error = NewError(http.StatusForbidden, "prohibited by policy")
+)
+
+// Error is the type of client-server API errors.
+// A Client returns an Error if a server responds
+// with a well-formed error message.
 //
-// It's guaranteed that the returned error has an additional
-//    Status() int
-// method that returns the given status code. Code that handles
-// HTTP requests may type-check whether an error value provides
-// this method by:
-//    if err, ok := err.(interface{ Status() int }); ok {
-//    }
-// and set the status code of the response accordingly.
+// An Error contains the HTTP status code sent by
+// the server. Errors with the same status code and
+// error message are equal. In particular:
+//   ErrKeyExists == NewError(400, "key does already exist") // true
 //
-// NewError should not be used to create internal errors,
-// like when running out-of-entropy while reading from a PRNG.
+// The client may distinguish errors as following:
+//   switch err := client.CreateKey("example-key"); err {
+//       case nil: // Success!
+//       case ErrKeyExists:
+//          // The key "example-key" already exists.
+//       case ErrNotAllowed:
+//          // We don't have the permission to create this key.
+//       default:
+//          // Something else when wrong.
+//   }
+type Error struct {
+	code    int
+	message string
+}
+
+// NewError returns a new Error with the given
+// HTTP status code and error message.
 //
-// Each call to NewError returns a distinct error value even
-// if the status and text are identical.
-func NewError(status int, text string) error {
-	return &httpError{
-		status: status,
-		text:   text,
+// Two errors with the same status code and
+// error message are equal.
+func NewError(code int, msg string) Error {
+	return Error{
+		code:    code,
+		message: msg,
 	}
 }
 
-type httpError struct {
-	status int
-	text   string
-}
+// Status returns the HTTP status code of the error.
+func (e Error) Status() int { return e.code }
 
-func (e *httpError) Status() int { return e.status }
-
-func (e *httpError) Error() string { return e.text }
+func (e Error) Error() string { return e.message }

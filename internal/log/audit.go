@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kes
+package log
 
 import (
 	"io"
@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/minio/kes"
 )
 
 // SystemLog groups a set of logging targets.
@@ -78,77 +80,77 @@ func (l *SystemLog) RemoveOutput(out io.Writer) {
 // to the currently specified output destination.
 func (l *SystemLog) Log() *log.Logger { return l.logger }
 
-var _ http.ResponseWriter = (*auditResponseWriter)(nil)
-var _ http.Flusher = (*auditResponseWriter)(nil)
+var _ http.ResponseWriter = (*AuditResponseWriter)(nil)
+var _ http.Flusher = (*AuditResponseWriter)(nil)
 
-// auditResponseWriter is an http.ResponseWriter implementation
+// AuditResponseWriter is an http.ResponseWriter implementation
 // that logs (parts of) the request and response before sending
 // the status code back to the client.
-type auditResponseWriter struct {
+type AuditResponseWriter struct {
 	http.ResponseWriter
 
-	URL           url.URL     // The request URL
-	Identity      Identity    // The request X.509 identity
-	RequestHeader http.Header // The request headers
-	Time          time.Time   // The time when we receive the request
+	URL           url.URL      // The request URL
+	Identity      kes.Identity // The request X.509 identity
+	RequestHeader http.Header  // The request headers
+	Time          time.Time    // The time when we receive the request
 
-	logger  *log.Logger
+	Logger  *log.Logger
 	written bool // Set to true on first write
 }
 
-func (w *auditResponseWriter) Header() http.Header {
+func (w *AuditResponseWriter) Header() http.Header {
 	return w.ResponseWriter.Header()
 }
 
-func (w *auditResponseWriter) WriteHeader(statusCode int) {
+func (w *AuditResponseWriter) WriteHeader(statusCode int) {
 	if !w.written {
 		w.written = true
 
 		now := time.Now().UTC()
 		const format = `{"time":"%s","request":{"path":"%s","identity":"%s"},"response":{"code":%d, "time":%d}}`
-		w.logger.Printf(format, now.Format(time.RFC3339), w.URL.Path, w.Identity, statusCode, now.Sub(w.Time.UTC()))
+		w.Logger.Printf(format, now.Format(time.RFC3339), w.URL.Path, w.Identity, statusCode, now.Sub(w.Time.UTC()))
 
 		w.ResponseWriter.WriteHeader(statusCode)
 	}
 }
 
-func (w *auditResponseWriter) Write(b []byte) (int, error) {
+func (w *AuditResponseWriter) Write(b []byte) (int, error) {
 	if !w.written {
 		w.WriteHeader(http.StatusOK)
 	}
 	return w.ResponseWriter.Write(b)
 }
 
-func (w *auditResponseWriter) Flush() {
+func (w *AuditResponseWriter) Flush() {
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
 
-// A flushWriter wraps and io.Writer and performs
+// A FlushWriter wraps and io.Writer and performs
 // a flush operation after every write call if the
 // wrapped io.Writer implements http.Flusher.
 //
-// A flushWriter is useful when (even small) data
+// A FlushWriter is useful when (even small) data
 // should reach the receiver as soon as possible.
 // For example, in case of audit logging.
-type flushWriter struct {
+type FlushWriter struct {
 	io.Writer
 	http.Flusher
 }
 
-// newFlushWriter returns a new flushWriter that
+// NewFlushWriter returns a new flushWriter that
 // wraps w and flushes everything written to it
 // as soon as possible if w implements http.Flusher.
-func newFlushWriter(w io.Writer) flushWriter {
-	fw := flushWriter{Writer: w}
+func NewFlushWriter(w io.Writer) FlushWriter {
+	fw := FlushWriter{Writer: w}
 	if flusher, ok := w.(http.Flusher); ok {
 		fw.Flusher = flusher
 	}
 	return fw
 }
 
-func (w flushWriter) Write(p []byte) (int, error) {
+func (w FlushWriter) Write(p []byte) (int, error) {
 	n, err := w.Writer.Write(p)
 	if w.Flusher != nil {
 		// TODO(aead): Flushing after every write may
