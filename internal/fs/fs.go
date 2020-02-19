@@ -16,6 +16,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cache"
+	"github.com/minio/kes/internal/secret"
 )
 
 // KeyStore is a file system secret key store
@@ -55,7 +56,7 @@ type KeyStore struct {
 //
 // In particular, Create creates a new file in KeyStore.Dir
 // and writes the secret key to it.
-func (store *KeyStore) Create(name string, secret kes.Secret) error {
+func (store *KeyStore) Create(name string, secret secret.Secret) error {
 	store.initialize()
 	if _, ok := store.cache.Get(name); ok {
 		return kes.ErrKeyExists
@@ -95,7 +96,7 @@ func (store *KeyStore) Create(name string, secret kes.Secret) error {
 //
 // In particular, Get reads the secret key from the associated
 // file in KeyStore.Dir.
-func (store *KeyStore) Get(name string) (kes.Secret, error) {
+func (store *KeyStore) Get(name string) (secret.Secret, error) {
 	store.initialize()
 	if secret, ok := store.cache.Get(name); ok {
 		return secret, nil
@@ -106,15 +107,15 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 	path := filepath.Join(store.Dir, name)
 	file, err := os.Open(path)
 	if err != nil && os.IsNotExist(err) {
-		return kes.Secret{}, kes.ErrKeyNotFound
+		return secret.Secret{}, kes.ErrKeyNotFound
 	}
 	if err != nil {
 		store.logf("fs: cannot open '%s': %v", path, err)
-		return kes.Secret{}, err
+		return secret.Secret{}, err
 	}
 	defer file.Close()
 
-	var secret kes.Secret
+	var secret secret.Secret
 	if _, err := secret.ReadFrom(file); err != nil {
 		store.logf("fs: failed to read secret from '%s': %v", path, err)
 		return secret, err

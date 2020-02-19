@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kes
+package secret
 
 import (
 	"crypto/aes"
@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/minio/kes"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -176,7 +177,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 		return nil, err
 	}
 	if n := len(sealedKey.IV); n != 16 {
-		return nil, NewError(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
+		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
 	}
 
 	var aead cipher.AEAD
@@ -204,15 +205,15 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	default:
-		return nil, NewError(http.StatusBadRequest, "invalid algorithm: "+sealedKey.Algorithm)
+		return nil, kes.NewError(http.StatusBadRequest, "invalid algorithm: "+sealedKey.Algorithm)
 	}
 
 	if n := len(sealedKey.Nonce); n != aead.NonceSize() {
-		return nil, NewError(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
+		return nil, kes.NewError(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
 	}
 	plaintext, err := aead.Open(nil, sealedKey.Nonce, sealedKey.Bytes, associatedData)
 	if err != nil {
-		return nil, NewError(http.StatusBadRequest, "ciphertext is not authentic")
+		return nil, kes.NewError(http.StatusBadRequest, "ciphertext is not authentic")
 	}
 	return plaintext, nil
 }

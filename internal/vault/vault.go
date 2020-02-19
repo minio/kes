@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cache"
+	"github.com/minio/kes/internal/secret"
 )
 
 // AppRole holds the Vault AppRole
@@ -171,18 +173,20 @@ func (store *KeyStore) Authenticate(context context.Context) error {
 	return nil
 }
 
+var errSealed = kes.NewError(http.StatusForbidden, "key store is sealed")
+
 // Get returns the secret key associated with the given name.
 // If no entry for name exists, Get returns kes.ErrKeyNotFound.
 //
 // In particular, Get reads the secret key from the corresponding
 // entry at the Vault K/V store.
-func (store *KeyStore) Get(name string) (kes.Secret, error) {
+func (store *KeyStore) Get(name string) (secret.Secret, error) {
 	if store.client == nil {
 		store.log(errNoConnection)
-		return kes.Secret{}, errNoConnection
+		return secret.Secret{}, errNoConnection
 	}
 	if store.sealed {
-		return kes.Secret{}, kes.ErrStoreSealed
+		return secret.Secret{}, errSealed
 	}
 
 	store.initialize()
@@ -198,25 +202,25 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
 		if err == nil && entry == nil {
-			return kes.Secret{}, kes.ErrKeyNotFound
+			return secret.Secret{}, kes.ErrKeyNotFound
 		}
 		store.logf("vault: failed to read secret '%s': %v", location, err)
-		return kes.Secret{}, err
+		return secret.Secret{}, err
 	}
 
 	// Verify that we got a well-formed secret key from Vault
 	v, ok := entry.Data[name]
 	if !ok || v == nil {
 		store.logf("vault: failed to read secret '%s': entry exists but no secret key is present", location)
-		return kes.Secret{}, errors.New("vault: K/V entry does not contain any value")
+		return secret.Secret{}, errors.New("vault: K/V entry does not contain any value")
 	}
 	s, ok := v.(string)
 	if !ok {
 		store.logf("vault: failed to read secret '%s': invalid K/V format", location)
-		return kes.Secret{}, errors.New("vault: invalid K/V entry format")
+		return secret.Secret{}, errors.New("vault: invalid K/V entry format")
 	}
 
-	var secret kes.Secret
+	var secret secret.Secret
 	if err = secret.ParseString(s); err != nil {
 		store.logf("vault: failed to read secret '%s': %v", location, err)
 		return secret, err
@@ -231,13 +235,13 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 //
 // In particular, Create creates a new K/V entry on the Vault
 // key store.
-func (store *KeyStore) Create(name string, secret kes.Secret) error {
+func (store *KeyStore) Create(name string, secret secret.Secret) error {
 	if store.client == nil {
 		store.log(errNoConnection)
 		return errNoConnection
 	}
 	if store.sealed {
-		return kes.ErrStoreSealed
+		return errSealed
 	}
 
 	store.initialize()
@@ -300,7 +304,7 @@ func (store *KeyStore) Delete(name string) error {
 		return errNoConnection
 	}
 	if store.sealed {
-		return kes.ErrStoreSealed
+		return errSealed
 	}
 
 	// Vault will not return an error if an entry does not

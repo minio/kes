@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kes
+package http
 
 import (
 	"encoding/json"
@@ -13,6 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/auth"
+	xlog "github.com/minio/kes/internal/log"
+	"github.com/minio/kes/internal/secret"
 	"github.com/secure-io/sio-go/sioutil"
 )
 
@@ -55,9 +59,9 @@ func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func EnforcePolicies(roles *Roles, f http.HandlerFunc) http.HandlerFunc {
+func EnforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := roles.enforce(r); err != nil {
+		if err := roles.Verify(r); err != nil {
 			http.Error(w, err.Error(), statusCode(err))
 			return
 		}
@@ -68,16 +72,16 @@ func EnforcePolicies(roles *Roles, f http.HandlerFunc) http.HandlerFunc {
 // AuditLog returns a handler function that wraps f and logs the
 // HTTP request and response before sending the response status code
 // back to the client.
-func AuditLog(logger *log.Logger, roles *Roles, f http.HandlerFunc) http.HandlerFunc {
+func AuditLog(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w = &auditResponseWriter{
+		w = &xlog.AuditResponseWriter{
 			ResponseWriter: w,
 			URL:            *r.URL,
-			Identity:       Identify(r, roles.Identify),
+			Identity:       auth.Identify(r, roles.Identify),
 			RequestHeader:  r.Header.Clone(),
 			Time:           time.Now(),
 
-			logger: logger,
+			Logger: logger,
 		}
 		f(w, r)
 	}
@@ -100,7 +104,7 @@ func HandleVersion(version string) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleCreateKey(store Store) http.HandlerFunc {
+func HandleCreateKey(store secret.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -108,7 +112,7 @@ func HandleCreateKey(store Store) http.HandlerFunc {
 			return
 		}
 
-		var secret Secret
+		var secret secret.Secret
 		bytes, err := sioutil.Random(len(secret))
 		if err != nil {
 			http.Error(w, err.Error(), statusCode(err))
@@ -130,7 +134,7 @@ func HandleCreateKey(store Store) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleImportKey(store Store) http.HandlerFunc {
+func HandleImportKey(store secret.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type request struct {
 			Bytes []byte `json:"bytes"`
@@ -148,7 +152,7 @@ func HandleImportKey(store Store) http.HandlerFunc {
 			return
 		}
 
-		var secret Secret
+		var secret secret.Secret
 		if len(req.Bytes) != len(secret) {
 			http.Error(w, "invalid key", http.StatusBadRequest)
 			return
@@ -162,7 +166,7 @@ func HandleImportKey(store Store) http.HandlerFunc {
 	}
 }
 
-func HandleDeleteKey(store Store) http.HandlerFunc {
+func HandleDeleteKey(store secret.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -177,7 +181,7 @@ func HandleDeleteKey(store Store) http.HandlerFunc {
 	}
 }
 
-func HandleGenerateKey(store Store) http.HandlerFunc {
+func HandleGenerateKey(store secret.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type Request struct {
 			Context []byte `json:"context"`
@@ -200,7 +204,7 @@ func HandleGenerateKey(store Store) http.HandlerFunc {
 		}
 		secret, err := store.Get(name)
 		if err != nil {
-			err = asStatusError(err, ErrKeyNotFound.Error(), ErrKeyNotFound.Status())
+			err = asStatusError(err, kes.ErrKeyNotFound.Error(), kes.ErrKeyNotFound.Status())
 			http.Error(w, err.Error(), statusCode(err))
 			return
 		}
@@ -222,7 +226,7 @@ func HandleGenerateKey(store Store) http.HandlerFunc {
 	}
 }
 
-func HandleDecryptKey(store Store) http.HandlerFunc {
+func HandleDecryptKey(store secret.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type Request struct {
 			Ciphertext []byte `json:"ciphertext"`
@@ -245,7 +249,7 @@ func HandleDecryptKey(store Store) http.HandlerFunc {
 		}
 		secret, err := store.Get(name)
 		if err != nil {
-			err = asStatusError(err, ErrKeyNotFound.Error(), ErrKeyNotFound.Status())
+			err = asStatusError(err, kes.ErrKeyNotFound.Error(), kes.ErrKeyNotFound.Status())
 			http.Error(w, err.Error(), statusCode(err))
 			return
 		}
@@ -261,7 +265,7 @@ func HandleDecryptKey(store Store) http.HandlerFunc {
 	}
 }
 
-func HandleWritePolicy(roles *Roles) http.HandlerFunc {
+func HandleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -269,7 +273,7 @@ func HandleWritePolicy(roles *Roles) http.HandlerFunc {
 			return
 		}
 
-		var policy Policy
+		var policy kes.Policy
 		if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
@@ -279,7 +283,7 @@ func HandleWritePolicy(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleReadPolicy(roles *Roles) http.HandlerFunc {
+func HandleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -296,7 +300,7 @@ func HandleReadPolicy(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleListPolicies(roles *Roles) http.HandlerFunc {
+func HandleListPolicies(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var policies []string
 		pattern := pathBase(r.URL.Path)
@@ -309,7 +313,7 @@ func HandleListPolicies(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleDeletePolicy(roles *Roles) http.HandlerFunc {
+func HandleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -321,9 +325,9 @@ func HandleDeletePolicy(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
+func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		identity := Identity(pathBase(r.URL.Path))
+		identity := kes.Identity(pathBase(r.URL.Path))
 		if identity.IsUnknown() {
 			http.Error(w, "invalid identity", http.StatusBadRequest)
 			return
@@ -332,7 +336,7 @@ func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 			http.Error(w, "identity is root", http.StatusBadRequest)
 			return
 		}
-		if identity == Identify(r, roles.Identify) {
+		if identity == auth.Identify(r, roles.Identify) {
 			http.Error(w, "invalid identity: you cannot assign a policy to yourself", http.StatusBadRequest)
 			return
 		}
@@ -346,10 +350,10 @@ func HandleAssignIdentity(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleListIdentities(roles *Roles) http.HandlerFunc {
+func HandleListIdentities(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pattern := pathBase(r.URL.Path)
-		identities := map[Identity]string{}
+		identities := map[kes.Identity]string{}
 		for id, policy := range roles.Identities() {
 			if ok, err := path.Match(pattern, id.String()); ok && err == nil {
 				identities[id] = policy
@@ -359,9 +363,9 @@ func HandleListIdentities(roles *Roles) http.HandlerFunc {
 	}
 }
 
-func HandleForgetIdentity(roles *Roles) http.HandlerFunc {
+func HandleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		identity := Identity(pathBase(r.URL.Path))
+		identity := kes.Identity(pathBase(r.URL.Path))
 		if identity.IsUnknown() {
 			http.Error(w, "invalid identity", http.StatusBadRequest)
 			return
@@ -382,9 +386,9 @@ func HandleForgetIdentity(roles *Roles) http.HandlerFunc {
 // that will wait for the client to close the connection
 // resp. until the request context is done.
 // Therefore, it will not work properly with (write) timeouts.
-func HandleTraceAuditLog(log *SystemLog) http.HandlerFunc {
+func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		out := newFlushWriter(w)
+		out := xlog.NewFlushWriter(w)
 		log.AddOutput(out)
 		defer log.RemoveOutput(out)
 
@@ -412,5 +416,5 @@ func asStatusError(err error, msg string, status int) error {
 	if _, ok := err.(interface{ Status() int }); ok {
 		return err
 	}
-	return NewError(status, fmt.Sprintf("%s: %s", msg, err.Error()))
+	return kes.NewError(status, fmt.Sprintf("%s: %s", msg, err.Error()))
 }

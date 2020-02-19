@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cache"
+	"github.com/minio/kes/internal/secret"
 )
 
 // Credentials represents static AWS credentials:
@@ -83,7 +84,7 @@ type SecretsManager struct {
 //
 // In particular, Create creates a new entry on AWS Secrets
 // Manager with the given name containing the secret.
-func (store *SecretsManager) Create(name string, secret kes.Secret) error {
+func (store *SecretsManager) Create(name string, secret secret.Secret) error {
 	if store.client == nil {
 		store.log(errNoConnection)
 		return errNoConnection
@@ -120,10 +121,10 @@ func (store *SecretsManager) Create(name string, secret kes.Secret) error {
 //
 // In particular, Get reads the secret key from the corresponding
 // entry at AWS Secrets Manager.
-func (store *SecretsManager) Get(name string) (kes.Secret, error) {
+func (store *SecretsManager) Get(name string) (secret.Secret, error) {
 	if store.client == nil {
 		store.log(errNoConnection)
-		return kes.Secret{}, errNoConnection
+		return secret.Secret{}, errNoConnection
 	}
 	store.initialize()
 	if secret, ok := store.cache.Get(name); ok {
@@ -137,14 +138,14 @@ func (store *SecretsManager) Get(name string) (kes.Secret, error) {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeDecryptionFailure:
-				return kes.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
+				return secret.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
 			case secretsmanager.ErrCodeResourceNotFoundException:
-				return kes.Secret{}, kes.ErrKeyNotFound
+				return secret.Secret{}, kes.ErrKeyNotFound
 			}
 		}
 		err = fmt.Errorf("aws: failed to read secret '%s': %v", name, err)
 		store.log(err)
-		return kes.Secret{}, err
+		return secret.Secret{}, err
 	}
 
 	// AWS has two different ways to store a secret. Either as
@@ -154,7 +155,7 @@ func (store *SecretsManager) Get(name string) (kes.Secret, error) {
 	// However, AWS demands and specifies that only one is present -
 	// either "SecretString" or "SecretBinary" - we can check which
 	// one is present and safely assume that the other one isn't.
-	var secret kes.Secret
+	var secret secret.Secret
 	if response.SecretString != nil {
 		if err = secret.ParseString(*response.SecretString); err != nil {
 			store.logf("aws: failed to read secret '%s': %v", name, err)

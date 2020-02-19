@@ -13,6 +13,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cache"
+	"github.com/minio/kes/internal/secret"
 )
 
 // KeyStore is an in-memory secret key store.
@@ -47,7 +48,7 @@ type KeyStore struct {
 // Create adds the given secret key to the store if and only
 // if no entry for name exists. If an entry already exists
 // it returns kes.ErrKeyExists.
-func (store *KeyStore) Create(name string, secret kes.Secret) error {
+func (store *KeyStore) Create(name string, secret secret.Secret) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
 
@@ -77,10 +78,10 @@ func (store *KeyStore) Delete(name string) error {
 
 // Get returns the secret key associated with the given name.
 // If no entry for name exists, Get returns kes.ErrKeyNotFound.
-func (store *KeyStore) Get(name string) (kes.Secret, error) {
-	secret, ok := store.cache.Get(name)
+func (store *KeyStore) Get(name string) (secret.Secret, error) {
+	sec, ok := store.cache.Get(name)
 	if ok {
-		return secret, nil
+		return sec, nil
 	}
 
 	// The secret key is not in the cache.
@@ -91,14 +92,14 @@ func (store *KeyStore) Get(name string) (kes.Secret, error) {
 
 	s, ok := store.store[name]
 	if !ok {
-		return kes.Secret{}, kes.ErrKeyNotFound
+		return secret.Secret{}, kes.ErrKeyNotFound
 	}
-	if err := secret.ParseString(s); err != nil {
+	if err := sec.ParseString(s); err != nil {
 		store.logf("mem: failed to read secret '%s': %v", name, err)
-		return secret, err
+		return secret.Secret{}, err
 	}
-	store.cache.Set(name, secret)
-	return secret, nil
+	store.cache.Set(name, sec)
+	return sec, nil
 }
 
 func (store *KeyStore) initialize() {
