@@ -94,8 +94,10 @@ type AuditResponseWriter struct {
 	RequestHeader http.Header  // The request headers
 	Time          time.Time    // The time when we receive the request
 
-	Logger  *log.Logger
-	written bool // Set to true on first write
+	Logger *log.Logger
+
+	sentHeader bool // Set to true on first WriteHeader
+	sentBody   bool // Set to true on first Write
 }
 
 func (w *AuditResponseWriter) Header() http.Header {
@@ -103,20 +105,50 @@ func (w *AuditResponseWriter) Header() http.Header {
 }
 
 func (w *AuditResponseWriter) WriteHeader(statusCode int) {
-	if !w.written {
-		w.written = true
+	if !w.sentHeader {
+		w.sentHeader = true
 
 		now := time.Now().UTC()
 		const format = `{"time":"%s","request":{"path":"%s","identity":"%s"},"response":{"code":%d, "time":%d}}`
 		w.Logger.Printf(format, now.Format(time.RFC3339), w.URL.Path, w.Identity, statusCode, now.Sub(w.Time.UTC()))
 
-		w.ResponseWriter.WriteHeader(statusCode)
+		// Here the following problem can appear:
+		//
+		// When a client hits the /v1/log/audit/trace API endpoint
+		// the ResponseWriter gets added as output dest. to w.Logger and
+		// then the audit trace handler writes 200 OK to the ResponseWriter.
+		// Now, this function gets executed - which will first log to all
+		// output dest. (including w itself). This implicitly sends a 200 OK
+		// to the client alongside with the log message.
+		// Then, this function tries to write the statusCode to the client - which
+		// already happened. So, the WriteHeader method of w.ResponseWriter gets called
+		// twice and causes Go's http stack to log: "http: superfluous response.WriteHeader call ..."
+		//
+		// Therefore, we first check whether we have sent the response headers
+		// and, if not, log the audit event before sending the response headers
+		// and status code.
+		// If we - while writing to all log output dest. - write to ourself
+		// (this AuditResponseWriter in case of /v1/log/audit/trace), and therefore,
+		// implicitly send 200 OK to the client, then we set the sentBody flag
+		// to true.
+		// By checking the sentBody flag here we ensure that we don't try to write
+		// a status code again.
+		//
+		// When changing this behavior it must be ensured that we don't start logging:
+		// "http: superfluous response.WriteHeader call ..."
+
+		if !w.sentBody {
+			w.ResponseWriter.WriteHeader(statusCode)
+		}
 	}
 }
 
 func (w *AuditResponseWriter) Write(b []byte) (int, error) {
-	if !w.written {
+	if !w.sentHeader {
 		w.WriteHeader(http.StatusOK)
+	}
+	if !w.sentBody {
+		w.sentBody = true
 	}
 	return w.ResponseWriter.Write(b)
 }
