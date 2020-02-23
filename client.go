@@ -49,7 +49,7 @@ func (c *Client) Transport(transport http.RoundTripper) { c.httpClient.Transport
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version() (string, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/version", c.addr))
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/version", c.addr))
 	if err != nil {
 		return "", err
 	}
