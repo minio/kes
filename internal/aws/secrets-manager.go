@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -136,10 +135,7 @@ func (store *SecretsManager) Get(name string) (secret.Secret, error) {
 	})
 	if err != nil {
 		if err, ok := err.(awserr.Error); ok {
-			switch err.Code() {
-			case secretsmanager.ErrCodeDecryptionFailure:
-				return secret.Secret{}, kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access secret '%s': %v", name, err))
-			case secretsmanager.ErrCodeResourceNotFoundException:
+			if err.Code() == secretsmanager.ErrCodeResourceNotFoundException {
 				return secret.Secret{}, kes.ErrKeyNotFound
 			}
 		}

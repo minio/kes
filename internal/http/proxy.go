@@ -35,7 +35,7 @@ func TLSProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 
 		aw, ok := w.(*log.AuditResponseWriter)
 		if err := proxy.Verify(r); err != nil {
-			http.Error(w, err.Error(), statusCode(err))
+			Error(w, err)
 			return
 		}
 		if ok && aw != nil {
