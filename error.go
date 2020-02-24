@@ -4,7 +4,12 @@
 
 package kes
 
-import "net/http"
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+)
 
 var (
 	ErrKeyNotFound Error = NewError(http.StatusNotFound, "key does not exist")
@@ -52,3 +57,48 @@ func NewError(code int, msg string) Error {
 func (e Error) Status() int { return e.code }
 
 func (e Error) Error() string { return e.message }
+
+// parseErrorResponse returns an error containing
+// the response status code and response body
+// as error message if the response is an error
+// response - i.e. status code >= 400.
+//
+// If the response status code is < 400, e.g. 200 OK,
+// parseErrorResponse returns nil and does not attempt
+// to read or close the responde body.
+//
+// If resp is an error response, parseErrorResponse reads
+// and closes the response body.
+func parseErrorResponse(resp *http.Response) error {
+	if resp == nil || resp.StatusCode < 400 {
+		return nil
+	}
+	if resp.Body == nil {
+		return NewError(resp.StatusCode, "")
+	}
+	defer resp.Body.Close()
+
+	const MaxBodySize = 1 << 20
+	var size = resp.ContentLength
+	if size < 0 || size > MaxBodySize {
+		size = MaxBodySize
+	}
+
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "application/json") {
+		type Response struct {
+			Message string `json:"message"`
+		}
+		var response Response
+		if err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response); err != nil {
+			return err
+		}
+		return NewError(resp.StatusCode, response.Message)
+	}
+
+	var sb strings.Builder
+	if _, err := io.CopyN(&sb, resp.Body, size); err != nil {
+		return err
+	}
+	return NewError(resp.StatusCode, sb.String())
+}
