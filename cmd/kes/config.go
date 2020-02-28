@@ -22,6 +22,12 @@ type serverConfig struct {
 	TLS struct {
 		KeyPath  string `toml:"key" yaml:"key"`
 		CertPath string `toml:"cert" yaml:"cert"`
+		Proxy    struct {
+			Identities []kes.Identity `toml:"identities" yaml:"identities"`
+			Header     struct {
+				ClientCert string `toml:"cert" yaml:"cert"`
+			} `toml:"header" yaml:"header"`
+		} `toml:"proxy" yaml:"proxy"`
 	} `toml:"tls" yaml:"tls"`
 
 	Policies map[string]struct {

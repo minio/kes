@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -240,6 +241,24 @@ func server(args []string) error {
 		}
 	}
 
+	var proxy *auth.TLSProxy
+	if len(config.TLS.Proxy.Identities) != 0 {
+		proxy = &auth.TLSProxy{
+			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert),
+		}
+		if mtlsAuth == "verify" {
+			proxy.VerifyOptions = new(x509.VerifyOptions)
+		}
+		for _, identity := range config.TLS.Proxy.Identities {
+			if identity == kes.Identity(rootIdentity) {
+				return fmt.Errorf("Cannot use root identity '%s' as TLS proxy", identity)
+			}
+			if !identity.IsUnknown() {
+				proxy.Add(identity)
+			}
+		}
+	}
+
 	roles := &auth.Roles{
 		Root: kes.Identity(rootIdentity),
 	}
@@ -251,10 +270,16 @@ func server(args []string) error {
 		roles.Set(name, p)
 
 		for _, identity := range policy.Identities {
+			if identity == kes.Identity(rootIdentity) {
+				return fmt.Errorf("Cannot assign policy '%s' to root identity '%s'", name, identity)
+			}
+			if proxy != nil && proxy.Is(identity) {
+				return fmt.Errorf("Cannot assign policy '%s' to TLS proxy '%s'", name, identity)
+			}
 			if roles.IsAssigned(identity) {
 				return fmt.Errorf("Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
 			}
-			if identity != kes.IdentityUnknown {
+			if !identity.IsUnknown() {
 				roles.Assign(name, identity)
 			}
 		}
@@ -262,25 +287,25 @@ func server(args []string) error {
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store))))))))
-	mux.Handle("/v1/key/import/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(maxBody, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store))))))))
-	mux.Handle("/v1/key/delete/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(store))))))))
-	mux.Handle("/v1/key/generate/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(maxBody, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(store))))))))
-	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(maxBody, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(store))))))))
+	mux.Handle("/v1/key/create/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store)))))))))
+	mux.Handle("/v1/key/import/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(maxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store)))))))))
+	mux.Handle("/v1/key/delete/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(store)))))))))
+	mux.Handle("/v1/key/generate/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(maxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(store)))))))))
+	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(maxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(store)))))))))
 
-	mux.Handle("/v1/policy/write/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/policy/write/*", xhttp.LimitRequestBody(maxBody, xhttp.EnforcePolicies(roles, xhttp.HandleWritePolicy(roles))))))))
-	mux.Handle("/v1/policy/read/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/read/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleReadPolicy(roles))))))))
-	mux.Handle("/v1/policy/list/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/list/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleListPolicies(roles))))))))
-	mux.Handle("/v1/policy/delete/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/policy/delete/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleDeletePolicy(roles))))))))
+	mux.Handle("/v1/policy/write/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/policy/write/*", xhttp.LimitRequestBody(maxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleWritePolicy(roles)))))))))
+	mux.Handle("/v1/policy/read/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/read/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleReadPolicy(roles)))))))))
+	mux.Handle("/v1/policy/list/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListPolicies(roles)))))))))
+	mux.Handle("/v1/policy/delete/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/policy/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeletePolicy(roles)))))))))
 
-	mux.Handle("/v1/identity/assign/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/identity/assign/*/*", xhttp.LimitRequestBody(maxBody, xhttp.EnforcePolicies(roles, xhttp.HandleAssignIdentity(roles))))))))
-	mux.Handle("/v1/identity/list/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/identity/list/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleListIdentities(roles))))))))
-	mux.Handle("/v1/identity/forget/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/identity/forget/*", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleForgetIdentity(roles))))))))
+	mux.Handle("/v1/identity/assign/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/identity/assign/*/*", xhttp.LimitRequestBody(maxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleAssignIdentity(roles)))))))))
+	mux.Handle("/v1/identity/list/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/identity/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListIdentities(roles)))))))))
+	mux.Handle("/v1/identity/forget/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/identity/forget/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleForgetIdentity(roles)))))))))
 
-	mux.Handle("/v1/log/audit/trace", xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/audit/trace", xhttp.LimitRequestBody(0, xhttp.EnforcePolicies(roles, xhttp.HandleTraceAuditLog(auditLog)))))))
+	mux.Handle("/v1/log/audit/trace", xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/audit/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceAuditLog(auditLog))))))))
 
-	mux.Handle("/version", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.HandleVersion(version))))))) // /version is accessible to any identity
-	mux.Handle("/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, http.NotFound)))
+	mux.Handle("/version", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.HandleVersion(version)))))))) // /version is accessible to any identity
+	mux.Handle("/", timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound))))
 
 	server := http.Server{
 		Addr:    addr,

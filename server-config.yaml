@@ -13,6 +13,28 @@ root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
 tls:
   key: ./server.key   # Path to the TLS private key
   cert: ./server.cert # Path to the TLS certificate
+  # The TLS proxy configuration. A TLS proxy, like nginx, sits in
+  # between a kes client and the kes server and usually acts as a
+  # load balancer or common API endpoint.
+  # All connections from the kes client to the TLS proxy as well
+  # the connections from the TLS proxy to the kes server must be
+  # established over TLS.
+  proxy:
+    # The identities of all TLS proxies directly connected to the kes
+    # server.
+    #
+    # Note that a TLS proxy can act as any identity (including root)
+    # since it can forward arbitrary client certificates. Client certificates
+    # aren't secret information and a malicious TLS proxy can fake any
+    # identity it has seen before. Therefore, its critical that all TLS proxy
+    # identities are secure and trusted servers.
+    identities: []
+    # The HTTP header sent by the TLS proxy to forward certain data
+    # about the client to the kes server.
+    header:
+      # The HTTP header containing the URL-escaped and PEM-encoded
+      # certificate of the kes client forwarded by the TLS proxy.
+      cert: X-Tls-Client-Cert
 
 # Policy definitions. A policy must have an unique name
 # (i.e. [policy.<name>]) and specifies which APIs can
@@ -33,7 +55,7 @@ tls:
 # the server finds the policy assigned to the identity and then
 # checks whether the request is valid.
 
-# In general, each user/applicaton should only have the minimal
+# In general, each user/application should only have the minimal
 # set of policy permissions to accomplish whatever it needs to do.
 # Therefore, it is recommended to define policies based on workflows
 # and then assign them to the identities.
@@ -105,7 +127,7 @@ log:
   # }
   # The server will write such an audit log entry for every HTTP
   # request-response pair - including invalid requests. If no audit
-  # file (path) is specifed the server will not log audit events.
+  # file (path) is specified the server will not log audit events.
   # In contrast to error log, audit logging has to be enabled explicitly.
   audit:
     file:  
