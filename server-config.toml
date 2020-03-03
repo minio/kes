@@ -128,6 +128,30 @@ file = [ "" ] # Add one or more log file paths here.
 [audit]
 file = [ "" ] # Add one or more log file paths here
 
+# External KMS configuration. An external KMS holds a set
+# of cryptographic secret keys - which can be used to encrypt
+# resp. decrypt secrets.
+# The kes server will try to encrypt resp. decrypt secrets
+# before storing resp. fetching them form the key store.
+# If an external KMS is set the kes server will only accept
+# encrypted secrets and no more plaintext secrets.
+#
+# The AWS key management system (AWS-KMS). If set, the kes
+# server will send all secrets to AWS to encrypt resp. decrypt
+# them before / after storing resp. fetching them from the
+# key store.
+[kms.aws]
+address = "" # The AWS-KMS endpoint - e.g.: kms.us-east-2.amazonaws.com
+region  = "" # The AWS region of the Secrets Manager - e.g.: "us-east-2"
+key     = "" # The AWS-KMS key ID (CMK ID) used to encrypt new secrets.
+
+# The AWS credentials to authenticate to AWS-KMS.
+[kms.aws.credentials]
+access_key    = "" # Your AWS Access Key
+secret_key    = "" # Your AWS Secret Key
+session_token = "" # Your AWS session token (usually optional)
+
+
 # Key stores configuration. A key store holds secret keys.
 # A server can only be configured to use one key store at
 # the same time.

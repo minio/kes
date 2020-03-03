@@ -2,114 +2,104 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-// Package cache implements an in-memory cache
-// for secret keys.
-package cache
+package secret
 
 import (
 	"context"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/minio/kes/internal/secret"
 )
 
-// An Entry holds a cached secret key and additional
-// cache-related metadata. For instance, whether the
-// entry has been used recently.
-type Entry struct {
-	Secret secret.Secret
+// An entry holds a cached secret and additional
+// cache-related metadata. For instance, whether
+// the entry has been used recently.
+type entry struct {
+	Secret Secret
 
-	used *uint32
+	used uint32
 }
 
-// Cache is a in-memory cache mapping names to
-// cache.Entry. It is safe for concurrent use.
-type Cache struct {
+// cache is a in-memory cache mapping names to
+// cache entries. It is safe for concurrent use.
+type cache struct {
 	lock  sync.RWMutex
-	store map[string]Entry
+	store map[string]*entry
 }
 
-// Set adds the given secret key to the cache.
+// Set adds the given secret to the cache.
 // If there is already an entry for the given
 // name then Set replaces this entry.
-func (c *Cache) Set(name string, secret secret.Secret) {
-	var used uint32 = 1
-
+func (c *cache) Set(name string, secret Secret) {
 	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	if c.store == nil {
-		c.store = map[string]Entry{}
+		c.store = map[string]*entry{}
 	}
-	c.store[name] = Entry{
+	c.store[name] = &entry{
 		Secret: secret,
-		used:   &used,
+		used:   1,
 	}
-	c.lock.Unlock()
 }
 
-// Add adds the given secret key to the cache
-// if and only if no entry for name existed
-// before. It returns true if and only if no
-// entry existed.
+// SetOrGet adds  given secret to the cache
+// if and only if no entry for name already
+// exists. Instead, if an entry for the given
+// name exists it returns the secret that is
+// currently present.
 //
-// In particular, Add returns the secret that
-// is in the cache - either the one that existed
-// before or the one added by Add.
-func (c *Cache) Add(name string, secret secret.Secret) (secret.Secret, bool) {
+// SetOrGet will always return the secret that
+// is in the cache right now - either the given
+// one or the one that has been there before.
+func (c *cache) SetOrGet(name string, secret Secret) Secret {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	if entry, ok := c.store[name]; ok {
-		return entry.Secret, false
+		atomic.StoreUint32(&entry.used, 1)
+		return entry.Secret
 	}
 
 	if c.store == nil {
-		c.store = map[string]Entry{}
+		c.store = map[string]*entry{}
 	}
-	var used uint32 = 1
-	c.store[name] = Entry{
+	c.store[name] = &entry{
 		Secret: secret,
-		used:   &used,
+		used:   1,
 	}
-	return secret, true
+	return secret
 }
 
-// Get returns the secret key for the
-// given name. It returns true if and
-// only if a cache entry exists.
-func (c *Cache) Get(name string) (secret.Secret, bool) {
+// Get returns the secret for the given name.
+// It returns true if and only if a cache entry
+// exists.
+func (c *cache) Get(name string) (Secret, bool) {
 	c.lock.RLock()
-	entry, ok := c.store[name]
-	c.lock.RUnlock()
+	defer c.lock.RUnlock()
 
-	if ok {
-		atomic.StoreUint32(entry.used, 1)
+	entry, ok := c.store[name]
+	if !ok {
+		return Secret{}, ok
 	}
+	atomic.StoreUint32(&entry.used, 1)
 	return entry.Secret, ok
 }
 
 // Delete removes the entry with the
 // given name if it exists.
-func (c *Cache) Delete(name string) {
+func (c *cache) Delete(name string) {
 	c.lock.Lock()
-	delete(c.store, name)
-	c.lock.Unlock()
-}
+	defer c.lock.Unlock()
 
-// Clear removes all entries from the
-// cache.
-func (c *Cache) Clear() {
-	c.lock.Lock()
-	c.store = map[string]Entry{}
-	c.lock.Unlock()
+	delete(c.store, name)
 }
 
 // StartGC spawns a new go-routine that clears
 // the cache repeatedly in t intervals.
 //
 // If t == 0, StartGC does nothing.
-func (c *Cache) StartGC(ctx context.Context, t time.Duration) {
+func (c *cache) StartGC(ctx context.Context, t time.Duration) {
 	if t == 0 {
 		return
 	}
@@ -122,7 +112,7 @@ func (c *Cache) StartGC(ctx context.Context, t time.Duration) {
 				return
 			case <-ticker.C:
 				c.lock.Lock()
-				c.store = map[string]Entry{}
+				c.store = map[string]*entry{}
 				c.lock.Unlock()
 			}
 		}
@@ -143,7 +133,7 @@ func (c *Cache) StartGC(ctx context.Context, t time.Duration) {
 // should survive x seconds, you should set t = x/2.
 //
 // If t == 0, StartUnusedGC does nothing.
-func (c *Cache) StartUnusedGC(ctx context.Context, t time.Duration) {
+func (c *cache) StartUnusedGC(ctx context.Context, t time.Duration) {
 	if t == 0 {
 		return
 	}
@@ -166,7 +156,7 @@ func (c *Cache) StartUnusedGC(ctx context.Context, t time.Duration) {
 					// since we marked as to delete". Therefore,
 					// we add it to the list of entries that should
 					// be deleted.
-					if !atomic.CompareAndSwapUint32(entry.used, 1, 0) {
+					if !atomic.CompareAndSwapUint32(&entry.used, 1, 0) {
 						names = append(names, name)
 					}
 				}

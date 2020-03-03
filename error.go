@@ -14,6 +14,7 @@ import (
 var (
 	ErrKeyNotFound Error = NewError(http.StatusNotFound, "key does not exist")
 	ErrKeyExists   Error = NewError(http.StatusBadRequest, "key does already exist")
+	ErrKeySealed   Error = NewError(http.StatusForbidden, "key is sealed")
 	ErrNotAllowed  Error = NewError(http.StatusForbidden, "prohibited by policy")
 )
 
@@ -34,7 +35,7 @@ var (
 //       case ErrNotAllowed:
 //          // We don't have the permission to create this key.
 //       default:
-//          // Something else when wrong.
+//          // Something else went wrong.
 //   }
 type Error struct {
 	code    int

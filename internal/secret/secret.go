@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,13 +23,6 @@ import (
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 )
-
-type sealed struct {
-	Algorithm string `json:"aead"`
-	IV        []byte `json:"iv"`
-	Nonce     []byte `json:"nonce"`
-	Bytes     []byte `json:"bytes"`
-}
 
 // Secret is a 256 bit secret key.
 // It can wrap and unwrap session
@@ -56,7 +48,7 @@ func (s *Secret) ParseString(v string) error {
 	const suffix = `"}`
 
 	if !strings.HasPrefix(v, prefix) || !strings.HasSuffix(v, suffix) {
-		return errors.New("kes: malformed secret")
+		return errors.New("secret is malformed")
 	}
 
 	v = strings.TrimPrefix(v, prefix)
@@ -64,38 +56,18 @@ func (s *Secret) ParseString(v string) error {
 
 	b, err := base64.StdEncoding.DecodeString(v)
 	if err != nil {
-		return errors.New("kes: malformed secret")
+		return errors.New("secret is malformed")
 	}
 	if len(b) != 32 {
-		return errors.New("kes: malformed secret")
+		return errors.New("secret is malformed")
 	}
 	copy(s[:], b)
 	return nil
 }
 
-// WriteTo writes the string representation of the
-// secret to w. It returns the first error encountered
-// during writing, if any, and the number of bytes
-// written to w.
-func (s Secret) WriteTo(w io.Writer) (int64, error) {
-	n, err := io.WriteString(w, s.String())
-	return int64(n), err
-}
+func (s Secret) MarshalJSON() ([]byte, error) { return []byte(s.String()), nil }
 
-// ReadFrom sets the secret to the value read from r,
-// if it could successfully parse whatever data r
-// returns. It returns the first error encountered
-// during reading, if any, and the number of bytes
-// read from r.
-func (s *Secret) ReadFrom(r io.Reader) (int64, error) {
-	const fileSize = 56 // base64.DecodeLen + 12 JSON bytes
-	var sb strings.Builder
-	n, err := io.Copy(&sb, io.LimitReader(r, fileSize))
-	if err != nil {
-		return n, err
-	}
-	return n, s.ParseString(sb.String())
-}
+func (s *Secret) UnmarshalJSON(b []byte) error { return s.ParseString(string(b)) }
 
 // Wrap encrypts and authenticates the plaintext,
 // authenticates the associatedData and returns
@@ -156,7 +128,14 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 		return nil, err
 	}
 	ciphertext := aead.Seal(nil, nonce, plaintext, associatedData)
-	return json.Marshal(sealed{
+
+	type SealedSecret struct {
+		Algorithm string `json:"aead"`
+		IV        []byte `json:"iv"`
+		Nonce     []byte `json:"nonce"`
+		Bytes     []byte `json:"bytes"`
+	}
+	return json.Marshal(SealedSecret{
 		Algorithm: algorithm,
 		IV:        iv,
 		Nonce:     nonce,
@@ -173,19 +152,26 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	// For instance, it ignores the first key-value pair if
 	// the same key is present more than nonce or ignores
 	// unknown keys by default.
-	var sealedKey sealed
-	if err := json.Unmarshal(ciphertext, &sealedKey); err != nil {
+
+	type SealedSecret struct {
+		Algorithm string `json:"aead"`
+		IV        []byte `json:"iv"`
+		Nonce     []byte `json:"nonce"`
+		Bytes     []byte `json:"bytes"`
+	}
+	var sealedSecret SealedSecret
+	if err := json.Unmarshal(ciphertext, &sealedSecret); err != nil {
 		return nil, err
 	}
-	if n := len(sealedKey.IV); n != 16 {
+	if n := len(sealedSecret.IV); n != 16 {
 		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
 	}
 
 	var aead cipher.AEAD
-	switch sealedKey.Algorithm {
+	switch sealedSecret.Algorithm {
 	case "AES-256-GCM-HMAC-SHA-256":
 		mac := hmac.New(sha256.New, s[:])
-		mac.Write(sealedKey.IV)
+		mac.Write(sealedSecret.IV)
 		sealingKey := mac.Sum(nil)
 
 		block, err := aes.NewCipher(sealingKey[:])
@@ -197,7 +183,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	case "AES-256-GCM":
-		sealingKey, err := insecureAESDeriveKey(s[:], sealedKey.IV)
+		sealingKey, err := insecureAESDeriveKey(s[:], sealedSecret.IV)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +196,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	case "ChaCha20Poly1305":
-		sealingKey, err := chacha20.HChaCha20(s[:], sealedKey.IV)
+		sealingKey, err := chacha20.HChaCha20(s[:], sealedSecret.IV)
 		if err != nil {
 			return nil, err
 		}
@@ -219,13 +205,13 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	default:
-		return nil, kes.NewError(http.StatusBadRequest, "invalid algorithm: "+sealedKey.Algorithm)
+		return nil, kes.NewError(http.StatusBadRequest, "invalid algorithm: "+sealedSecret.Algorithm)
 	}
 
-	if n := len(sealedKey.Nonce); n != aead.NonceSize() {
+	if n := len(sealedSecret.Nonce); n != aead.NonceSize() {
 		return nil, kes.NewError(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
 	}
-	plaintext, err := aead.Open(nil, sealedKey.Nonce, sealedKey.Bytes, associatedData)
+	plaintext, err := aead.Open(nil, sealedSecret.Nonce, sealedSecret.Bytes, associatedData)
 	if err != nil {
 		return nil, kes.NewError(http.StatusBadRequest, "ciphertext is not authentic")
 	}

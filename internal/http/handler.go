@@ -108,7 +108,7 @@ func HandleVersion(version string) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleCreateKey(store secret.Store) http.HandlerFunc {
+func HandleCreateKey(store *secret.Store) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func HandleCreateKey(store secret.Store) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleImportKey(store secret.Store) http.HandlerFunc {
+func HandleImportKey(store *secret.Store) http.HandlerFunc {
 	var (
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -178,7 +178,7 @@ func HandleImportKey(store secret.Store) http.HandlerFunc {
 	}
 }
 
-func HandleDeleteKey(store secret.Store) http.HandlerFunc {
+func HandleDeleteKey(store *secret.Store) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func HandleDeleteKey(store secret.Store) http.HandlerFunc {
 	}
 }
 
-func HandleGenerateKey(store secret.Store) http.HandlerFunc {
+func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -243,7 +243,7 @@ func HandleGenerateKey(store secret.Store) http.HandlerFunc {
 	}
 }
 
-func HandleDecryptKey(store secret.Store) http.HandlerFunc {
+func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")

@@ -2,121 +2,60 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-// Package mem implements an in-memory secret key store.
+// Package mem implements an in-memory key-value store.
 package mem
 
 import (
-	"context"
-	"log"
 	"sync"
-	"time"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/cache"
 	"github.com/minio/kes/internal/secret"
 )
 
-// KeyStore is an in-memory secret key store.
-type KeyStore struct {
-	// CacheExpireAfter is the duration after which
-	// cache entries expire such that they have to
-	// be loaded from the backend storage again.
-	CacheExpireAfter time.Duration
-
-	// CacheExpireUnusedAfter is the duration after
-	// which not recently used cache entries expire
-	// such that they have to be loaded from the
-	// backend storage again.
-	// Not recently is defined as: CacheExpireUnusedAfter / 2
-	CacheExpireUnusedAfter time.Duration
-
-	// ErrorLog specifies an optional logger for errors
-	// when files cannot be opened, deleted or contain
-	// invalid content.
-	// If nil, logging is done via the log package's
-	// standard logger.
-	ErrorLog *log.Logger
-
-	cache cache.Cache
-
+// Store is an in-memory key-value store. Its zero value is
+// ready to use.
+type Store struct {
 	lock  sync.RWMutex
 	store map[string]string
-
-	once sync.Once // initializes the store and starts cache GCs
 }
 
-// Create adds the given secret key to the store if and only
-// if no entry for name exists. If an entry already exists
+var _ secret.Remote = (*Store)(nil)
+
+// Create adds the given key-value pair to the store if and
+// only if no entry for key exists. If an entry already exists
 // it returns kes.ErrKeyExists.
-func (store *KeyStore) Create(name string, secret secret.Secret) error {
-	store.lock.Lock()
-	defer store.lock.Unlock()
+func (s *Store) Create(key, value string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	if _, ok := store.cache.Get(name); ok {
+	if s.store == nil {
+		s.store = map[string]string{}
+	}
+	if _, ok := s.store[key]; ok {
 		return kes.ErrKeyExists
 	}
-	if _, ok := store.store[name]; ok {
-		return kes.ErrKeyExists
-	}
-	if store.store == nil {
-		store.once.Do(store.initialize)
-	}
-	store.cache.Set(name, secret)
-	store.store[name] = secret.String()
+	s.store[key] = value
 	return nil
 }
 
-// Delete removes a the secret key with the given name
-// from the key store if it exists.
-func (store *KeyStore) Delete(name string) error {
-	store.lock.Lock()
-	store.cache.Delete(name)
-	delete(store.store, name)
-	store.lock.Unlock()
+// Delete removes the value for the given key, if it exists.
+func (s *Store) Delete(key string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	delete(s.store, key)
 	return nil
 }
 
-// Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns kes.ErrKeyNotFound.
-func (store *KeyStore) Get(name string) (secret.Secret, error) {
-	sec, ok := store.cache.Get(name)
-	if ok {
-		return sec, nil
-	}
+// Get returns the value associated with the given key. If no
+// entry for key exists it returns kes.ErrKeyNotFound.
+func (s *Store) Get(key string) (string, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
-	// The secret key is not in the cache.
-	// So we check whether it exists at all
-	// and, if so, add it to the cache.
-	store.lock.Lock()
-	defer store.lock.Unlock()
-
-	s, ok := store.store[name]
+	value, ok := s.store[key]
 	if !ok {
-		return secret.Secret{}, kes.ErrKeyNotFound
+		return "", kes.ErrKeyNotFound
 	}
-	if err := sec.ParseString(s); err != nil {
-		store.logf("mem: failed to read secret '%s': %v", name, err)
-		return secret.Secret{}, err
-	}
-	store.cache.Set(name, sec)
-	return sec, nil
-}
-
-func (store *KeyStore) initialize() {
-	// We have to hold the write-lock here
-	// since once.Do may modify the in-memory
-	// store.
-	if store.store == nil {
-		store.store = map[string]string{}
-		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
-		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
-	}
-}
-
-func (store *KeyStore) logf(format string, v ...interface{}) {
-	if store.ErrorLog == nil {
-		log.Printf(format, v...)
-	} else {
-		store.ErrorLog.Printf(format, v...)
-	}
+	return value, nil
 }
