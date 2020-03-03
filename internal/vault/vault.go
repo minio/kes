@@ -19,13 +19,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/cache"
-	"github.com/minio/kes/internal/secret"
 )
 
 // AppRole holds the Vault AppRole
@@ -39,10 +36,9 @@ type AppRole struct {
 	Retry  time.Duration
 }
 
-// KeyStore is a secret key store that saves
-// secret keys as K/V entries on Vault's K/V
-// secret backend.
-type KeyStore struct {
+// Store is a key-value store that saves key-value
+// pairs as entries on Vault's K/V secret backend.
+type Store struct {
 	// Addr is the HTTP address of the Vault server.
 	Addr string
 
@@ -58,18 +54,6 @@ type KeyStore struct {
 	// AppRole contains the Vault AppRole authentication
 	// credentials.
 	AppRole AppRole
-
-	// CacheExpireAfter is the duration after which
-	// cache entries expire such that they have to
-	// be loaded from the backend storage again.
-	CacheExpireAfter time.Duration
-
-	// CacheExpireUnusedAfter is the duration after
-	// which not recently used cache entries expire
-	// such that they have to be loaded from the
-	// backend storage again.
-	// Not recently is defined as: CacheExpireUnusedAfter / 2
-	CacheExpireUnusedAfter time.Duration
 
 	// StatusPingAfter is the duration after which
 	// the KeyStore will check the status of the Vault
@@ -106,9 +90,6 @@ type KeyStore struct {
 	// https://www.vaultproject.io/docs/enterprise/namespaces/index.html
 	Namespace string
 
-	cache cache.Cache
-	once  uint32
-
 	client *vaultapi.Client
 	sealed bool
 }
@@ -118,140 +99,115 @@ type KeyStore struct {
 // It returns an error if no connection could be
 // established - for instance because of invalid
 // authentication credentials.
-func (store *KeyStore) Authenticate(context context.Context) error {
+func (s *Store) Authenticate(context context.Context) error {
 	tlsConfig := &vaultapi.TLSConfig{
-		ClientKey:  store.ClientKeyPath,
-		ClientCert: store.ClientCertPath,
+		ClientKey:  s.ClientKeyPath,
+		ClientCert: s.ClientCertPath,
 	}
-	if store.CAPath != "" {
-		stat, err := os.Stat(store.CAPath)
+	if s.CAPath != "" {
+		stat, err := os.Stat(s.CAPath)
 		if err != nil {
-			return fmt.Errorf("Failed to open '%s': %v", store.CAPath, err)
+			return fmt.Errorf("Failed to open '%s': %v", s.CAPath, err)
 		}
 		if stat.IsDir() {
-			tlsConfig.CAPath = store.CAPath
+			tlsConfig.CAPath = s.CAPath
 		} else {
-			tlsConfig.CACert = store.CAPath
+			tlsConfig.CACert = s.CAPath
 		}
 	}
 
 	config := vaultapi.DefaultConfig()
-	config.Address = store.Addr
+	config.Address = s.Addr
 	config.ConfigureTLS(tlsConfig)
 	client, err := vaultapi.NewClient(config)
 	if err != nil {
 		return err
 	}
-	if store.Namespace != "" {
+	if s.Namespace != "" {
 		// We must only set the namespace if it is not
 		// empty. If namespace == "" the vault client
 		// will send an empty namespace HTTP header -
 		// which is not what we want.
-		client.SetNamespace(store.Namespace)
+		client.SetNamespace(s.Namespace)
 	}
 
-	store.client = client
+	s.client = client
 
-	status, err := store.client.Sys().Health()
+	status, err := s.client.Sys().Health()
 	if err != nil {
 		return err
 	}
-	store.sealed = status.Sealed
+	s.sealed = status.Sealed
 
 	var token string
 	var ttl time.Duration
 	if !status.Sealed {
-		token, ttl, err = store.authenticate(store.AppRole)
+		token, ttl, err = s.authenticate(s.AppRole)
 		if err != nil {
 			return err
 		}
-		store.client.SetToken(token)
+		s.client.SetToken(token)
 	}
 
-	go store.checkStatus(context, store.StatusPingAfter)
-	go store.renewAuthToken(context, store.AppRole, ttl)
+	go s.checkStatus(context, s.StatusPingAfter)
+	go s.renewAuthToken(context, s.AppRole, ttl)
 	return nil
 }
 
 var errSealed = kes.NewError(http.StatusForbidden, "key store is sealed")
 
-// Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns kes.ErrKeyNotFound.
-//
-// In particular, Get reads the secret key from the corresponding
-// entry at the Vault K/V store.
-func (store *KeyStore) Get(name string) (secret.Secret, error) {
-	if store.client == nil {
-		store.log(errNoConnection)
-		return secret.Secret{}, errNoConnection
+// Get returns the value associated with the given key.
+// If no entry for the key exists it returns kes.ErrKeyNotFound.
+func (s *Store) Get(key string) (string, error) {
+	if s.client == nil {
+		s.log(errNoConnection)
+		return "", errNoConnection
 	}
-	if store.sealed {
-		return secret.Secret{}, errSealed
+	if s.sealed {
+		return "", errSealed
 	}
 
-	store.initialize()
-	if secret, ok := store.cache.Get(name); ok {
-		return secret, nil
-	}
-
-	// Since we haven't found the requested secret key in the cache
-	// we reach out to Vault's K/V store and fetch it from there.
-	location := fmt.Sprintf("/kv/%s/%s", store.Location, name)
-	entry, err := store.client.Logical().Read(location)
+	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
+	entry, err := s.client.Logical().Read(location)
 	if err != nil || entry == nil {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
 		if err == nil && entry == nil {
-			return secret.Secret{}, kes.ErrKeyNotFound
+			return "", kes.ErrKeyNotFound
 		}
-		store.logf("vault: failed to read secret '%s': %v", location, err)
-		return secret.Secret{}, err
+		s.logf("vault: failed to read '%s': %v", location, err)
+		return "", err
 	}
 
-	// Verify that we got a well-formed secret key from Vault
-	v, ok := entry.Data[name]
+	// Verify that we got a well-formed response from Vault
+	v, ok := entry.Data[key]
 	if !ok || v == nil {
-		store.logf("vault: failed to read secret '%s': entry exists but no secret key is present", location)
-		return secret.Secret{}, errors.New("vault: K/V entry does not contain any value")
+		s.logf("vault: failed to read '%s': entry exists but no secret key is present", location)
+		return "", errors.New("vault: K/V entry does not contain any value")
 	}
-	s, ok := v.(string)
+	value, ok := v.(string)
 	if !ok {
-		store.logf("vault: failed to read secret '%s': invalid K/V format", location)
-		return secret.Secret{}, errors.New("vault: invalid K/V entry format")
+		s.logf("vault: failed to read '%s': invalid K/V format", location)
+		return "", errors.New("vault: invalid K/V entry format")
 	}
-
-	var secret secret.Secret
-	if err = secret.ParseString(s); err != nil {
-		store.logf("vault: failed to read secret '%s': %v", location, err)
-		return secret, err
-	}
-	secret, _ = store.cache.Add(name, secret)
-	return secret, nil
+	return value, nil
 }
 
-// Create adds the given secret key to the store if and only
-// if no entry for name exists. If an entry already exists
+// Create creates the given key-value pair at Vault if and only
+// if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
-//
-// In particular, Create creates a new K/V entry on the Vault
-// key store.
-func (store *KeyStore) Create(name string, secret secret.Secret) error {
-	if store.client == nil {
-		store.log(errNoConnection)
+func (s *Store) Create(key, value string) error {
+	if s.client == nil {
+		s.log(errNoConnection)
 		return errNoConnection
 	}
-	if store.sealed {
+	if s.sealed {
 		return errSealed
-	}
-
-	store.initialize()
-	if _, ok := store.cache.Get(name); ok {
-		return kes.ErrKeyExists
 	}
 
 	// We try to check whether key exists on the K/V store.
 	// If so, we must not overwrite it.
-	location := fmt.Sprintf("/kv/%s/%s", store.Location, name)
+	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
 
 	// Vault will return nil for the secret as well as a nil-error
 	// if the specified entry does not exist.
@@ -270,40 +226,38 @@ func (store *KeyStore) Create(name string, secret secret.Secret) error {
 	// But when the client returns an error it does not mean that
 	// the entry does not exist but that some other error (e.g.
 	// network error) occurred.
-	switch s, err := store.client.Logical().Read(location); {
-	case err == nil && s != nil:
+	switch secret, err := s.client.Logical().Read(location); {
+	case err == nil && secret != nil:
 		return kes.ErrKeyExists
 	case err != nil:
-		store.logf("vault: failed to create '%s': %v", location, err)
+		s.logf("vault: failed to create '%s': %v", location, err)
 		return err
 	}
 
-	// Finally, we create the secret key since it seems that it
+	// Finally, we create the value since it seems that it
 	// doesn't exist. However, this is just an assumption since
 	// another key server may have created that key in the meantime.
 	// Since there is now way we can detect that reliable we require
 	// that whoever has the permission to create keys does that in
 	// a non-racy way.
-	_, err := store.client.Logical().Write(location, map[string]interface{}{
-		name: secret.String(),
+	_, err := s.client.Logical().Write(location, map[string]interface{}{
+		key: value,
 	})
 	if err != nil {
-		store.logf("vault: failed to create '%s': %v", location, err)
+		s.logf("vault: failed to create '%s': %v", location, err)
 		return err
 	}
-	store.cache.Set(name, secret)
 	return nil
 }
 
-// Delete removes a the secret key with the given name
-// from the key store and deletes the corresponding Vault
-// K/V entry, if it exists.
-func (store *KeyStore) Delete(name string) error {
-	if store.client == nil {
-		store.log(errNoConnection)
+// Delete removes a the value associated with the given key
+// from Vault, if it exists.
+func (s *Store) Delete(key string) error {
+	if s.client == nil {
+		s.log(errNoConnection)
 		return errNoConnection
 	}
-	if store.sealed {
+	if s.sealed {
 		return errSealed
 	}
 
@@ -311,17 +265,16 @@ func (store *KeyStore) Delete(name string) error {
 	// exist. Instead, it responds with 204 No Content and
 	// no body. In this case the client also returns a nil-error
 	// Therefore, we can just try to delete it in any case.
-	location := fmt.Sprintf("/kv/%s/%s", store.Location, name)
-	_, err := store.client.Logical().Delete(location)
-	store.cache.Delete(name)
+	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
+	_, err := s.client.Logical().Delete(location)
 	if err != nil {
-		store.logf("vault: failed to delete '%s': %v", location, err)
+		s.logf("vault: failed to delete '%s': %v", location, err)
 	}
 	return err
 }
 
-func (store *KeyStore) authenticate(login AppRole) (token string, ttl time.Duration, err error) {
-	secret, err := store.client.Logical().Write("auth/approle/login", map[string]interface{}{
+func (s *Store) authenticate(login AppRole) (token string, ttl time.Duration, err error) {
+	secret, err := s.client.Logical().Write("auth/approle/login", map[string]interface{}{
 		"role_id":   login.ID,
 		"secret_id": login.Secret,
 	})
@@ -344,18 +297,15 @@ func (store *KeyStore) authenticate(login AppRole) (token string, ttl time.Durat
 	return token, ttl, err
 }
 
-func (store *KeyStore) checkStatus(ctx context.Context, delay time.Duration) {
+func (s *Store) checkStatus(ctx context.Context, delay time.Duration) {
 	if delay == 0 {
 		delay = 10 * time.Second
 	}
 	var timer *time.Timer
 	for {
-		status, err := store.client.Sys().Health()
+		status, err := s.client.Sys().Health()
 		if err == nil {
-			if !store.sealed && status.Sealed {
-				store.cache.Clear()
-			}
-			store.sealed = status.Sealed
+			s.sealed = status.Sealed
 		}
 
 		if timer == nil {
@@ -372,7 +322,7 @@ func (store *KeyStore) checkStatus(ctx context.Context, delay time.Duration) {
 	}
 }
 
-func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl time.Duration) {
+func (s *Store) renewAuthToken(ctx context.Context, login AppRole, ttl time.Duration) {
 	if login.Retry == 0 {
 		login.Retry = 5 * time.Second
 	}
@@ -381,7 +331,7 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 		// until it is unsealed again.
 		// The Vault status is checked by another go routine
 		// constantly by querying the Vault health status.
-		for store.sealed {
+		for s.sealed {
 			timer := time.NewTimer(1 * time.Second)
 			select {
 			case <-ctx.Done():
@@ -399,7 +349,7 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 				token string
 				err   error
 			)
-			token, ttl, err = store.authenticate(login)
+			token, ttl, err = s.authenticate(login)
 			if err != nil {
 				ttl = 0
 				timer := time.NewTimer(login.Retry)
@@ -411,7 +361,7 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 				}
 				continue
 			}
-			store.client.SetToken(token) // SetToken is safe to call from different go routines
+			s.client.SetToken(token) // SetToken is safe to call from different go routines
 		}
 
 		// Now the client has token with a non-zero TTL
@@ -426,7 +376,7 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 				return
 			case <-timer.C:
 			}
-			secret, err := store.client.Auth().Token().RenewSelf(int(ttl.Seconds()))
+			secret, err := s.client.Auth().Token().RenewSelf(int(ttl.Seconds()))
 			if err != nil || secret == nil {
 				break
 			}
@@ -451,25 +401,18 @@ func (store *KeyStore) renewAuthToken(ctx context.Context, login AppRole, ttl ti
 // hasn't been called.
 var errNoConnection = errors.New("vault: no connection to vault server")
 
-func (store *KeyStore) initialize() {
-	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
-		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
-		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
-	}
-}
-
-func (store *KeyStore) log(v ...interface{}) {
-	if store.ErrorLog == nil {
+func (s *Store) log(v ...interface{}) {
+	if s.ErrorLog == nil {
 		log.Println(v...)
 	} else {
-		store.ErrorLog.Println(v...)
+		s.ErrorLog.Println(v...)
 	}
 }
 
-func (store *KeyStore) logf(format string, v ...interface{}) {
-	if store.ErrorLog == nil {
+func (s *Store) logf(format string, v ...interface{}) {
+	if s.ErrorLog == nil {
 		log.Printf(format, v...)
 	} else {
-		store.ErrorLog.Printf(format, v...)
+		s.ErrorLog.Printf(format, v...)
 	}
 }

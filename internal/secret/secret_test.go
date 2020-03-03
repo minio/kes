@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/secure-io/sio-go/sioutil"
@@ -31,12 +30,16 @@ func TestSecretString(t *testing.T) {
 	}
 }
 
-func TestSecretWriteTo(t *testing.T) {
-	for i, test := range secretStringTests {
-		var sb strings.Builder
-		test.Secret.WriteTo(&sb)
-		if s := sb.String(); s != test.String {
-			t.Fatalf("Test %d: got %s - want %s", i, s, test.String)
+var secretMarshalJSONTests = secretStringTests
+
+func TestSecretMarshalJSON(t *testing.T) {
+	for i, test := range secretMarshalJSONTests {
+		s, err := test.Secret.MarshalJSON()
+		if err != nil {
+			t.Fatalf("Test %d: Failed to marshal secret: %v", i, err)
+		}
+		if string(s) != test.String {
+			t.Fatalf("Test %d: got %s - want %s", i, string(s), test.String)
 		}
 	}
 }
@@ -71,15 +74,17 @@ func TestSecretParseString(t *testing.T) {
 	}
 }
 
-func TestSecretReadFrom(t *testing.T) {
-	for i, test := range secretParseStringTests {
+var secretUnmarshalJSONTests = secretParseStringTests
+
+func TestSecretUnmarshalJSON(t *testing.T) {
+	for i, test := range secretUnmarshalJSONTests {
 		var secret Secret
-		_, err := secret.ReadFrom(strings.NewReader(test.String))
+		err := secret.UnmarshalJSON([]byte(test.String))
 		if err != nil && !test.ShouldFail {
-			t.Fatalf("Test %d: Failed to parse string: %v", i, err)
+			t.Fatalf("Test %d: Failed to unmarshal JSON: %v", i, err)
 		}
 		if err == nil && test.ShouldFail {
-			t.Fatalf("Test %d: Parsing should have failed but it succeeded", i)
+			t.Fatalf("Test %d: Unmarshaling should have failed but it succeeded", i)
 		}
 		if err == nil && secret != test.Secret {
 			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)

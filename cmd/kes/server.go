@@ -172,7 +172,25 @@ func server(args []string) error {
 		}
 	}
 
-	var store secret.Store
+	var store = &secret.Store{}
+	switch {
+	case config.KMS.AWS.Addr != "":
+		kms := &aws.KMS{
+			Addr:   config.KMS.AWS.Addr,
+			Region: config.KMS.AWS.Region,
+			Login: aws.Credentials{
+				AccessKey:    config.KMS.AWS.Login.AccessKey,
+				SecretKey:    config.KMS.AWS.Login.SecretKey,
+				SessionToken: config.KMS.AWS.Login.SessionToken,
+			},
+		}
+		if err = kms.Authenticate(); err != nil {
+			return fmt.Errorf("Failed to connect to AWS-KMS: %v", err)
+		}
+		store.KMS = kms
+		store.Key = config.KMS.AWS.Key
+	}
+
 	switch {
 	case config.KeyStore.Fs.Dir != "":
 		f, err := os.Stat(config.KeyStore.Fs.Dir)
@@ -187,14 +205,12 @@ func server(args []string) error {
 				return fmt.Errorf("Failed to create directory %s: %v", config.KeyStore.Fs.Dir, err)
 			}
 		}
-		store = &fs.KeyStore{
-			Dir:                    config.KeyStore.Fs.Dir,
-			CacheExpireAfter:       config.Cache.Expiry.All,
-			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog.Log(),
+		store.Remote = &fs.Store{
+			Dir:      config.KeyStore.Fs.Dir,
+			ErrorLog: errorLog.Log(),
 		}
 	case config.KeyStore.Vault.Addr != "":
-		vaultStore := &vault.KeyStore{
+		vaultStore := &vault.Store{
 			Addr:      config.KeyStore.Vault.Addr,
 			Location:  config.KeyStore.Vault.Name,
 			Namespace: config.KeyStore.Vault.Namespace,
@@ -203,26 +219,22 @@ func server(args []string) error {
 				Secret: config.KeyStore.Vault.AppRole.Secret,
 				Retry:  config.KeyStore.Vault.AppRole.Retry,
 			},
-			CacheExpireAfter:       config.Cache.Expiry.All,
-			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			StatusPingAfter:        config.KeyStore.Vault.Status.Ping,
-			ErrorLog:               errorLog.Log(),
-			ClientKeyPath:          config.KeyStore.Vault.TLS.KeyPath,
-			ClientCertPath:         config.KeyStore.Vault.TLS.CertPath,
-			CAPath:                 config.KeyStore.Vault.TLS.CAPath,
+			StatusPingAfter: config.KeyStore.Vault.Status.Ping,
+			ErrorLog:        errorLog.Log(),
+			ClientKeyPath:   config.KeyStore.Vault.TLS.KeyPath,
+			ClientCertPath:  config.KeyStore.Vault.TLS.CertPath,
+			CAPath:          config.KeyStore.Vault.TLS.CAPath,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)
 		}
-		store = vaultStore
+		store.Remote = vaultStore
 	case config.KeyStore.Aws.SecretsManager.Addr != "":
 		awsStore := &aws.SecretsManager{
-			Addr:                   config.KeyStore.Aws.SecretsManager.Addr,
-			Region:                 config.KeyStore.Aws.SecretsManager.Region,
-			KmsKeyID:               config.KeyStore.Aws.SecretsManager.KmsKeyID,
-			CacheExpireAfter:       config.Cache.Expiry.All,
-			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog.Log(),
+			Addr:     config.KeyStore.Aws.SecretsManager.Addr,
+			Region:   config.KeyStore.Aws.SecretsManager.Region,
+			KMSKeyID: config.KeyStore.Aws.SecretsManager.KmsKeyID,
+			ErrorLog: errorLog.Log(),
 			Login: aws.Credentials{
 				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
 				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
@@ -232,14 +244,11 @@ func server(args []string) error {
 		if err := awsStore.Authenticate(); err != nil {
 			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
 		}
-		store = awsStore
+		store.Remote = awsStore
 	default:
-		store = &mem.KeyStore{
-			CacheExpireAfter:       config.Cache.Expiry.All,
-			CacheExpireUnusedAfter: config.Cache.Expiry.Unused,
-			ErrorLog:               errorLog.Log(),
-		}
+		store.Remote = &mem.Store{}
 	}
+	store.StartGC(context.Background(), config.Cache.Expiry.All, config.Cache.Expiry.Unused)
 
 	var proxy *auth.TLSProxy
 	if len(config.TLS.Proxy.Identities) != 0 {

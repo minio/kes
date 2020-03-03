@@ -51,6 +51,21 @@ type serverConfig struct {
 		} `toml:"audit" yaml:"audit"`
 	} `toml:"log" yaml:"log"`
 
+	KMS struct {
+		AWS struct {
+			Addr   string `toml:"address" yaml:"address"`
+			Region string `toml:"region" yaml:"region"`
+
+			Key string `toml:"key" yaml:"key"`
+
+			Login struct {
+				AccessKey    string `toml:"access_key" yaml:"access_key"`
+				SecretKey    string `toml:"secret_key" yaml:"secret_key"`
+				SessionToken string `toml:"session_token" yaml:"session_token"`
+			} `toml:"credentials" yaml:"credentials"`
+		} `toml:"aws" yaml:"aws"`
+	} `toml:"kms" yaml:"kms"`
+
 	KeyStore struct {
 		Fs struct {
 			Dir string `toml:"path" yaml:"path"`

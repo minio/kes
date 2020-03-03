@@ -5,13 +5,10 @@
 package aws
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"log"
-	"sync/atomic"
-	"time"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -19,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/cache"
 	"github.com/minio/kes/internal/secret"
 )
 
@@ -31,39 +27,29 @@ type Credentials struct {
 	SessionToken string // The AWS session token
 }
 
-// SecretsManager is a secret key store that
-// saves/fetches secret keys on/from the AWS
+// SecretsManager is a  key-value store that
+// saves/fetches values as secrets  on/from the AWS
 // Secrets Manager.
 // See: https://aws.amazon.com/secrets-manager
 type SecretsManager struct {
 	// Addr is the HTTP address of the AWS Secret
-	// Manager. In general, you want to AWS directly.
-	// Therefore, use an address of the following
-	// form: secretsmanager.<region>.amazonaws.com
+	// Manager. In general, the address has the
+	// following form:
+	//  secretsmanager.<region>.amazonaws.com
 	Addr string
+
 	// Region is the AWS region. Even though the Addr
 	// endpoint contains that information already, this
 	// field is mandatory.
 	Region string
-	// The AWS-KMS key ID specifying the AWS-KMS key
-	// that is used to encrypt (and decrypt) the
-	// secret values stored at AWS Secrets Manager.
-	KmsKeyID string
+
+	// The KMSKeyID is the AWS-KMS key ID specifying the
+	// AWS-KMS key that is used to encrypt (and decrypt) the
+	// values stored at AWS Secrets Manager.
+	KMSKeyID string
 
 	// Login contains the AWS credentials (access/secret key).
 	Login Credentials
-
-	// CacheExpireAfter is the duration after which
-	// cache entries expire such that they have to
-	// be loaded from the backend storage again.
-	CacheExpireAfter time.Duration
-
-	// CacheExpireUnusedAfter is the duration after
-	// which not recently used cache entries expire
-	// such that they have to be loaded from the
-	// backend storage again.
-	// Not recently is defined as: CacheExpireUnusedAfter / 2
-	CacheExpireUnusedAfter time.Duration
 
 	// ErrorLog specifies an optional logger for errors
 	// when files cannot be opened, deleted or contain
@@ -72,76 +58,68 @@ type SecretsManager struct {
 	// standard logger.
 	ErrorLog *log.Logger
 
-	cache  cache.Cache
 	client *secretsmanager.SecretsManager
-	once   uint32
 }
 
-// Create adds the given secret key to the store if and only
-// if no entry for name exists. If an entry already exists
+var _ secret.Remote = (*SecretsManager)(nil)
+
+// Create stores the given key-value pair at the AWS SecretsManager
+// if and only if it doesn't exists. If such an entry already exists
 // it returns kes.ErrKeyExists.
 //
-// In particular, Create creates a new entry on AWS Secrets
-// Manager with the given name containing the secret.
-func (store *SecretsManager) Create(name string, secret secret.Secret) error {
-	if store.client == nil {
-		store.log(errNoConnection)
+// If the SecretsManager.KMSKeyID is set AWS will use this key ID to
+// encrypt the values. Otherwise, AWS will use the default key ID for
+// encrypting secrets at the AWS SecretsManager.
+func (s *SecretsManager) Create(key, value string) error {
+	if s.client == nil {
+		s.log(errNoConnection)
 		return errNoConnection
-	}
-	store.initialize()
-	if _, ok := store.cache.Get(name); ok {
-		return kes.ErrKeyExists
 	}
 
 	createOpt := secretsmanager.CreateSecretInput{
-		Name:         aws.String(name),
-		SecretString: aws.String(secret.String()),
+		Name:         aws.String(key),
+		SecretString: aws.String(value),
 	}
-	if store.KmsKeyID != "" {
-		createOpt.KmsKeyId = aws.String(store.KmsKeyID)
+	if s.KMSKeyID != "" {
+		createOpt.KmsKeyId = aws.String(s.KMSKeyID)
 	}
-	if _, err := store.client.CreateSecret(&createOpt); err != nil {
+	if _, err := s.client.CreateSecret(&createOpt); err != nil {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeResourceExistsException:
 				return kes.ErrKeyExists
 			}
 		}
-		err = fmt.Errorf("aws: failed to create secret '%s': %v", name, err)
-		store.log(err)
+		err = fmt.Errorf("aws: failed to create '%s': %v", key, err)
+		s.log(err)
 		return err
 	}
-	store.cache.Set(name, secret)
 	return nil
 }
 
-// Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns kes.ErrKeyNotFound.
-//
-// In particular, Get reads the secret key from the corresponding
-// entry at AWS Secrets Manager.
-func (store *SecretsManager) Get(name string) (secret.Secret, error) {
-	if store.client == nil {
-		store.log(errNoConnection)
-		return secret.Secret{}, errNoConnection
-	}
-	store.initialize()
-	if secret, ok := store.cache.Get(name); ok {
-		return secret, nil
+// Get returns the value associated with the given key.
+// If no entry for key exists, it returns kes.ErrKeyNotFound.
+func (s *SecretsManager) Get(key string) (string, error) {
+	if s.client == nil {
+		s.log(errNoConnection)
+		return "", errNoConnection
 	}
 
-	response, err := store.client.GetSecretValue(&secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(name),
+	response, err := s.client.GetSecretValue(&secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(key),
 	})
 	if err != nil {
 		if err, ok := err.(awserr.Error); ok {
-			if err.Code() == secretsmanager.ErrCodeResourceNotFoundException {
-				return secret.Secret{}, kes.ErrKeyNotFound
+			switch err.Code() {
+			case secretsmanager.ErrCodeDecryptionFailure:
+				return "", kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access '%s': %v", key, err))
+			case secretsmanager.ErrCodeResourceNotFoundException:
+				return "", kes.ErrKeyNotFound
 			}
 		}
-		err = fmt.Errorf("aws: failed to read secret '%s': %v", name, err)
-		store.log(err)
-		return secret.Secret{}, err
+		err = fmt.Errorf("aws: failed to read '%s': %v", key, err)
+		s.log(err)
+		return "", err
 	}
 
 	// AWS has two different ways to store a secret. Either as
@@ -151,34 +129,22 @@ func (store *SecretsManager) Get(name string) (secret.Secret, error) {
 	// However, AWS demands and specifies that only one is present -
 	// either "SecretString" or "SecretBinary" - we can check which
 	// one is present and safely assume that the other one isn't.
-	var secret secret.Secret
 	if response.SecretString != nil {
-		if err = secret.ParseString(*response.SecretString); err != nil {
-			store.logf("aws: failed to read secret '%s': %v", name, err)
-			return secret, err
-		}
-	} else {
-		if _, err = secret.ReadFrom(bytes.NewReader(response.SecretBinary)); err != nil {
-			store.logf("aws: failed to read secret '%s': %v", name, err)
-			return secret, err
-		}
+		return *response.SecretString, nil
 	}
-	secret, _ = store.cache.Add(name, secret)
-	return secret, nil
+	return string(response.SecretBinary), nil
 }
 
-// Delete removes a the secret key with the given name
-// from the key store and deletes the corresponding AWS
-// Secrets Manager entry, if it exists.
-func (store *SecretsManager) Delete(name string) error {
-	if store.client == nil {
-		store.log(errNoConnection)
+// Delete removes the key-value pair from the AWS SecretsManager, if
+// it exists.
+func (s *SecretsManager) Delete(key string) error {
+	if s.client == nil {
+		s.log(errNoConnection)
 		return errNoConnection
 	}
-	store.cache.Delete(name)
 
-	_, err := store.client.DeleteSecret(&secretsmanager.DeleteSecretInput{
-		SecretId:                   aws.String(name),
+	_, err := s.client.DeleteSecret(&secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(key),
 		ForceDeleteWithoutRecovery: aws.Bool(true),
 	})
 	if err != nil {
@@ -187,8 +153,8 @@ func (store *SecretsManager) Delete(name string) error {
 				return nil
 			}
 		}
-		err = fmt.Errorf("aws: failed to delete secret '%s': %v", name, err)
-		store.log(err)
+		err = fmt.Errorf("aws: failed to delete '%s': %v", key, err)
+		s.log(err)
 		return err
 	}
 	return nil
@@ -196,13 +162,13 @@ func (store *SecretsManager) Delete(name string) error {
 
 // Authenticate tries to establish a connection to
 // the AWS Secrets Manager using the login credentials.
-func (store *SecretsManager) Authenticate() error {
+func (s *SecretsManager) Authenticate() error {
 	credentials := credentials.NewStaticCredentials(
-		store.Login.AccessKey,
-		store.Login.SecretKey,
-		store.Login.SessionToken,
+		s.Login.AccessKey,
+		s.Login.SecretKey,
+		s.Login.SessionToken,
 	)
-	if store.Login.AccessKey == "" && store.Login.SecretKey == "" && store.Login.SessionToken == "" {
+	if s.Login.AccessKey == "" && s.Login.SecretKey == "" && s.Login.SessionToken == "" {
 		// If all login credentials (access key, secret key and session token) are empty
 		// we pass no (not empty) credentials to the AWS SDK. The SDK will try to fetch
 		// the credentials from:
@@ -217,8 +183,8 @@ func (store *SecretsManager) Authenticate() error {
 
 	session, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
-			Endpoint:    aws.String(store.Addr),
-			Region:      aws.String(store.Region),
+			Endpoint:    aws.String(s.Addr),
+			Region:      aws.String(s.Region),
 			Credentials: credentials,
 		},
 		SharedConfigState: session.SharedConfigDisable,
@@ -226,7 +192,7 @@ func (store *SecretsManager) Authenticate() error {
 	if err != nil {
 		return err
 	}
-	store.client = secretsmanager.New(session)
+	s.client = secretsmanager.New(session)
 	return nil
 }
 
@@ -239,25 +205,10 @@ func (store *SecretsManager) Authenticate() error {
 // hasn't been called.
 var errNoConnection = errors.New("aws: no connection to AWS secrets manager")
 
-func (store *SecretsManager) initialize() {
-	if atomic.CompareAndSwapUint32(&store.once, 0, 1) {
-		store.cache.StartGC(context.Background(), store.CacheExpireAfter)
-		store.cache.StartUnusedGC(context.Background(), store.CacheExpireUnusedAfter/2)
-	}
-}
-
-func (store *SecretsManager) log(v ...interface{}) {
-	if store.ErrorLog == nil {
+func (s *SecretsManager) log(v ...interface{}) {
+	if s.ErrorLog == nil {
 		log.Println(v...)
 	} else {
-		store.ErrorLog.Println(v...)
-	}
-}
-
-func (store *SecretsManager) logf(format string, v ...interface{}) {
-	if store.ErrorLog == nil {
-		log.Printf(format, v...)
-	} else {
-		store.ErrorLog.Printf(format, v...)
+		s.ErrorLog.Println(v...)
 	}
 }
