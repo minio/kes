@@ -201,15 +201,29 @@ func (store *SecretsManager) Delete(name string) error {
 // Authenticate tries to establish a connection to
 // the AWS Secrets Manager using the login credentials.
 func (store *SecretsManager) Authenticate() error {
+	credentials := credentials.NewStaticCredentials(
+		store.Login.AccessKey,
+		store.Login.SecretKey,
+		store.Login.SessionToken,
+	)
+	if store.Login.AccessKey == "" && store.Login.SecretKey == "" && store.Login.SessionToken == "" {
+		// If all login credentials (access key, secret key and session token) are empty
+		// we pass no (not empty) credentials to the AWS SDK. The SDK will try to fetch
+		// the credentials from:
+		//  - Environment Variables
+		//  - Shared Credentials file
+		//  - EC2 Instance Metadata
+		// In particular, when running a kes server on an EC2 instance, the SDK will
+		// automatically fetch the temp. credentials from the EC2 metadata service.
+		// See: AWS IAM roles for EC2 instances.
+		credentials = nil
+	}
+
 	session, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
-			Endpoint: aws.String(store.Addr),
-			Region:   aws.String(store.Region),
-			Credentials: credentials.NewStaticCredentials(
-				store.Login.AccessKey,
-				store.Login.SecretKey,
-				store.Login.SessionToken,
-			),
+			Endpoint:    aws.String(store.Addr),
+			Region:      aws.String(store.Region),
+			Credentials: credentials,
 		},
 		SharedConfigState: session.SharedConfigDisable,
 	})
