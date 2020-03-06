@@ -144,12 +144,23 @@ func auditTrace(args []string) error {
 				identity = color.YellowString(entry.Request.Identity.String())
 			}
 
+			// Truncate duration values such that we show reasonable
+			// time values - like 1.05s or 345.76ms.
+			respTime := entry.Response.Time
+			switch {
+			case respTime >= time.Second:
+				respTime = respTime.Truncate(10 * time.Millisecond)
+			case respTime >= time.Millisecond:
+				respTime = respTime.Truncate(10 * time.Microsecond)
+			default:
+				respTime = respTime.Truncate(time.Microsecond)
+			}
+
 			const format = "%s %s %-25s %10s\n"
-			fmt.Printf(format, identity, status, entry.Request.Path, entry.Response.Time.Truncate(1*time.Microsecond))
+			fmt.Printf(format, identity, status, entry.Request.Path, respTime)
 		} else {
 			fmt.Println(scanner.Text())
 		}
 	}
 	return nil
-
 }
