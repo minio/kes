@@ -7,6 +7,8 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -114,21 +116,20 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 
 	var algorithm string
 	if sioutil.NativeAES() {
-		algorithm = "AES-256-GCM"
+		algorithm = "AES-256-GCM-HMAC-SHA-256"
 	} else {
 		algorithm = "ChaCha20Poly1305"
 	}
 
 	var aead cipher.AEAD
 	switch algorithm {
-	case "AES-256-GCM":
-		var sealingKey []byte
+	case "AES-256-GCM-HMAC-SHA-256":
+		mac := hmac.New(sha256.New, s[:])
+		mac.Write(iv)
+		sealingKey := mac.Sum(nil)
+
 		var block cipher.Block
-		sealingKey, err = aesDeriveKey(s[:], iv)
-		if err != nil {
-			return nil, err
-		}
-		block, err = aes.NewCipher(sealingKey[:])
+		block, err = aes.NewCipher(sealingKey)
 		if err != nil {
 			return nil, err
 		}
@@ -182,8 +183,21 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 
 	var aead cipher.AEAD
 	switch sealedKey.Algorithm {
+	case "AES-256-GCM-HMAC-SHA-256":
+		mac := hmac.New(sha256.New, s[:])
+		mac.Write(sealedKey.IV)
+		sealingKey := mac.Sum(nil)
+
+		block, err := aes.NewCipher(sealingKey[:])
+		if err != nil {
+			return nil, err
+		}
+		aead, err = cipher.NewGCM(block)
+		if err != nil {
+			return nil, err
+		}
 	case "AES-256-GCM":
-		sealingKey, err := aesDeriveKey(s[:], sealedKey.IV)
+		sealingKey, err := insecureAESDeriveKey(s[:], sealedKey.IV)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +232,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	return plaintext, nil
 }
 
-// aesDeriveKey returns a new key derived from the
+// insecureAESDeriveKey returns a new key derived from the
 // provided key and iv using AES as pseudo-random-
 // permutation (PRP).
 // The provided key must be 16 (AES-128) or 32 (AES-256)
@@ -230,7 +244,24 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 //
 // The main difference to RFC 8452 is that the iv
 // is 128 bit long while AES-GCM-SIV uses 96 bit nonces.
-func aesDeriveKey(key, iv []byte) ([]byte, error) {
+//
+// BUG(aead): The KDF implemented by insecureAESDeriveKey is
+// not a PRF. The following example shows that there
+// exists a relation between 4 generated keys:
+//   iv0 = 0¹⁶
+//   iv1 = 1 || 0¹⁵
+//   iv2 = 0¹⁵ || 1
+//   iv3 = 1 || 0¹⁴ || 1
+// Generating 4 derived keys with these 4 iv values using
+// the same key `K` gives:
+//   k0 = insecureAESDeriveKey(K, iv0)
+//   k1 = insecureAESDeriveKey(K, iv1)
+//   k2 = insecureAESDeriveKey(K, iv2)
+//   k3 = insecureAESDeriveKey(K, iv3)
+// Now, the following statement holds (^ is XOR):
+//   k0 ^ k1 ^ k2 == k3
+// This shows that insecureAESDeriveKey is not a PRF.
+func insecureAESDeriveKey(key, iv []byte) ([]byte, error) {
 	if n := len(iv); n != 16 {
 		return nil, errors.New("key: invalid iv size " + strconv.Itoa(n))
 	}
