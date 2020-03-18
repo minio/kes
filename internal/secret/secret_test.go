@@ -190,7 +190,7 @@ func TestSecrectUnwrap(t *testing.T) {
 	}
 }
 
-var aesDeriveKeyTests = []struct {
+var insecureAESDeriveKeyTests = []struct {
 	Key        []byte
 	IV         []byte
 	DerivedKey []byte
@@ -228,9 +228,9 @@ var aesDeriveKeyTests = []struct {
 	},
 }
 
-func TestAESDeriveKey(t *testing.T) {
-	for i, test := range aesDeriveKeyTests {
-		key, err := aesDeriveKey(test.Key, test.IV)
+func TestInsecureAESDeriveKey(t *testing.T) {
+	for i, test := range insecureAESDeriveKeyTests {
+		key, err := insecureAESDeriveKey(test.Key, test.IV)
 		if err != nil && !test.ShouldFail {
 			t.Fatalf("Test %d: Failed to derive key: %v", i, err)
 		}
