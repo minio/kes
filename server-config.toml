@@ -128,6 +128,7 @@ file = [ "" ] # Add one or more log file paths here.
 [audit]
 file = [ "" ] # Add one or more log file paths here
 
+
 # External KMS configuration. An external KMS holds a set
 # of cryptographic secret keys - which can be used to encrypt
 # resp. decrypt secrets.
@@ -136,6 +137,37 @@ file = [ "" ] # Add one or more log file paths here
 # If an external KMS is set the kes server will only accept
 # encrypted secrets and no more plaintext secrets.
 #
+# The Vault KMS configuration. If set, the kes server will
+# send all secrets to Vault to encrypt resp. decrypt them
+# before / after storing resp. fetching them from the key
+# store.
+[kms.vault]
+address   = "" # The Vault endpoint - e.g. https://127.0.0.1:8200
+key       = "" # The master key at Vault used to en/decrypt secrets - e.g. my-key
+namespace = "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+
+# Vault AppRole access credentials.
+# See: https://www.vaultproject.io/docs/auth/approle.html 
+[kms.vault.approle]
+id     = ""    # Your AppRole Role ID 
+secret = ""    # Your AppRole Secret ID
+retry  = "15s" # Duration until the server tries to re-authenticate after connection loss.
+
+# Vault client TLS configuration.
+# The server will use the private key and certificate to
+# to authenticate to Vault via mTLS and use the Root CAs
+# found at the ca path to verify the Vault server TLS
+# certificate.
+[kms.vault.tls]
+key  = "" # Path to the TLS client private key for mTLS authentication to Vault
+cert = "" # Path to the TLS client certificate for mTLS authentication to Vailt
+ca   = "" # Path to one or multiple PEM Root CA certificates
+
+# Vault status configuration. The kes server will periodically
+# reach out to Vault to check its status. 
+[kms.vault.status]
+ping = "10s" # Duration until the server checks Vault's status again.
+
 # The AWS key management system (AWS-KMS). If set, the kes
 # server will send all secrets to AWS to encrypt resp. decrypt
 # them before / after storing resp. fetching them from the
@@ -151,7 +183,7 @@ access_key    = "" # Your AWS Access Key
 secret_key    = "" # Your AWS Secret Key
 session_token = "" # Your AWS session token (usually optional)
 
-
+    
 # Key stores configuration. A key store holds secret keys.
 # A server can only be configured to use one key store at
 # the same time.

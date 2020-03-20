@@ -90,6 +90,11 @@ func (kms *KMS) Authenticate() error {
 // CMK at the AWS-KMS instance. It returns the encrypted plaintext
 // as ciphertext.
 func (kms *KMS) Encrypt(key string, plaintext []byte) ([]byte, error) {
+	if kms.client == nil {
+		kms.logf("aws: no connection to AWS-KMS")
+		return nil, kes.NewError(http.StatusServiceUnavailable, "failed to encrypt key")
+	}
+
 	ciphertext, err := kms.client.Encrypt(&awskms.EncryptInput{
 		KeyId:     aws.String(key),
 		Plaintext: plaintext,
@@ -113,7 +118,7 @@ func (kms *KMS) Encrypt(key string, plaintext []byte) ([]byte, error) {
 		} else {
 			kms.logf("aws: %v", err)
 		}
-		return nil, kes.NewError(http.StatusInternalServerError, "cannot encrypt key")
+		return nil, kes.NewError(http.StatusServiceUnavailable, "failed to encrypt key")
 	}
 	return ciphertext.CiphertextBlob, nil
 }
@@ -122,6 +127,11 @@ func (kms *KMS) Encrypt(key string, plaintext []byte) ([]byte, error) {
 // using the AWS-KMS. It returns the decrypted ciphertexts as plaintext
 // on success.
 func (kms *KMS) Decrypt(key string, ciphertext []byte) ([]byte, error) {
+	if kms.client == nil {
+		kms.log("aws: no connection to AWS-KMS")
+		return nil, kes.ErrKeySealed
+	}
+
 	plaintext, err := kms.client.Decrypt(&awskms.DecryptInput{
 		KeyId:          aws.String(key),
 		CiphertextBlob: ciphertext,
@@ -159,5 +169,13 @@ func (kms *KMS) logf(format string, v ...interface{}) {
 		log.Printf(format, v...)
 	} else {
 		kms.ErrorLog.Printf(format, v...)
+	}
+}
+
+func (kms *KMS) log(v ...interface{}) {
+	if kms.ErrorLog == nil {
+		log.Print(v...)
+	} else {
+		kms.ErrorLog.Print(v...)
 	}
 }

@@ -63,8 +63,8 @@ type Store struct {
 	StatusPingAfter time.Duration
 
 	// ErrorLog specifies an optional logger for errors
-	// when files cannot be opened, deleted or contain
-	// invalid content.
+	// when K/V pairs cannot be stored, fetched, deleted
+	// or contain invalid content.
 	// If nil, logging is done via the log package's
 	// standard logger.
 	ErrorLog *log.Logger
@@ -90,8 +90,7 @@ type Store struct {
 	// https://www.vaultproject.io/docs/enterprise/namespaces/index.html
 	Namespace string
 
-	client *vaultapi.Client
-	sealed bool
+	client *client
 }
 
 // Authenticate tries to establish a connection to
@@ -119,38 +118,28 @@ func (s *Store) Authenticate(context context.Context) error {
 	config := vaultapi.DefaultConfig()
 	config.Address = s.Addr
 	config.ConfigureTLS(tlsConfig)
-	client, err := vaultapi.NewClient(config)
+	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
 		return err
+	}
+	s.client = &client{
+		Client: vaultClient,
 	}
 	if s.Namespace != "" {
 		// We must only set the namespace if it is not
 		// empty. If namespace == "" the vault client
 		// will send an empty namespace HTTP header -
 		// which is not what we want.
-		client.SetNamespace(s.Namespace)
+		s.client.SetNamespace(s.Namespace)
 	}
+	go s.client.CheckStatus(context, s.StatusPingAfter)
 
-	s.client = client
-
-	status, err := s.client.Sys().Health()
+	token, ttl, err := s.client.Authenticate(s.AppRole)
 	if err != nil {
 		return err
 	}
-	s.sealed = status.Sealed
-
-	var token string
-	var ttl time.Duration
-	if !status.Sealed {
-		token, ttl, err = s.authenticate(s.AppRole)
-		if err != nil {
-			return err
-		}
-		s.client.SetToken(token)
-	}
-
-	go s.checkStatus(context, s.StatusPingAfter)
-	go s.renewAuthToken(context, s.AppRole, ttl)
+	s.client.SetToken(token)
+	go s.client.RenewToken(context, s.AppRole, ttl)
 	return nil
 }
 
@@ -163,7 +152,7 @@ func (s *Store) Get(key string) (string, error) {
 		s.log(errNoConnection)
 		return "", errNoConnection
 	}
-	if s.sealed {
+	if s.client.Sealed() {
 		return "", errSealed
 	}
 
@@ -201,7 +190,7 @@ func (s *Store) Create(key, value string) error {
 		s.log(errNoConnection)
 		return errNoConnection
 	}
-	if s.sealed {
+	if s.client.Sealed() {
 		return errSealed
 	}
 
@@ -257,7 +246,7 @@ func (s *Store) Delete(key string) error {
 		s.log(errNoConnection)
 		return errNoConnection
 	}
-	if s.sealed {
+	if s.client.Sealed() {
 		return errSealed
 	}
 
@@ -271,126 +260,6 @@ func (s *Store) Delete(key string) error {
 		s.logf("vault: failed to delete '%s': %v", location, err)
 	}
 	return err
-}
-
-func (s *Store) authenticate(login AppRole) (token string, ttl time.Duration, err error) {
-	secret, err := s.client.Logical().Write("auth/approle/login", map[string]interface{}{
-		"role_id":   login.ID,
-		"secret_id": login.Secret,
-	})
-	if err != nil || secret == nil {
-		if err == nil {
-			// TODO: return non-nil error
-		}
-		return token, ttl, err
-	}
-
-	token, err = secret.TokenID()
-	if err != nil {
-		return token, ttl, err
-	}
-
-	ttl, err = secret.TokenTTL()
-	if err != nil {
-		return token, ttl, err
-	}
-	return token, ttl, err
-}
-
-func (s *Store) checkStatus(ctx context.Context, delay time.Duration) {
-	if delay == 0 {
-		delay = 10 * time.Second
-	}
-	var timer *time.Timer
-	for {
-		status, err := s.client.Sys().Health()
-		if err == nil {
-			s.sealed = status.Sealed
-		}
-
-		if timer == nil {
-			timer = time.NewTimer(delay)
-		} else {
-			timer.Reset(delay)
-		}
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-		}
-	}
-}
-
-func (s *Store) renewAuthToken(ctx context.Context, login AppRole, ttl time.Duration) {
-	if login.Retry == 0 {
-		login.Retry = 5 * time.Second
-	}
-	for {
-		// If Vault is sealed we have to wait
-		// until it is unsealed again.
-		// The Vault status is checked by another go routine
-		// constantly by querying the Vault health status.
-		for s.sealed {
-			timer := time.NewTimer(1 * time.Second)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-		}
-		// If the TTL is 0 we cannot renew the token.
-		// Therefore, we try to re-authenticate and
-		// get a new token. We repeat that until we
-		// successfully authenticate and got a token.
-		if ttl == 0 {
-			var (
-				token string
-				err   error
-			)
-			token, ttl, err = s.authenticate(login)
-			if err != nil {
-				ttl = 0
-				timer := time.NewTimer(login.Retry)
-				select {
-				case <-ctx.Done():
-					timer.Stop()
-					return
-				case <-timer.C:
-				}
-				continue
-			}
-			s.client.SetToken(token) // SetToken is safe to call from different go routines
-		}
-
-		// Now the client has token with a non-zero TTL
-		// such tht we can renew it. We repeat that until
-		// the renewable process fails once. In this case
-		// we try to re-authenticate again.
-		timer := time.NewTimer(ttl / 2)
-		for {
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-			secret, err := s.client.Auth().Token().RenewSelf(int(ttl.Seconds()))
-			if err != nil || secret == nil {
-				break
-			}
-			if ok, err := secret.TokenIsRenewable(); !ok || err != nil {
-				break
-			}
-			ttl, err := secret.TokenTTL()
-			if err != nil || ttl == 0 {
-				break
-			}
-			timer.Reset(ttl / 2)
-		}
-		ttl = 0
-	}
 }
 
 // errNoConnection is the error returned and logged by
