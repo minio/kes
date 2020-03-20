@@ -141,6 +141,24 @@ log:
 # If an external KMS is set the kes server will only accept
 # encrypted secrets and no more plaintext secrets.
 kms:
+  # The Vault KMS configuration. If set, the kes server will
+  # send all secrets to Vault to encrypt resp. decrypt them
+  # before / after storing resp. fetching them from the key
+  # store.
+  vault:
+    address: ""   # The Vault endpoint - e.g. https://127.0.0.1:8200
+    namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+    key: ""       # The master key at Vault used to en/decrypt secrets - e.g. my-key
+    approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html:
+      id: ""      # Your AppRole Role ID
+      secret: ""  # Your AppRole Secret ID
+      retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
+    tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification  
+      key: ""     # Path to the TLS client private key for mTLS authentication to Vault
+      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vailt
+      ca: ""      # Path to one or multiple PEM Root CA certificates 
+    status:     # Vault status configuration. The kes server will periodically reach out to Vault to check its status. 
+      ping: 10s   # Duration until the server checks Vault's status again.
   # The AWS key management system (AWS-KMS). If set, the kes
   # server will send all secrets to AWS to encrypt resp. decrypt
   # them before / after storing resp. fetching them from the
@@ -179,10 +197,10 @@ keystore:
       secret: ""  # Your AppRole Secret ID
       retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
     tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification  
-      key: ""   # Path to the TLS client private key for mTLS authentication to Vault
-      cert: ""  # Path to the TLS client certificate for mTLS authentication to Vailt
-      ca: ""    # Path to one or multiple PEM Root CA certificates 
-    status:       # Vault status configuration. The kes server will periodically reach out to Vault to check its status. 
+      key: ""     # Path to the TLS client private key for mTLS authentication to Vault
+      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vailt
+      ca: ""      # Path to one or multiple PEM Root CA certificates 
+    status:     # Vault status configuration. The kes server will periodically reach out to Vault to check its status. 
       ping: 10s   # Duration until the server checks Vault's status again.
   aws:
     # The AWS Secrets Manager key store. The server will store

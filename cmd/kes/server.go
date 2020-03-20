@@ -115,6 +115,11 @@ func server(args []string) error {
 	}
 
 	switch {
+	case config.KMS.AWS.Addr != "" && config.KMS.Vault.Addr != "":
+		return errors.New("Ambiguous configuration: AWS and Vault KMS are specified at the same time")
+	}
+
+	switch {
 	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "":
 		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
 	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
@@ -174,6 +179,26 @@ func server(args []string) error {
 
 	var store = &secret.Store{}
 	switch {
+	case config.KMS.Vault.Addr != "":
+		kms := &vault.KMS{
+			Addr:      config.KMS.Vault.Addr,
+			Namespace: config.KMS.Vault.Namespace,
+			AppRole: vault.AppRole{
+				ID:     config.KMS.Vault.AppRole.ID,
+				Secret: config.KMS.Vault.AppRole.Secret,
+				Retry:  config.KMS.Vault.AppRole.Retry,
+			},
+			ErrorLog:        errorLog.Log(),
+			ClientKeyPath:   config.KMS.Vault.TLS.KeyPath,
+			ClientCertPath:  config.KMS.Vault.TLS.CertPath,
+			CAPath:          config.KMS.Vault.TLS.CAPath,
+			StatusPingAfter: config.KMS.Vault.Status.Ping,
+		}
+		if err = kms.Authenticate(context.Background()); err != nil {
+			return fmt.Errorf("Failed to connect to Vault KMS: %v", err)
+		}
+		store.KMS = kms
+		store.Key = config.KMS.Vault.Key
 	case config.KMS.AWS.Addr != "":
 		kms := &aws.KMS{
 			Addr:   config.KMS.AWS.Addr,

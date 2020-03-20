@@ -52,6 +52,29 @@ type serverConfig struct {
 	} `toml:"log" yaml:"log"`
 
 	KMS struct {
+		Vault struct {
+			Addr      string `toml:"address" yaml:"address"`
+			Namespace string `toml:"namespace" yaml:"namespace"`
+
+			Key string `toml:"key" yaml:"key"`
+
+			AppRole struct {
+				ID     string        `toml:"id" yaml:"id"`
+				Secret string        `toml:"secret" yaml:"secret"`
+				Retry  time.Duration `toml:"retry" yaml:"retry"`
+			} `toml:"approle" yaml:"approle"`
+
+			TLS struct {
+				KeyPath  string `toml:"key" yaml:"key"`
+				CertPath string `toml:"cert" yaml:"cert"`
+				CAPath   string `toml:"ca" yaml:"ca"`
+			} `toml:"tls" yaml:"tls"`
+
+			Status struct {
+				Ping time.Duration `toml:"ping" yaml:"ping"`
+			} `toml:"status" yaml:"status"`
+		} `toml:"vault" yaml:"vault"`
+
 		AWS struct {
 			Addr   string `toml:"address" yaml:"address"`
 			Region string `toml:"region" yaml:"region"`
