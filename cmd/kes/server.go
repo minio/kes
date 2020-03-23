@@ -208,6 +208,7 @@ func server(args []string) error {
 				SecretKey:    config.KMS.AWS.Login.SecretKey,
 				SessionToken: config.KMS.AWS.Login.SessionToken,
 			},
+			ErrorLog: errorLog.Log(),
 		}
 		if err = kms.Authenticate(); err != nil {
 			return fmt.Errorf("Failed to connect to AWS-KMS: %v", err)
