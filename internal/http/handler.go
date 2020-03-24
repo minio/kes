@@ -442,4 +442,37 @@ func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
 	}
 }
 
+// HandleTraceErrorLog returns an HTTP handler that writes
+// whatever log logs to the client.
+//
+// The returned handler is a long-running server task
+// that will wait for the client to close the connection
+// resp. until the request context is done.
+// Therefore, it will not work properly with (write) timeouts.
+//
+// In contrast to HandleTraceAuditLog, HandleTraceErrorLog
+// wraps the http.ResponseWriter such that whatever log logs
+// gets converted to the JSON:
+//  {
+//    "message":"<log-output>",
+//  }
+func HandleTraceErrorLog(log *xlog.SystemLog) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// We provide a JSON API. Therefore, our error log
+		// must also be converted to JSON / nd-JSON.
+		out := xlog.NewJSONWriter(w)
+		log.AddOutput(out)
+		defer log.RemoveOutput(out)
+
+		// TODO(aead): set appropriate content-type.
+		// For audit logs we could either set "application/x-ndjson"
+		// or "application/octet-stream". However, for error logs
+		// "application/x-ndjson" would be incorrect unless/until we
+		// implement JSON error logging.
+		w.WriteHeader(http.StatusOK)
+
+		<-r.Context().Done() // Wait for the client to close the connection
+	}
+}
+
 func pathBase(p string) string { return path.Base(p) }
