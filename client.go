@@ -308,7 +308,13 @@ func (c *Client) ForgetIdentity(id Identity) error {
 	return nil
 }
 
-func (c *Client) TraceAuditLog() (io.ReadCloser, error) {
+// TraceAuditLog subscribes to the KES server audit
+// log and returns a stream of audit events on success.
+//
+// It returns ErrNotAllowed if the client does not
+// have sufficient permissions to subscribe to the
+// audit log.
+func (c *Client) TraceAuditLog() (*AuditStream, error) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/audit/trace", c.addr), nil)
 	if err != nil {
 		return nil, err
@@ -320,5 +326,26 @@ func (c *Client) TraceAuditLog() (io.ReadCloser, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-	return resp.Body, nil
+	return NewAuditStream(resp.Body), nil
+}
+
+// TraceErrorLog subscribes to the KES server error
+// log and returns a stream of error events on success.
+//
+// It returns ErrNotAllowed if the client does not
+// have sufficient permissions to subscribe to the
+// error log.
+func (c *Client) TraceErrorLog() (*ErrorStream, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/error/trace", c.addr), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	return NewErrorStream(resp.Body), nil
 }

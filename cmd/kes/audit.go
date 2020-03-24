@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"crypto/tls"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -88,79 +86,60 @@ func auditTrace(args []string) error {
 		Certificates:       certificates,
 	})
 
-	reader, err := client.TraceAuditLog()
+	stream, err := client.TraceAuditLog()
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer stream.Close()
 
 	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		if err := reader.Close(); err != nil {
+		if err := stream.Close(); err != nil {
 			fmt.Fprintln(cli.Output(), err)
 		}
 	}()
 
-	type AuditEntry struct {
-		Time    time.Time `json:"time"`
-		Request struct {
-			Path     string       `json:"path"`
-			Identity kes.Identity `json:"identity"`
-		} `json:"request"`
-		Response struct {
-			Code int           `json:"code"`
-			Time time.Duration `json:"time"`
-		} `json:"response"`
-	}
-
 	isTerminal := isTerm(os.Stdout)
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		if err = scanner.Err(); err != nil {
-			return err
+	for stream.Next() {
+		if !isTerminal || jsonOutput {
+			fmt.Println(string(stream.Bytes()))
+			continue
 		}
-		if isTerminal && !jsonOutput {
-			var entry AuditEntry
-			if err = json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-				return err
-			}
-			if len(entry.Request.Identity) > 7 { // only show a short identity - similar to git commits
-				entry.Request.Identity = entry.Request.Identity[:7]
-			}
 
-			var status string
-			var identity string
-			if runtime.GOOS == "windows" { // don't colorize on windows
-				status = fmt.Sprintf("[%d %s]", entry.Response.Code, http.StatusText(entry.Response.Code))
-				identity = entry.Request.Identity.String()
-			} else {
-				if entry.Response.Code == http.StatusOK {
-					status = color.GreenString("[%d %s]", entry.Response.Code, http.StatusText(entry.Response.Code))
-				} else {
-					status = color.RedString("[%d %s]", entry.Response.Code, http.StatusText(entry.Response.Code))
-				}
-				identity = color.YellowString(entry.Request.Identity.String())
-			}
+		event := stream.Event()
+		identity := event.Request.Identity
+		if len(identity) > 7 {
+			identity = identity[:7]
+		}
 
-			// Truncate duration values such that we show reasonable
-			// time values - like 1.05s or 345.76ms.
-			respTime := entry.Response.Time
-			switch {
-			case respTime >= time.Second:
-				respTime = respTime.Truncate(10 * time.Millisecond)
-			case respTime >= time.Millisecond:
-				respTime = respTime.Truncate(10 * time.Microsecond)
-			default:
-				respTime = respTime.Truncate(time.Microsecond)
-			}
-
-			const format = "%s %s %-25s %10s\n"
-			fmt.Printf(format, identity, status, entry.Request.Path, respTime)
+		var status string
+		if runtime.GOOS == "windows" { // don't colorize on windows
+			status = fmt.Sprintf("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
 		} else {
-			fmt.Println(scanner.Text())
+			identity = color.YellowString(identity)
+			if event.Response.StatusCode == http.StatusOK {
+				status = color.GreenString("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
+			} else {
+				status = color.RedString("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
+			}
 		}
+
+		// Truncate duration values such that we show reasonable
+		// time values - like 1.05s or 345.76ms.
+		respTime := event.Response.Time
+		switch {
+		case respTime >= time.Second:
+			respTime = respTime.Truncate(10 * time.Millisecond)
+		case respTime >= time.Millisecond:
+			respTime = respTime.Truncate(10 * time.Microsecond)
+		default:
+			respTime = respTime.Truncate(time.Microsecond)
+		}
+
+		const format = "%s %s %-25s %10s\n"
+		fmt.Printf(format, identity, status, event.Request.Path, respTime)
 	}
-	return nil
+	return stream.Err()
 }

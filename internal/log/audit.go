@@ -159,7 +159,7 @@ func (w *AuditResponseWriter) Flush() {
 	}
 }
 
-// A FlushWriter wraps and io.Writer and performs
+// A FlushWriter wraps an io.Writer and performs
 // a flush operation after every write call if the
 // wrapped io.Writer implements http.Flusher.
 //
@@ -171,7 +171,9 @@ type FlushWriter struct {
 	http.Flusher
 }
 
-// NewFlushWriter returns a new flushWriter that
+var _ http.Flusher = (*FlushWriter)(nil)
+
+// NewFlushWriter returns a new FlushWriter that
 // wraps w and flushes everything written to it
 // as soon as possible if w implements http.Flusher.
 func NewFlushWriter(w io.Writer) FlushWriter {
@@ -197,4 +199,10 @@ func (w FlushWriter) Write(p []byte) (int, error) {
 		w.Flusher.Flush()
 	}
 	return n, err
+}
+
+func (w FlushWriter) Flush() {
+	if w.Flusher != nil {
+		w.Flusher.Flush()
+	}
 }
