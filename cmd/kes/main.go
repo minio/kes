@@ -24,9 +24,9 @@ const usage = `usage: %s <command>
     server               Start a kes server.
 
     key                  Manage secret keys.
+    log                  Work with server logs.
     policy               Manage the kes server policies.
     identity             Assign policies to identities.
-    audit                Manage the kes server audit logs.                  
 
     tool                 Run specific key and identity management tools.
 
@@ -62,12 +62,12 @@ func main() {
 		err = server(args)
 	case "key":
 		err = key(args)
+	case "log":
+		err = log(args)
 	case "identity":
 		err = identity(args)
 	case "policy":
 		err = policy(args)
-	case "audit":
-		err = audit(args)
 	case "tool":
 		err = tool(args)
 	default:
