@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
+	stdlog "log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -137,7 +137,7 @@ func server(args []string) error {
 		}
 	}
 
-	errorLog := xlog.NewLogger(os.Stderr, "", log.LstdFlags)
+	errorLog := xlog.NewLogger(os.Stderr, "", stdlog.LstdFlags)
 	if len(config.Log.Error.Files) > 0 {
 		var files []io.Writer
 		for _, path := range config.Log.Error.Files {

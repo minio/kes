@@ -1,3 +1,7 @@
+// Copyright 2020 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package main
 
 import (
@@ -15,17 +19,17 @@ import (
 	"github.com/minio/kes"
 )
 
-const auditCmdUsage = `usage: %s <command>
+const logCmdUsage = `usage: %s <command>
 
-    trace              Trace the audit log output.
+    trace              Trace server log events.
 
   -h, --help           Show list of command-line options.
 `
 
-func audit(args []string) error {
+func log(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), auditCmdUsage, cli.Name())
+		fmt.Fprintf(cli.Output(), logCmdUsage, cli.Name())
 	}
 
 	cli.Parse(args[1:])
@@ -36,7 +40,7 @@ func audit(args []string) error {
 
 	switch args[0] {
 	case "trace":
-		return auditTrace(args)
+		return logTrace(args)
 	default:
 		cli.Usage()
 		os.Exit(2)
@@ -44,32 +48,28 @@ func audit(args []string) error {
 	}
 }
 
-const auditTraceCmdUsage = `Trace and print audit log events.
+const logTraceCmdUsage = `Trace server log events.
 
-Connects to a KES server as audit log device and print an audit
-log event for each request/response pair processed by the server.
-It will print the audit log events as readable text representation
-when writing to a tty. Otherwise it will print events as
-line-separated JSON (nd-json)
+Connects to a KES server and traces log events.
 
 usage: %s [flags]
 
-  --json               Print audit log events as JSON.
+  --json               Print log events as JSON.
 
   -k, --insecure       Skip X.509 certificate validation during TLS handshake.
 
   -h, --help           Show list of command-line options.
 `
 
-func auditTrace(args []string) error {
+func logTrace(args []string) error {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), auditTraceCmdUsage, cli.Name())
+		fmt.Fprintf(cli.Output(), logTraceCmdUsage, cli.Name())
 	}
 
 	var jsonOutput bool
 	var insecureSkipVerify bool
-	cli.BoolVar(&jsonOutput, "json", false, "Print audit log events as JSON")
+	cli.BoolVar(&jsonOutput, "json", false, "Print log events as JSON")
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 	if args = parseCommandFlags(cli, args[1:]); len(args) != 0 {
