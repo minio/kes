@@ -9,7 +9,8 @@ ENV GOPROXY https://proxy.golang.org
 
 RUN  \
      apk add --no-cache git && \
-     go install -v -ldflags "-s -w" github.com/minio/kes/cmd/kes
+     go install -v -ldflags "-s -w" github.com/minio/kes/cmd/release && \
+     go install -v -ldflags "-s -w -X main.version=$(release)" github.com/minio/kes/cmd/kes
 
 FROM alpine:3.10
 
