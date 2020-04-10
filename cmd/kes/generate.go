@@ -5,13 +5,10 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/base64"
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/minio/kes"
 )
 
 const generateCmdUsage = `usage: %s name [context]
@@ -47,14 +44,10 @@ func deriveKey(args []string) error {
 		context = b
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
 	plaintext, ciphertext, err := client.GenerateDataKey(name, context)
 	if err != nil {
 		return fmt.Errorf("Failed to generate data key: %v", err)

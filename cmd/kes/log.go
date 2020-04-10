@@ -5,7 +5,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/minio/kes"
 )
 
 const logCmdUsage = `usage: %s <command>
@@ -77,15 +75,10 @@ func logTrace(args []string) error {
 		os.Exit(2)
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	stream, err := client.TraceAuditLog()
 	if err != nil {
 		return err
