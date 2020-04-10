@@ -5,13 +5,10 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/base64"
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/minio/kes"
 )
 
 const createCmdUsage = `usage: %s name [key]
@@ -47,15 +44,10 @@ func createKey(args []string) error {
 		bytes = b
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	if len(bytes) > 0 {
 		if err = client.ImportKey(name, bytes); err != nil {
 			return fmt.Errorf("Failed to import %s: %v", name, err)

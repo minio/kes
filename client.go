@@ -16,15 +16,74 @@ import (
 	"time"
 )
 
+// Client is a KES client. Usually, a new client is
+// instantiated via the NewClient or NewClientWithConfig
+// functions.
+//
+// In general, a client just requires:
+// •  a KES server endpoint
+// •  a X.509 certificate for authentication.
+//
+// However, custom transport protcols, timeouts,
+// connection pooling, etc. can be specified via
+// a custom http.RoundTripper. For example:
+//   client := &Client{
+//       Endpoint:   "https:127.0.0.1:7373",
+//       HTTPClient: http.Client{
+//           Transport: &http.Transport{
+//              // specify custom behavior...
+//
+//              TLSClientConfig: &tls.Config{
+//                  Certificates: []tls.Certificates{clientCert},
+//              },
+//           },
+//       },
+//    }
+//
+// A custom transport protocol can be used via a
+// custom implemention of the http.RoundTripper
+// interface.
 type Client struct {
-	addr       string
-	httpClient http.Client
+	// Endpoint is the KES server HTTPS endpoint.
+	// For example: https://127.0.0.1:7373
+	Endpoint string
+
+	// HTTPClient is the HTTP client.
+	//
+	// The HTTP client uses its http.RoundTripper
+	// to send requests resp. receive responses.
+	//
+	// It must not be modified concurrently.
+	HTTPClient http.Client
 }
 
-func NewClient(addr string, config *tls.Config) *Client {
+// NewClient returns a new KES client with the given
+// KES server endpoint that uses the given TLS certficate
+// mTLS authentication.
+//
+// The TLS certificate must be valid for client authentication.
+//
+// NewClient uses an http.Transport with reasonable defaults.
+func NewClient(endpoint string, cert tls.Certificate) *Client {
+	return NewClientWithConfig(endpoint, &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{cert},
+	})
+}
+
+// NewClientWithConfig returns a new KES client with the
+// given KES server endpoint that uses the given TLS config
+// for mTLS authentication.
+//
+// Therefore, the config.Certificates must contain a TLS
+// certificate that is valid for client authentication.
+//
+// NewClientWithConfig uses an http.Transport with reasonable
+// defaults.
+func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 	return &Client{
-		addr: addr,
-		httpClient: http.Client{
+		Endpoint: endpoint,
+		HTTPClient: http.Client{
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				DialContext: (&net.Dialer{
@@ -37,18 +96,16 @@ func NewClient(addr string, config *tls.Config) *Client {
 				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   10 * time.Second,
 				ExpectContinueTimeout: 1 * time.Second,
-				TLSClientConfig:       config.Clone(),
+				TLSClientConfig:       config,
 			},
 		},
 	}
 }
 
-func (c *Client) Transport(transport http.RoundTripper) { c.httpClient.Transport = transport }
-
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version() (string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/version", c.addr))
+	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/version", c.Endpoint))
 	if err != nil {
 		return "", err
 	}
@@ -71,12 +128,12 @@ func (c *Client) Version() (string, error) {
 // the specified name. The master key will be generated
 // by the KES server.
 func (c *Client) CreateKey(name string) error {
-	url := fmt.Sprintf("%s/v1/key/create/%s", c.addr, name)
+	url := fmt.Sprintf("%s/v1/key/create/%s", c.Endpoint, name)
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -101,8 +158,8 @@ func (c *Client) ImportKey(name string, key []byte) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/v1/key/import/%s", c.addr, name)
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	url := fmt.Sprintf("%s/v1/key/import/%s", c.Endpoint, name)
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -113,12 +170,12 @@ func (c *Client) ImportKey(name string, key []byte) error {
 }
 
 func (c *Client) DeleteKey(name string) error {
-	url := fmt.Sprintf("%s/v1/key/delete/%s", c.addr, name)
+	url := fmt.Sprintf("%s/v1/key/delete/%s", c.Endpoint, name)
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -139,8 +196,8 @@ func (c *Client) GenerateDataKey(name string, context []byte) ([]byte, []byte, e
 		return nil, nil, err
 	}
 
-	url := fmt.Sprintf("%s/v1/key/generate/%s", c.addr, name)
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	url := fmt.Sprintf("%s/v1/key/generate/%s", c.Endpoint, name)
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -174,8 +231,8 @@ func (c *Client) DecryptDataKey(name string, ciphertext, context []byte) ([]byte
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/v1/key/decrypt/%s", c.addr, name)
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	url := fmt.Sprintf("%s/v1/key/decrypt/%s", c.Endpoint, name)
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -200,8 +257,8 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("%s/v1/policy/write/%s", c.addr, name)
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(content))
+	url := fmt.Sprintf("%s/v1/policy/write/%s", c.Endpoint, name)
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(content))
 	if err != nil {
 		return err
 	}
@@ -212,7 +269,7 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 }
 
 func (c *Client) ReadPolicy(name string) (*Policy, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/read/%s", c.addr, name))
+	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/policy/read/%s", c.Endpoint, name))
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +289,7 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 }
 
 func (c *Client) ListPolicies(pattern string) ([]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.addr, url.PathEscape(pattern)))
+	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.Endpoint, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +307,11 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 }
 
 func (c *Client) DeletePolicy(name string) error {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/policy/delete/%s", c.addr, name), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/policy/delete/%s", c.Endpoint, name), nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -265,8 +322,8 @@ func (c *Client) DeletePolicy(name string) error {
 }
 
 func (c *Client) AssignIdentity(policy string, id Identity) error {
-	url := fmt.Sprintf("%s/v1/identity/assign/%s/%s", c.addr, policy, id.String())
-	resp, err := c.httpClient.Post(url, "application/json", nil)
+	url := fmt.Sprintf("%s/v1/identity/assign/%s/%s", c.Endpoint, policy, id.String())
+	resp, err := c.HTTPClient.Post(url, "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -277,7 +334,7 @@ func (c *Client) AssignIdentity(policy string, id Identity) error {
 }
 
 func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.addr, url.PathEscape(pattern)))
+	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.Endpoint, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
@@ -294,11 +351,11 @@ func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
 }
 
 func (c *Client) ForgetIdentity(id Identity) error {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/identity/forget/%s", c.addr, id.String()), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/identity/forget/%s", c.Endpoint, id.String()), nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -315,11 +372,11 @@ func (c *Client) ForgetIdentity(id Identity) error {
 // have sufficient permissions to subscribe to the
 // audit log.
 func (c *Client) TraceAuditLog() (*AuditStream, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/audit/trace", c.addr), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/audit/trace", c.Endpoint), nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -336,11 +393,11 @@ func (c *Client) TraceAuditLog() (*AuditStream, error) {
 // have sufficient permissions to subscribe to the
 // error log.
 func (c *Client) TraceErrorLog() (*ErrorStream, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/error/trace", c.addr), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/error/trace", c.Endpoint), nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

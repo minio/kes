@@ -5,7 +5,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
@@ -71,14 +70,10 @@ func assignIdentity(args []string) error {
 		os.Exit(2)
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
 	if err := client.AssignIdentity(args[1], kes.Identity(args[0])); err != nil {
 		return fmt.Errorf("Failed to assign policy '%s' to '%s': %v", args[1], args[0], err)
 	}
@@ -110,14 +105,10 @@ func listIdentity(args []string) error {
 		pattern = args[0]
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
 	identityRoles, err := client.ListIdentities(pattern)
 	if err != nil {
 		return fmt.Errorf("Cannot list identities: %v", err)
@@ -169,14 +160,10 @@ func forgetIdentity(args []string) error {
 		os.Exit(2)
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
 	if err := client.ForgetIdentity(kes.Identity(args[0])); err != nil {
 		return fmt.Errorf("Cannot forget '%s': %v", args[0], err)
 	}

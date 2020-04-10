@@ -5,12 +5,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/minio/kes"
 )
 
 const deleteCmdUsage = `usage: %s name
@@ -35,14 +32,10 @@ func deleteKey(args []string) error {
 	}
 
 	name := args[0]
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
 	if err := client.DeleteKey(name); err != nil {
 		return fmt.Errorf("Failed to delete %s: %v", name, err)
 	}

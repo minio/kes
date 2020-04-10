@@ -5,7 +5,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -82,15 +81,10 @@ func addPolicy(args []string) error {
 		os.Exit(2)
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	data, err := ioutil.ReadFile(args[1])
 	if err != nil {
 		return fmt.Errorf("Cannot read policy file '%s': %v", args[1], err)
@@ -149,15 +143,10 @@ func showPolicy(args []string) error {
 		}
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	policy, err := client.ReadPolicy(name)
 	if err != nil {
 		return fmt.Errorf("Failed to fetch policy '%s': %v", args[0], err)
@@ -208,15 +197,10 @@ func listPolicies(args []string) error {
 		policy = args[0]
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	policies, err := client.ListPolicies(policy)
 	if err != nil {
 		return fmt.Errorf("Failed to list policies: %v", err)
@@ -258,15 +242,10 @@ func deletePolicy(args []string) error {
 		os.Exit(2)
 	}
 
-	certificates, err := loadClientCertificates()
+	client, err := newClient(insecureSkipVerify)
 	if err != nil {
 		return err
 	}
-	client := kes.NewClient(serverAddr(), &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
-		Certificates:       certificates,
-	})
-
 	if err := client.DeletePolicy(args[0]); err != nil {
 		return fmt.Errorf("Failed to delete policy '%s': %v", args[0], err)
 	}

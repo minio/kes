@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/minio/kes"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -102,14 +103,7 @@ func isFlagPresent(set *flag.FlagSet, name string) bool {
 	return found
 }
 
-func serverAddr() string {
-	if addr, ok := os.LookupEnv("KES_SERVER"); ok {
-		return addr
-	}
-	return "https://127.0.0.1:7373"
-}
-
-func loadClientCertificates() ([]tls.Certificate, error) {
+func newClient(insecureSkipVerify bool) (*kes.Client, error) {
 	certPath := os.Getenv("KES_CLIENT_TLS_CERT_FILE")
 	keyPath := os.Getenv("KES_CLIENT_TLS_KEY_FILE")
 	if certPath == "" {
@@ -122,7 +116,15 @@ func loadClientCertificates() ([]tls.Certificate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load TLS key or cert for client: %v", err)
 	}
-	return []tls.Certificate{cert}, nil
+
+	addr := "https://127.0.0.1:7373"
+	if env, ok := os.LookupEnv("KES_SERVER"); ok {
+		addr = env
+	}
+	return kes.NewClientWithConfig(addr, &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: insecureSkipVerify,
+	}), nil
 }
 
 func isTerm(f *os.File) bool { return terminal.IsTerminal(int(f.Fd())) }
