@@ -25,6 +25,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
+	"github.com/minio/kes/internal/etcd"
 	"github.com/minio/kes/internal/fs"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
@@ -124,8 +125,14 @@ func server(args []string) error {
 		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
 	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
 		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager key store are specified at the same time")
+	case config.KeyStore.Fs.Dir != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
+		return errors.New("Ambiguous configuration: FS and Etcd key store are specified at the same time")
 	case config.KeyStore.Vault.Addr != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
-		return errors.New("Ambiguous configuration: Vault and AWS Secrets Manager key store are specified at the same time")
+		return errors.New("Ambiguous configuration: Vault and AWS SecretsManager key store are specified at the same time")
+	case config.KeyStore.Vault.Addr != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
+		return errors.New("Ambiguous configuration: Vault and Etcd key store are specified at the same time")
+	case config.KeyStore.Aws.SecretsManager.Addr != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
+		return errors.New("Ambiguous configuration: AWS SecretsManager and Etcd key store are specified at the same time")
 	}
 
 	if mlock {
@@ -271,6 +278,22 @@ func server(args []string) error {
 			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
 		}
 		store.Remote = awsStore
+	case isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
+		etcdStore := &etcd.Store{
+			Addr: config.KeyStore.Etcd.V3.Addr,
+			Login: etcd.Login{
+				Username: config.KeyStore.Etcd.V3.Login.Username,
+				Password: config.KeyStore.Etcd.V3.Login.Password,
+			},
+			ClientKeyPath:  config.KeyStore.Etcd.V3.TLS.KeyPath,
+			ClientCertPath: config.KeyStore.Etcd.V3.TLS.CertPath,
+			CAPath:         config.KeyStore.Etcd.V3.TLS.CAPath,
+			ErrorLog:       errorLog.Log(),
+		}
+		if err := etcdStore.Authenticate(context.Background()); err != nil {
+			return fmt.Errorf("Failed to connect to etcd: %v", err)
+		}
+		store.Remote = etcdStore
 	default:
 		store.Remote = &mem.Store{}
 	}

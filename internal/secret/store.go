@@ -82,7 +82,7 @@ type Store struct {
 
 	// KMS is the KMS implementation used to
 	// encrypt secrets before sending them to
-	// the remove key-value store.
+	// the remote key-value store.
 	//
 	// It uses the Store.Key as the default
 	// cryptographic key for encrypting new
