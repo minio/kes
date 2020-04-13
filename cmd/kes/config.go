@@ -129,6 +129,23 @@ type serverConfig struct {
 				} `toml:"credentials" yaml:"credentials"`
 			} `toml:"secrets_manager" yaml:"secrets_manager"`
 		} `toml:"aws" yaml:"aws"`
+
+		Etcd struct {
+			V3 struct {
+				Addr []string `toml:"address" yaml:"address"`
+
+				Login struct {
+					Username string `toml:"username" yaml:"username"`
+					Password string `toml:"password" yaml:"password"`
+				} `toml:"credentials" yaml:"credentials"`
+
+				TLS struct {
+					KeyPath  string `toml:"key" yaml:"key"`
+					CertPath string `toml:"cert" yaml:"cert"`
+					CAPath   string `toml:"ca" yaml:"ca"`
+				} `toml:"tls" yaml:"tls"`
+			} `toml:"v3" yaml:"v3"`
+		} `toml:"etcd" yaml:"etcd"`
 	} `toml:"keystore" yaml:"keystore"`
 }
 
@@ -163,4 +180,27 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		}
 		return config, err
 	}
+}
+
+// isEndpointPresent returns true if and only if
+// there is at least one endpoint != "".
+//
+// It is mainly used to determine whether a list
+// of endpoints contains at least one non-empty
+// endpoint.
+// A simple len(endpoints) == 0 check is not
+// sufficient since endpoints could be:
+//   endpoints = []string{ "" }
+func isEndpointPresent(endpoints []string) bool {
+	if len(endpoints) == 0 {
+		return false
+	}
+
+	for _, e := range endpoints {
+		if e != "" {
+			return true
+		}
+	}
+	return false
+
 }

@@ -214,7 +214,7 @@ retry  = "15s" # Duration until the server tries to re-authenticate after connec
 
 # Vault client TLS configuration.
 # The server will use the private key and certificate to
-# to authenticate to Vault via mTLS and use the Root CAs
+# authenticate to Vault via mTLS and use the root CAs
 # found at the ca path to verify the Vault server TLS
 # certificate.
 [keystore.vault.tls]
@@ -222,16 +222,16 @@ key  = "" # Path to the TLS client private key for mTLS authentication to Vault
 cert = "" # Path to the TLS client certificate for mTLS authentication to Vailt
 ca   = "" # Path to one or multiple PEM Root CA certificates
 
-# Vault status configuration. The kes server will periodically
+# Vault status configuration. The server will periodically
 # reach out to Vault to check its status. 
 [keystore.vault.status]
 ping = "10s" # Duration until the server checks Vault's status again.
 
-# The AWS Secrets Manager key store. The server will store
-# secret keys at the AWS Secrets Manager encrypted with
+# The AWS SecretsManager key store. The server will store
+# secret keys at the AWS SecretsManager encrypted with
 # AWS-KMS. See: https://aws.amazon.com/secrets-manager
 [keystore.aws.secrets_manager]
-address    = "" # The AWS Secrets Manager endpoint - e.g.: secretsmanager.us-east-2.amazonaws.com
+address    = "" # The AWS SecretsManager endpoint - e.g.: secretsmanager.us-east-2.amazonaws.com
 region     = "" # The AWS region of the Secrets Manager - e.g.: "us-east-2"
 kms_key_id = "" # The AWS-KMS key ID used to en/decrypt secrets at the Secrets Manager. By default (if not set) the default AWS-KMS key will be used.
 
@@ -241,3 +241,27 @@ kms_key_id = "" # The AWS-KMS key ID used to en/decrypt secrets at the Secrets M
 access_key    = "" # Your AWS Access Key
 secret_key    = "" # Your AWS Secret Key
 session_token = "" # Your AWS session token (usually optional)
+
+# A etcd (v3) key store. The server will store secret keys
+# as key-value entries at a etcd cluster.
+[keystore.etcd.v3]
+address  = [ ] # The etcd endpoint(s) - e.g. [ "https://127.0.0.1:2379" ]
+
+# The etcd authentication credentials.
+[keystore.etcd.v3.credentials]
+username = "" # Your etcd username
+password = "" # Your etcd password
+
+# The etcd TLS configuration.
+# The server will use the private key and certificate
+# to authenticate to etcd via mTLS and uses the root
+# CAs found at the cap path to verify the etcd cluster
+# certificate.
+#
+# If both, a client certificate and a username/password,
+# is specified then the username takes precedence over
+# the certificate's common name.
+[keystore.etcd.v3.tls]
+key  = "" # Path to the TLS client private key for mTLS authentication
+cert = "" # Path to the TLS client certificate for mTLS authentication
+ca   = "" # Path to one or multiple PEM root CA certificates
