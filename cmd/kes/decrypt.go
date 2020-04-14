@@ -53,7 +53,7 @@ func decryptKey(args []string) error {
 	if err != nil {
 		return err
 	}
-	plaintext, err := client.DecryptDataKey(name, ciphertext, context)
+	plaintext, err := client.Decrypt(name, ciphertext, context)
 	if err != nil {
 		return fmt.Errorf("Failed to decrypt data key: %v", err)
 	}

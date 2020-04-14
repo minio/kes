@@ -48,19 +48,19 @@ func deriveKey(args []string) error {
 	if err != nil {
 		return err
 	}
-	plaintext, ciphertext, err := client.GenerateDataKey(name, context)
+	key, err := client.GenerateKey(name, context)
 	if err != nil {
 		return fmt.Errorf("Failed to generate data key: %v", err)
 	}
 
 	if isTerm(os.Stdout) {
 		fmt.Println("{")
-		fmt.Printf("  plaintext : %s\n", base64.StdEncoding.EncodeToString(plaintext))
-		fmt.Printf("  ciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
+		fmt.Printf("  plaintext : %s\n", base64.StdEncoding.EncodeToString(key.Plaintext))
+		fmt.Printf("  ciphertext: %s\n", base64.StdEncoding.EncodeToString(key.Ciphertext))
 		fmt.Println("}")
 	} else {
 		const format = `{"plaintext":"%s","ciphertext":"%s"}`
-		fmt.Printf(format, base64.StdEncoding.EncodeToString(plaintext), base64.StdEncoding.EncodeToString(ciphertext))
+		fmt.Printf(format, base64.StdEncoding.EncodeToString(key.Plaintext), base64.StdEncoding.EncodeToString(key.Ciphertext))
 	}
 	return nil
 }
