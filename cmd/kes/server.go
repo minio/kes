@@ -25,7 +25,6 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
-	"github.com/minio/kes/internal/etcd"
 	"github.com/minio/kes/internal/fs"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
@@ -116,23 +115,12 @@ func server(args []string) error {
 	}
 
 	switch {
-	case config.KMS.AWS.Addr != "" && config.KMS.Vault.Addr != "":
-		return errors.New("Ambiguous configuration: AWS and Vault KMS are specified at the same time")
-	}
-
-	switch {
 	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "":
 		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
 	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
 		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager key store are specified at the same time")
-	case config.KeyStore.Fs.Dir != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
-		return errors.New("Ambiguous configuration: FS and Etcd key store are specified at the same time")
 	case config.KeyStore.Vault.Addr != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
 		return errors.New("Ambiguous configuration: Vault and AWS SecretsManager key store are specified at the same time")
-	case config.KeyStore.Vault.Addr != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
-		return errors.New("Ambiguous configuration: Vault and Etcd key store are specified at the same time")
-	case config.KeyStore.Aws.SecretsManager.Addr != "" && isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
-		return errors.New("Ambiguous configuration: AWS SecretsManager and Etcd key store are specified at the same time")
 	}
 
 	if mlock {
@@ -185,45 +173,6 @@ func server(args []string) error {
 	}
 
 	var store = &secret.Store{}
-	switch {
-	case config.KMS.Vault.Addr != "":
-		kms := &vault.KMS{
-			Addr:      config.KMS.Vault.Addr,
-			Namespace: config.KMS.Vault.Namespace,
-			AppRole: vault.AppRole{
-				ID:     config.KMS.Vault.AppRole.ID,
-				Secret: config.KMS.Vault.AppRole.Secret,
-				Retry:  config.KMS.Vault.AppRole.Retry,
-			},
-			ErrorLog:        errorLog.Log(),
-			ClientKeyPath:   config.KMS.Vault.TLS.KeyPath,
-			ClientCertPath:  config.KMS.Vault.TLS.CertPath,
-			CAPath:          config.KMS.Vault.TLS.CAPath,
-			StatusPingAfter: config.KMS.Vault.Status.Ping,
-		}
-		if err = kms.Authenticate(context.Background()); err != nil {
-			return fmt.Errorf("Failed to connect to Vault KMS: %v", err)
-		}
-		store.KMS = kms
-		store.Key = config.KMS.Vault.Key
-	case config.KMS.AWS.Addr != "":
-		kms := &aws.KMS{
-			Addr:   config.KMS.AWS.Addr,
-			Region: config.KMS.AWS.Region,
-			Login: aws.Credentials{
-				AccessKey:    config.KMS.AWS.Login.AccessKey,
-				SecretKey:    config.KMS.AWS.Login.SecretKey,
-				SessionToken: config.KMS.AWS.Login.SessionToken,
-			},
-			ErrorLog: errorLog.Log(),
-		}
-		if err = kms.Authenticate(); err != nil {
-			return fmt.Errorf("Failed to connect to AWS-KMS: %v", err)
-		}
-		store.KMS = kms
-		store.Key = config.KMS.AWS.Key
-	}
-
 	switch {
 	case config.KeyStore.Fs.Dir != "":
 		f, err := os.Stat(config.KeyStore.Fs.Dir)
@@ -278,22 +227,6 @@ func server(args []string) error {
 			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
 		}
 		store.Remote = awsStore
-	case isEndpointPresent(config.KeyStore.Etcd.V3.Addr):
-		etcdStore := &etcd.Store{
-			Addr: config.KeyStore.Etcd.V3.Addr,
-			Login: etcd.Login{
-				Username: config.KeyStore.Etcd.V3.Login.Username,
-				Password: config.KeyStore.Etcd.V3.Login.Password,
-			},
-			ClientKeyPath:  config.KeyStore.Etcd.V3.TLS.KeyPath,
-			ClientCertPath: config.KeyStore.Etcd.V3.TLS.CertPath,
-			CAPath:         config.KeyStore.Etcd.V3.TLS.CAPath,
-			ErrorLog:       errorLog.Log(),
-		}
-		if err := etcdStore.Authenticate(context.Background()); err != nil {
-			return fmt.Errorf("Failed to connect to etcd: %v", err)
-		}
-		store.Remote = etcdStore
 	default:
 		store.Remote = &mem.Store{}
 	}
