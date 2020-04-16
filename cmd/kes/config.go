@@ -51,44 +51,6 @@ type serverConfig struct {
 		} `toml:"audit" yaml:"audit"`
 	} `toml:"log" yaml:"log"`
 
-	KMS struct {
-		Vault struct {
-			Addr      string `toml:"address" yaml:"address"`
-			Namespace string `toml:"namespace" yaml:"namespace"`
-
-			Key string `toml:"key" yaml:"key"`
-
-			AppRole struct {
-				ID     string        `toml:"id" yaml:"id"`
-				Secret string        `toml:"secret" yaml:"secret"`
-				Retry  time.Duration `toml:"retry" yaml:"retry"`
-			} `toml:"approle" yaml:"approle"`
-
-			TLS struct {
-				KeyPath  string `toml:"key" yaml:"key"`
-				CertPath string `toml:"cert" yaml:"cert"`
-				CAPath   string `toml:"ca" yaml:"ca"`
-			} `toml:"tls" yaml:"tls"`
-
-			Status struct {
-				Ping time.Duration `toml:"ping" yaml:"ping"`
-			} `toml:"status" yaml:"status"`
-		} `toml:"vault" yaml:"vault"`
-
-		AWS struct {
-			Addr   string `toml:"address" yaml:"address"`
-			Region string `toml:"region" yaml:"region"`
-
-			Key string `toml:"key" yaml:"key"`
-
-			Login struct {
-				AccessKey    string `toml:"access_key" yaml:"access_key"`
-				SecretKey    string `toml:"secret_key" yaml:"secret_key"`
-				SessionToken string `toml:"session_token" yaml:"session_token"`
-			} `toml:"credentials" yaml:"credentials"`
-		} `toml:"aws" yaml:"aws"`
-	} `toml:"kms" yaml:"kms"`
-
 	KeyStore struct {
 		Fs struct {
 			Dir string `toml:"path" yaml:"path"`
@@ -129,23 +91,6 @@ type serverConfig struct {
 				} `toml:"credentials" yaml:"credentials"`
 			} `toml:"secrets_manager" yaml:"secrets_manager"`
 		} `toml:"aws" yaml:"aws"`
-
-		Etcd struct {
-			V3 struct {
-				Addr []string `toml:"address" yaml:"address"`
-
-				Login struct {
-					Username string `toml:"username" yaml:"username"`
-					Password string `toml:"password" yaml:"password"`
-				} `toml:"credentials" yaml:"credentials"`
-
-				TLS struct {
-					KeyPath  string `toml:"key" yaml:"key"`
-					CertPath string `toml:"cert" yaml:"cert"`
-					CAPath   string `toml:"ca" yaml:"ca"`
-				} `toml:"tls" yaml:"tls"`
-			} `toml:"v3" yaml:"v3"`
-		} `toml:"etcd" yaml:"etcd"`
 	} `toml:"keystore" yaml:"keystore"`
 }
 
@@ -180,27 +125,4 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		}
 		return config, err
 	}
-}
-
-// isEndpointPresent returns true if and only if
-// there is at least one endpoint != "".
-//
-// It is mainly used to determine whether a list
-// of endpoints contains at least one non-empty
-// endpoint.
-// A simple len(endpoints) == 0 check is not
-// sufficient since endpoints could be:
-//   endpoints = []string{ "" }
-func isEndpointPresent(endpoints []string) bool {
-	if len(endpoints) == 0 {
-		return false
-	}
-
-	for _, e := range endpoints {
-		if e != "" {
-			return true
-		}
-	}
-	return false
-
 }

@@ -30,20 +30,6 @@ func TestSecretString(t *testing.T) {
 	}
 }
 
-var secretMarshalJSONTests = secretStringTests
-
-func TestSecretMarshalJSON(t *testing.T) {
-	for i, test := range secretMarshalJSONTests {
-		s, err := test.Secret.MarshalJSON()
-		if err != nil {
-			t.Fatalf("Test %d: Failed to marshal secret: %v", i, err)
-		}
-		if string(s) != test.String {
-			t.Fatalf("Test %d: got %s - want %s", i, string(s), test.String)
-		}
-	}
-}
-
 var secretParseStringTests = []struct {
 	Secret     Secret
 	String     string
@@ -58,33 +44,14 @@ var secretParseStringTests = []struct {
 	{Secret: Secret{}, String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="`, ShouldFail: true},  // Missing final }
 }
 
-func TestSecretParseString(t *testing.T) {
+func TestParseString(t *testing.T) {
 	for i, test := range secretParseStringTests {
-		var secret Secret
-		err := secret.ParseString(test.String)
+		secret, err := ParseSecret(test.String)
 		if err != nil && !test.ShouldFail {
 			t.Fatalf("Test %d: Failed to parse string: %v", i, err)
 		}
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: Parsing should have failed but it succeeded", i)
-		}
-		if err == nil && secret != test.Secret {
-			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)
-		}
-	}
-}
-
-var secretUnmarshalJSONTests = secretParseStringTests
-
-func TestSecretUnmarshalJSON(t *testing.T) {
-	for i, test := range secretUnmarshalJSONTests {
-		var secret Secret
-		err := secret.UnmarshalJSON([]byte(test.String))
-		if err != nil && !test.ShouldFail {
-			t.Fatalf("Test %d: Failed to unmarshal JSON: %v", i, err)
-		}
-		if err == nil && test.ShouldFail {
-			t.Fatalf("Test %d: Unmarshaling should have failed but it succeeded", i)
 		}
 		if err == nil && secret != test.Secret {
 			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)
@@ -134,7 +101,7 @@ var secretUnwrapTests = []struct {
 	ShouldFail     bool
 }{
 	{ // 0
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 	},
 	{ // 1
@@ -142,27 +109,27 @@ var secretUnwrapTests = []struct {
 		AssociatedData: nil,
 	},
 	{ // 2
-		Ciphertext:     `{"aead":"AES-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // Invalid algorithm
 	},
 	{ // 3
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"9Qup+RN5PQLQNxkqSsae","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"EjOY4JKqjIrPmQ5z1KSR8zlhggY=","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid IV length
 	},
 	{ // 4
-		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"n9XhMi9e/KfIvIJniCoh4Q==","bytes":"cw22HjLq/4cx8507SW4hhSrYbDiMuRao4b5+GE+XfbE="}`,
+		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"SXAbms731/c=","bytes":"cw22HjLq/4cx8507SW4hhSrYbDiMuRao4b5+GE+XfbE="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
 	},
 	{ // 5
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"EryghN51hWA=","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"efY+4kYF9n8=","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
 	},
 	{ // 6
-		Ciphertext:     `{"aead":"AES-256-GCM","iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"WH19g/H1oi/eejfRXWiEyPH4QHw2NrG+Wz+HXF07MOU="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"QTza1g5oX3f9cGJMbY1xJwWPj1F7R2VnNl6XpFKYQy0="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
 	},
@@ -172,7 +139,7 @@ var secretUnwrapTests = []struct {
 		ShouldFail:     true, // ciphertext not authentic
 	},
 	{ // 8
-		Ciphertext:     `{"aead":"AES-256-GCM" "iv":"NriFv+QwBriwRYjCZY9c+g==","nonce":"NoLh4PmZuu1OGScv","bytes":"SR5qb4zk1l5+WMp3xydhHbBFQuiYwiet/KDpKmTHBt4="}`,
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256" "iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid JSON
 	},
@@ -191,59 +158,6 @@ func TestSecrectUnwrap(t *testing.T) {
 		}
 		if !test.ShouldFail && !bytes.Equal(plaintext, Plaintext) {
 			t.Fatalf("Test %d: Plaintext mismatch: got %x - want %x", i, plaintext, Plaintext)
-		}
-	}
-}
-
-var insecureAESDeriveKeyTests = []struct {
-	Key        []byte
-	IV         []byte
-	DerivedKey []byte
-	ShouldFail bool
-}{
-	{
-		Key:        make([]byte, 16),
-		IV:         make([]byte, 16),
-		DerivedKey: mustDecodeHex("219853c2069743cbd1f745723fba24fd"),
-	},
-	{
-		Key:        mustDecodeHex("8f7ac5e8a42206d7c2e605914ba67498"),
-		IV:         mustDecodeHex("e24e500a7359d5564fa6e5d52e6cdc30"),
-		DerivedKey: mustDecodeHex("8f48be964f50b0243a764a29c492ab81"),
-	},
-	{
-		Key:        make([]byte, 32),
-		IV:         make([]byte, 16),
-		DerivedKey: mustDecodeHex("8ee033a0c90f31e1e8dbb12a2d211c544e4dd17f2d5604ce7126bbd5ed3abb80"),
-	},
-	{
-		Key:        mustDecodeHex("5b647be0a1ecb2a01d3b0223f19b454b114be28cda1bf55bd28c478980139986"),
-		IV:         mustDecodeHex("325b10c6a642a992c3539554358c0b8a"),
-		DerivedKey: mustDecodeHex("fc92900f18dc13349e738c54b6d47e1d8d8a3aa1ef088a1d33053a7ea31c7930"),
-	},
-	{
-		Key:        make([]byte, 24),
-		IV:         make([]byte, 16),
-		ShouldFail: true, // Invalid key size: Only AES-128 and AES-256, not AES-192
-	},
-	{
-		Key:        make([]byte, 32),
-		IV:         make([]byte, 15),
-		ShouldFail: true, // Invalid IV size: len(IV) == 16
-	},
-}
-
-func TestInsecureAESDeriveKey(t *testing.T) {
-	for i, test := range insecureAESDeriveKeyTests {
-		key, err := insecureAESDeriveKey(test.Key, test.IV)
-		if err != nil && !test.ShouldFail {
-			t.Fatalf("Test %d: Failed to derive key: %v", i, err)
-		}
-		if err == nil && test.ShouldFail {
-			t.Fatalf("Test %d: Expected to fail but succeeded", i)
-		}
-		if !test.ShouldFail && !bytes.Equal(key, test.DerivedKey) {
-			t.Fatalf("Test %d: Derived key mismatch: got %x - want %x", i, key, test.DerivedKey)
 		}
 	}
 }
