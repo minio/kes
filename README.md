@@ -1,5 +1,5 @@
-# Kes
-Kes is a tool for managing and distributing secret keys at scale. In particular, it decouples a traditional key-management-system (KMS) - like AWS-KMS or Hashicorp Vault from large-scale and high-performance applications.
+# KES
+KES is a stateless and distributed key-management system for high-performance applications. We built KES as the bridge between modern applications - running as containers on [Kubernetes](https://kubernetes.io) - and centralized KMS solutions. Therefore, KES has been designed to be simple, scalable and secure by default. It has just a few knobs to tweak instead of a complex configuration and does not require a deep understanding of secure key-management or cryptography.
 
 ## Architecture
 [![KES](https://raw.githubusercontent.com/minio/kes/master/.github/arch.png)](https://min.io)
@@ -39,4 +39,4 @@ GO111MODULE=on go get github.com/minio/kes/cmd/kes
 For your first steps checkout our [Getting Started](https://github.com/minio/kes/wiki/Getting-Started) guide.
 
 ## License
-Use of `kes` is governed by the AGPLv3 license that can be found in the [LICENSE](./LICENSE) file.
+Use of `KES` is governed by the AGPLv3 license that can be found in the [LICENSE](./LICENSE) file.
