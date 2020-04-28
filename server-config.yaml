@@ -1,27 +1,28 @@
-# The address of the kes server
-address: 127.0.0.1:7373
+# The TCP address (ip:port) for the KES server to listen on.
+address: 0.0.0.0:7373
 
 # The root identity. Root is the identity that can perform
 # any operation. A root identity must be specified - either
 # here as part of the config file or via a CLI argument.
 root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
 
-# The TLS configuration of the kes server.
-# A kes server speaks HTTP only over TLS (HTTPS).
-# Therefore, a TLS private key and public certificate must be specified -
+# The TLS configuration for the KES server. A KES server
+# accepts HTTP only over TLS (HTTPS). Therefore, a TLS
+# private key and public certificate must be specified,
 # either here as part of the config file or via CLI arguments.
 tls:
   key: ./server.key   # Path to the TLS private key
   cert: ./server.cert # Path to the TLS certificate
+
   # The TLS proxy configuration. A TLS proxy, like nginx, sits in
-  # between a kes client and the kes server and usually acts as a
-  # load balancer or common API endpoint.
-  # All connections from the kes client to the TLS proxy as well
-  # the connections from the TLS proxy to the kes server must be
+  # between a KES client and the KES server and usually acts as a
+  # load balancer or common endpoint.
+  # All connections from the KES client to the TLS proxy as well
+  # the connections from the TLS proxy to the KES server must be
   # established over TLS.
   proxy:
-    # The identities of all TLS proxies directly connected to the kes
-    # server.
+    # The identities of all TLS proxies directly connected to the
+    # KES server.
     #
     # Note that a TLS proxy can act as any identity (including root)
     # since it can forward arbitrary client certificates. Client certificates
@@ -30,91 +31,88 @@ tls:
     # identities are secure and trusted servers.
     identities: []
     # The HTTP header sent by the TLS proxy to forward certain data
-    # about the client to the kes server.
+    # about the client to the KES server.
     header:
       # The HTTP header containing the URL-escaped and PEM-encoded
       # certificate of the kes client forwarded by the TLS proxy.
       cert: X-Tls-Client-Cert
 
-# Policy definitions. A policy must have an unique name
-# (i.e. [policy.<name>]) and specifies which APIs can
-# be accessed (i.e. paths = [ ... ]).
+# The (pre-defined) policy definitions. 
 #
-# Each server API has an unique path. For instance,
-# /v1/key/create/. A policy specifies which API paths
-# can be accessed. Therefore, a policy compares the
-# request URL path with all of its API path patterns.
-# If the URL path matches one pattern the policy allows
-# the request. 
-# A policy pattern is a glob pattern - e.g. /v1/key/create/abc*
+# A policy must have an unique name (e.g my-app) and specifies which
+# server APIs can be accessed. An API path pattern is a glob pattern
+# of the following form:
+#   <API-version>/<API>/<operation>/[<argument-0>/<argument-1>/...]>
+# 
+# Each KES server API has an unique path - e.g. /v1/key/create/<key-name>.
+# A client request is allowed if and only if the request URL path matches
+# one of the policy path patterns.
+# 
+# A policy has zero (by default) or more assigned identities. However,
+# an identity can never be assigned to more than one policy at the same
+# time. So, one policy has N assigned identities but one identity is
+# assigned to at most one policy.
 #
-# A policy has zero (by default) or more assigned identities.
-# When a key server receives a request it first extracts the
-# identity from the TLS certificate sent by the client when
-# establishing the connection. Based on this extracted identity
-# the server finds the policy assigned to the identity and then
-# checks whether the request is valid.
-
 # In general, each user/application should only have the minimal
 # set of policy permissions to accomplish whatever it needs to do.
 # Therefore, it is recommended to define policies based on workflows
 # and then assign them to the identities.
-#
-# The following policies are just dummy policies. Please adjust them to
-# your needs:
+
+# The following policy section shows some example policy definitions.
+# Please remove/adjust to your needs.
 policy:
-  prod-admin:
+  my-app:
     paths:
-    - /v1/policy/show/prod-*
-    - /v1/policy/list/prod-*
-    - /v1/identity/assign/prod-ops/*
-    - /v1/identity/assign/prod-app/*
-    - /v1/identity/list/*
-    - /v1/identity/forget/*
-    identities:
-    - 7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127
-  prod-app:
-    paths:
-    - /v1/key/generate/prod-*
-    - /v1/key/decrypt/prod-*
+    - /v1/key/create/my-app*
+    - /v1/key/generate/my-app*
+    - /v1/key/decrypt/my-app*
     identities:
     - df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258
     - c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731
-  prod-ops:
-    paths:
-    - /v1/key/create/prod-*
-    - /v1/key/delete/prod-*
+
+  my-app-ops:
+    - /v1/key/delete/my-app*
+    - /v1/policy/show/my-app
+    - /v1/identity/assign/my-app/*
     identities:
-    - c956add675567b7a2e5011c6efe6106bc2504a71ce406299a8dd7e292d1610da
+    - 7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127
 
 cache:
   # Cache expiry specifies when cache entries expire.
   expiry:
-    # Period after which all cache entries are discarded.
-    # It determines how often the kes server has to fetch
-    # a secret key from the key storage.
-    all: 5m0s
+    # Period after which any cache entries are discarded.
+    # It determines how often the KES server has to fetch
+    # a secret key from the KMS.
+    any: 5m0s
     # Period after which all unused cache entries are discarded.
     # It determines how often "not frequently" used secret keys
-    # must be fetched from the key storage.
+    # must be fetched from the KMS.
     unused: 20s
 
-# Log configuration. In general, the server distinguishes
-# between (operational) errors and audit events. Therefore,
-# there are separate error and audit logs.
+# The console logging configuration. In general, the KES server
+# distinguishes between (operational) errors and audit events.
+# By default, the KES server logs error events to STDERR but
+# does not log audit log events to STDOUT.
+#
+# The following log configuration only affects logging to console.
 log:
-  # Error log. The server can log error events to one or multiple
-  # log files. If one or multiple log files already exist, the
-  # server will truncate them. If no log file (path) is specified
-  # the server will log errors to stderr.
-  error:
-    file:
-    - ""  # Add one or more log file paths here.
+  # Enable/Disable logging error events to STDERR. Valid values
+  # are "on" or "off". If not set the default is "on". If no error
+  # events should be logged to STDERR it has to be set explicitly
+  # to: "off".  
+  error: on
   
-  # Audit log. The server can log audit events to one or multiple
-  # log files. Each audit event is a JSON object representing a
-  # request-response pair that contains the time, client identity, the
-  # API path, HTTP response status code etc.
+  # Enable/Disable logging audit events to STDOUT. Valid values
+  # are "on" and "off". If not set the default is "off".
+  # Logging audit events to STDOUT may flood your console since
+  # there will be one audit log event per request-response pair.
+  #
+  # For tracing/monitoring audit logs take a look at the 
+  # /v1/log/audit/trace API.
+  #
+  # Each audit event is a JSON object representing a request-response
+  # pair that contains the time, client identity, the API path, HTTP
+  # response status code etc.
   # {
   #   "time": "2006-01-02T15:04:05Z07:00",
   #   "request": {
@@ -126,72 +124,34 @@ log:
   #   }
   # }
   # The server will write such an audit log entry for every HTTP
-  # request-response pair - including invalid requests. If no audit
-  # file (path) is specified the server will not log audit events.
-  # In contrast to error log, audit logging has to be enabled explicitly.
-  audit:
-    file:  
-    - ""  # Add one or more log file paths here.
+  # request-response pair - including invalid requests.
+  audit: off
 
-# External KMS configuration. An external KMS holds a set
-# of cryptographic secret keys - which can be used to encrypt
-# resp. decrypt secrets.
-# The kes server will try to encrypt resp. decrypt secrets
-# before storing resp. fetching them form the key store.
-# If an external KMS is set the kes server will only accept
-# encrypted secrets and no more plaintext secrets.
-kms:
-  # The Vault KMS configuration. If set, the kes server will
-  # send all secrets to Vault to encrypt resp. decrypt them
-  # before / after storing resp. fetching them from the key
-  # store.
-  vault:
-    address: ""   # The Vault endpoint - e.g. https://127.0.0.1:8200
-    namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
-    key: ""       # The master key at Vault used to en/decrypt secrets - e.g. my-key
-    approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html:
-      id: ""      # Your AppRole Role ID
-      secret: ""  # Your AppRole Secret ID
-      retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
-    tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification  
-      key: ""     # Path to the TLS client private key for mTLS authentication to Vault
-      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vailt
-      ca: ""      # Path to one or multiple PEM Root CA certificates 
-    status:     # Vault status configuration. The kes server will periodically reach out to Vault to check its status. 
-      ping: 10s   # Duration until the server checks Vault's status again.
-  # The AWS key management system (AWS-KMS). If set, the kes
-  # server will send all secrets to AWS to encrypt resp. decrypt
-  # them before / after storing resp. fetching them from the
-  # key store.
-  aws:
-    address: "" # The AWS-KMS endpoint - e.g.: kms.us-east-2.amazonaws.com
-    region: ""  # The AWS region of the Secrets Manager - e.g.: "us-east-2"
-    key: ""     # The AWS-KMS key ID (CMK ID) used to encrypt new secrets.
-    # The AWS credentials to authenticate to AWS-KMS.
-    credentials:
-      access_key: ""    # Your AWS Access Key
-      secret_key: ""    # Your AWS Secret Key
-      session_token: "" # Your AWS session token (usually optional)
-
-# Key stores configuration. A key store holds secret keys.
-# A server can only be configured to use one key store at
-# the same time.
-# If no store is explicitly specified the server will use
-# a non-persistent in-memory key store.
-keystore:
-  # A file system key store. The secret keys will be stored
-  # as files in a directory. The path must be a path to a
-  # directory. If it doesn't exist the server will create
-  # a new one.
+# The keys section specifies which KMS - or in general key store - is 
+# used to store and fetch encryption keys.
+# A KES server can only use one KMS / key store at the same time.
+# If no store is explicitly specified the server will use store
+# keys in-memory. In this case all keys are lost when the KES server
+# restarts.
+keys:
+  # Configuration for storing keys on the filesytem.
+  # The path must be path to a directory. If it doesn't
+  # exist then the KES server will create the directory.
+  #
+  # The main purpose of the fs configuration is testing
+  # and development. It should not be used for production.
   fs:
-    path: "" # Path to your key storee
-  # A Vault K/V key store. The server will store secret keys
-  # at Vault's key-value backend. For more information see:
+    path: "" # Path to directory. Keys will be stored as files.
+  
+  # Hashicorp Vault configuration. The KES server will store/fetch
+  # secret keys at/from Vault's key-value backend.
+  #
+  # For more information take a look at:
   # https://www.vaultproject.io/api/secret/kv/kv-v1.html
   vault:
-    address: ""   # The Vault endpoint - e.g. https://127.0.0.1:8200
-    name: ""      # An optional K/V prefix. The server will store keys under /kv/name/... 
+    endpoint: ""  # The Vault endpoint - e.g. https://127.0.0.1:8200
     namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+    prefix: ""    # An optional K/V prefix. The server will store keys under this prefix. 
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
       id: ""      # Your AppRole Role ID
       secret: ""  # Your AppRole Secret ID
@@ -207,34 +167,10 @@ keystore:
     # secret keys at the AWS SecretsManager encrypted with
     # AWS-KMS. See: https://aws.amazon.com/secrets-manager
     secrets_manager:
-      address: ""    # The AWS SecretsManager endpoint - e.g.: secretsmanager.us-east-2.amazonaws.com
-      region: ""     # The AWS region of the Secrets Manager - e.g.: "us-east-2"
-      kms_key_id: "" # The AWS-KMS key ID used to en/decrypt secrets at the Secrets Manager. By default (if not set) the default AWS-KMS key will be used.
-      # The AWS credentials to authenticate for accessing
-      # secrets at AWS Secrets Manager.
-      credentials:
-        access_key: ""    # Your AWS Access Key
-        secret_key: ""    # Your AWS Secret Key
-        session_token: "" # Your AWS session token (usually optional)
-  etcd:
-    # A etcd (v3) key store. The server will store secret keys
-    # as key-value entries at a etcd cluster.
-    v3:
-      address: []    # The etcd endpoint(s) - e.g. [ "https://127.0.0.1:2379" ]
-      # The etcd authentication credentials.
-      credentials:
-        username: "" # Your etcd username
-        password: "" # Your etcd password
-      # The etcd TLS configuration.
-      # The server will use the private key and certificate
-      # to authenticate to etcd via mTLS and uses the root
-      # CAs found at the cap path to verify the etcd cluster
-      # certificate.
-      #
-      # If both, a client certificate and a username/password,
-      # is specified then the username takes precedence over
-      # the certificate's common name.
-      tls:
-        key: ""  # Path to the TLS client private key for mTLS authentication
-        cert: "" # Path to the TLS client certificate for mTLS authentication
-        ca: ""   # Path to one or multiple PEM root CA certificates
+      endpoint: ""   # The AWS SecretsManager endpoint      - e.g.: secretsmanager.us-east-2.amazonaws.com
+      region: ""     # The AWS region of the SecretsManager - e.g.: us-east-2
+      kmskey: ""     # The AWS-KMS key ID used to en/decrypt secrets at the SecretsManager. By default (if not set) the default AWS-KMS key will be used.
+      credentials:   # The AWS credentials for accessing secrets at the AWS SecretsManager.
+        access_key: "" # Your AWS Access Key
+        secret_key: "" # Your AWS Secret Key
+        token: ""      # Your AWS session token (usually optional)
