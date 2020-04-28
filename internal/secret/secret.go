@@ -28,28 +28,20 @@ import (
 type Secret [32]byte
 
 func ParseSecret(s string) (Secret, error) {
-	const (
-		prefix = `{"bytes":"`
-		suffix = `"}`
-	)
-
-	if !strings.HasPrefix(s, prefix) || !strings.HasSuffix(s, suffix) {
-		return Secret{}, errors.New("secret is malformed")
+	type SecretJSON struct {
+		Bytes []byte `json:"bytes"`
 	}
 
-	s = strings.TrimPrefix(s, prefix)
-	s = strings.TrimSuffix(s, suffix)
-
-	bytes, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
+	var secretJSON SecretJSON
+	if err := json.NewDecoder(strings.NewReader(s)).Decode(&secretJSON); err != nil {
 		return Secret{}, errors.New("secret is malformed")
 	}
-	if len(bytes) != 32 {
+	if len(secretJSON.Bytes) != 32 {
 		return Secret{}, errors.New("secret is malformed")
 	}
 
 	var secret Secret
-	copy(secret[:], bytes)
+	copy(secret[:], secretJSON.Bytes)
 	return secret, nil
 }
 

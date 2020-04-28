@@ -11,13 +11,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	stdlog "log"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -45,18 +45,18 @@ const serverCmdUsage = `usage: %s [options]
   --mlock              Lock all allocated memory pages to prevent the OS from
                        swapping them to the disk and eventually leak secrets.
 
-  --tls-key            Path to the TLS private key. It takes precedence over
+  --key                Path to the TLS private key. It takes precedence over
                        the config file. 
-  --tls-cert           Path to the TLS certificate. It takes precedence over
+  --cert               Path to the TLS certificate. It takes precedence over
                        the config file.
 
-  --mtls-auth          Controls how the server handles client certificates.
+  --auth               Controls how the server handles mTLS authentication (default: on)
+                       By default, the server requires a client certificate
+                       and verifies that certificate has been issued by a
+                       trusted CA.
                        Valid options are:
-                          Require and verify      : --mtls-auth=verify (default)
-                          Require but don't verify: --mtls-auth=ignore
-                       By default, the server will verify that the certificate
-                       presented by the client during the TLS handshake has been
-                       signed by a trusted CA.
+                          Require and verify      : --auth=on (default)
+                          Require but don't verify: --auth=off
 `
 
 func server(args []string) error {
@@ -79,9 +79,9 @@ func server(args []string) error {
 	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
 	cli.StringVar(&rootIdentity, "root", "", "The identity of root - who can perform any operation")
 	cli.BoolVar(&mlock, "mlock", false, "Lock all allocated memory pages")
-	cli.StringVar(&tlsKeyPath, "tls-key", "", "Path to the TLS private key")
-	cli.StringVar(&tlsCertPath, "tls-cert", "", "Path to the TLS certificate")
-	cli.StringVar(&mtlsAuth, "mtls-auth", "verify", "Controls how the server handles client certificates.")
+	cli.StringVar(&tlsKeyPath, "key", "", "Path to the TLS private key")
+	cli.StringVar(&tlsCertPath, "cert", "", "Path to the TLS certificate")
+	cli.StringVar(&mtlsAuth, "auth", "on", "Controls how the server handles mTLS authentication")
 	cli.Parse(args[1:])
 	if cli.NArg() != 0 {
 		cli.Usage()
@@ -115,11 +115,11 @@ func server(args []string) error {
 	}
 
 	switch {
-	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Vault.Addr != "":
+	case config.Keys.Fs.Path != "" && config.Keys.Vault.Endpoint != "":
 		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
-	case config.KeyStore.Fs.Dir != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
+	case config.Keys.Fs.Path != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
 		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager key store are specified at the same time")
-	case config.KeyStore.Vault.Addr != "" && config.KeyStore.Aws.SecretsManager.Addr != "":
+	case config.Keys.Vault.Endpoint != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
 		return errors.New("Ambiguous configuration: Vault and AWS SecretsManager key store are specified at the same time")
 	}
 
@@ -132,95 +132,79 @@ func server(args []string) error {
 		}
 	}
 
-	errorLog := xlog.NewLogger(os.Stderr, "", stdlog.LstdFlags)
-	if len(config.Log.Error.Files) > 0 {
-		var files []io.Writer
-		for _, path := range config.Log.Error.Files {
-			if path == "" { // ignore empty entries in the config file
-				continue
-			}
-
-			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
-			if err != nil {
-				return fmt.Errorf("Failed to open error log file '%s': %v", path, err)
-			}
-			defer file.Close()
-			files = append(files, file)
+	var errorLog *xlog.SystemLog
+	switch strings.ToLower(config.Log.Error) {
+	case "", "on": // If not set, error logging to STDERR is enabled
+		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
+			errorLog = xlog.NewLogger(os.Stderr, "", stdlog.LstdFlags)
+		} else {
+			errorLog = xlog.NewLogger(xlog.NewJSONWriter(os.Stderr), "", stdlog.LstdFlags)
 		}
-		if len(files) > 0 { // only create non-default error log if we have files
-			errorLog.SetOutput(files...)
-		}
+	case "off":
+		errorLog = xlog.NewLogger(ioutil.Discard, "", stdlog.LstdFlags)
+	default:
+		return fmt.Errorf("Error log configuration '%s' is invalid", config.Log.Error)
 	}
 
-	auditLog := xlog.NewLogger(ioutil.Discard, "", 0)
-	if len(config.Log.Audit.Files) > 0 {
-		var files []io.Writer
-		for _, path := range config.Log.Audit.Files {
-			if path == "" { // ignore empty entries in the config file
-				continue
-			}
-
-			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-			if err != nil {
-				return fmt.Errorf("Failed to open audit log file '%s': %v", path, err)
-			}
-			defer file.Close()
-			files = append(files, file)
-		}
-		if len(files) > 0 { // only create non-default audit log if we have files
-			auditLog.SetOutput(files...)
-		}
+	var auditLog *xlog.SystemLog
+	switch strings.ToLower(config.Log.Audit) {
+	case "on":
+		auditLog = xlog.NewLogger(os.Stdout, "", 0)
+	case "", "off": // If not set, audit logging to STDOUT is disabled
+		auditLog = xlog.NewLogger(ioutil.Discard, "", 0)
+	default:
+		return fmt.Errorf("Audit log configuration '%s' is invalid", config.Log.Audit)
 	}
 
 	var store = &secret.Store{}
 	switch {
-	case config.KeyStore.Fs.Dir != "":
-		f, err := os.Stat(config.KeyStore.Fs.Dir)
+	case config.Keys.Fs.Path != "":
+		f, err := os.Stat(config.Keys.Fs.Path)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("Failed to open %s: %v", config.KeyStore.Fs.Dir, err)
+			return fmt.Errorf("Failed to open %s: %v", config.Keys.Fs.Path, err)
 		}
 		if err == nil && !f.IsDir() {
-			return fmt.Errorf("%s is not a directory", config.KeyStore.Fs.Dir)
+			return fmt.Errorf("%s is not a directory", config.Keys.Fs.Path)
 		}
 		if os.IsNotExist(err) {
-			if err = os.MkdirAll(config.KeyStore.Fs.Dir, 0700); err != nil {
-				return fmt.Errorf("Failed to create directory %s: %v", config.KeyStore.Fs.Dir, err)
+			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {
+				return fmt.Errorf("Failed to create directory %s: %v", config.Keys.Fs.Path, err)
 			}
 		}
 		store.Remote = &fs.Store{
-			Dir:      config.KeyStore.Fs.Dir,
+			Dir:      config.Keys.Fs.Path,
 			ErrorLog: errorLog.Log(),
 		}
-	case config.KeyStore.Vault.Addr != "":
+	case config.Keys.Vault.Endpoint != "":
 		vaultStore := &vault.Store{
-			Addr:      config.KeyStore.Vault.Addr,
-			Location:  config.KeyStore.Vault.Name,
-			Namespace: config.KeyStore.Vault.Namespace,
+			Addr:      config.Keys.Vault.Endpoint,
+			Location:  config.Keys.Vault.Prefix,
+			Namespace: config.Keys.Vault.Namespace,
 			AppRole: vault.AppRole{
-				ID:     config.KeyStore.Vault.AppRole.ID,
-				Secret: config.KeyStore.Vault.AppRole.Secret,
-				Retry:  config.KeyStore.Vault.AppRole.Retry,
+				ID:     config.Keys.Vault.AppRole.ID,
+				Secret: config.Keys.Vault.AppRole.Secret,
+				Retry:  config.Keys.Vault.AppRole.Retry,
 			},
-			StatusPingAfter: config.KeyStore.Vault.Status.Ping,
+			StatusPingAfter: config.Keys.Vault.Status.Ping,
 			ErrorLog:        errorLog.Log(),
-			ClientKeyPath:   config.KeyStore.Vault.TLS.KeyPath,
-			ClientCertPath:  config.KeyStore.Vault.TLS.CertPath,
-			CAPath:          config.KeyStore.Vault.TLS.CAPath,
+			ClientKeyPath:   config.Keys.Vault.TLS.KeyPath,
+			ClientCertPath:  config.Keys.Vault.TLS.CertPath,
+			CAPath:          config.Keys.Vault.TLS.CAPath,
 		}
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
 			return fmt.Errorf("Failed to connect to Vault: %v", err)
 		}
 		store.Remote = vaultStore
-	case config.KeyStore.Aws.SecretsManager.Addr != "":
+	case config.Keys.Aws.SecretsManager.Endpoint != "":
 		awsStore := &aws.SecretsManager{
-			Addr:     config.KeyStore.Aws.SecretsManager.Addr,
-			Region:   config.KeyStore.Aws.SecretsManager.Region,
-			KMSKeyID: config.KeyStore.Aws.SecretsManager.KmsKeyID,
+			Addr:     config.Keys.Aws.SecretsManager.Endpoint,
+			Region:   config.Keys.Aws.SecretsManager.Region,
+			KMSKeyID: config.Keys.Aws.SecretsManager.KmsKey,
 			ErrorLog: errorLog.Log(),
 			Login: aws.Credentials{
-				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey,
-				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey,
-				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken,
+				AccessKey:    config.Keys.Aws.SecretsManager.Login.AccessKey,
+				SecretKey:    config.Keys.Aws.SecretsManager.Login.SecretKey,
+				SessionToken: config.Keys.Aws.SecretsManager.Login.SessionToken,
 			},
 		}
 		if err := awsStore.Authenticate(); err != nil {
@@ -230,7 +214,7 @@ func server(args []string) error {
 	default:
 		store.Remote = &mem.Store{}
 	}
-	store.StartGC(context.Background(), config.Cache.Expiry.All, config.Cache.Expiry.Unused)
+	store.StartGC(context.Background(), config.Cache.Expiry.Any, config.Cache.Expiry.Unused)
 
 	var proxy *auth.TLSProxy
 	if len(config.TLS.Proxy.Identities) != 0 {
@@ -310,13 +294,13 @@ func server(args []string) error {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 0 * time.Second, // explicitly set no write timeout - see timeout handler.
 	}
-	switch mtlsAuth {
-	case "verify":
+	switch strings.ToLower(mtlsAuth) {
+	case "on":
 		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
-	case "ignore":
+	case "off":
 		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
 	default:
-		return fmt.Errorf("Invalid option for --mtls-auth: %s", mtlsAuth)
+		return fmt.Errorf("Invalid option for --auth: %s", mtlsAuth)
 	}
 
 	sigCh := make(chan os.Signal)
