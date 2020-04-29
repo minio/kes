@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-
-	"github.com/pelletier/go-toml"
 )
 
 type Policy struct {
@@ -58,32 +56,6 @@ func (p *Policy) UnmarshalJSON(b []byte) error {
 		}
 	}
 	p.patterns = policyJSON.Patterns
-	return nil
-}
-
-func (p Policy) MarshalTOML() ([]byte, error) {
-	type PolicyTOML struct {
-		Patterns []string `toml:"paths"`
-	}
-	return toml.Marshal(PolicyTOML{
-		Patterns: p.patterns,
-	})
-}
-
-func (p *Policy) UnmarshalTOML(b []byte) error {
-	var policyTOML struct {
-		Patterns []string `toml:"paths"`
-	}
-
-	if err := toml.Unmarshal(b, &policyTOML); err != nil {
-		return err
-	}
-	for _, pattern := range policyTOML.Patterns {
-		if _, err := path.Match(pattern, pattern); err != nil {
-			return err
-		}
-	}
-	p.patterns = policyTOML.Patterns
 	return nil
 }
 
