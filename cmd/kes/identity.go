@@ -15,10 +15,9 @@ import (
 
 const identityCmdUsage = `usage: %s <command>
   
-  assign               Assign a policy to an identity such that the policy
-                       applies to the identity.
-  list                 List all identities present at the key server.
-  forget               Forget an identity such that no policy applies to it.
+  assign               Assign an identity to a policy.
+  list                 List identities at the KES server.
+  forget               Forget an identity.
 
   -h, --help           Show list of command-line options
 `

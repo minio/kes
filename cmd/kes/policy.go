@@ -15,13 +15,13 @@ import (
 	"github.com/minio/kes"
 )
 
-const policyCmdUsage = `Manage named key policies.
+const policyCmdUsage = `Manage named KES policies.
 
 usage: %s <command>
   
-  add                  Add a named policy to the policy set.
+  add                  Add a new named policy.
   show                 Download and print a named policy.
-  list                 List all named policies.
+  list                 List named policies.
   delete               Delete a named policy.
 
   -h, --help           Show list of command-line options
@@ -54,11 +54,10 @@ func policy(args []string) error {
 	}
 }
 
-const addPolicyCmdUsage = `Adds a named policy to the policy set of the key server.
+const addPolicyCmdUsage = `Adds a named policy to the policy set of the KES server.
 
-It reads a TOML or JSON encoded policy from the specified file
-and adds it to the policy set of the key server. The policy will
-be available under the specified policy name.
+It reads a JSON encoded policy from the specified file and
+adds it to the policy set of the KES server.
 
 usage: %s <policy> <file>
   
@@ -89,29 +88,25 @@ func addPolicy(args []string) error {
 	if err != nil {
 		return fmt.Errorf("Cannot read policy file '%s': %v", args[1], err)
 	}
-	var policy kes.Policy
-	if err = policy.UnmarshalTOML(data); err != nil {
-		if err = policy.UnmarshalJSON(data); err != nil {
-			return fmt.Errorf("Policy file contains neither valid TOML nor valid JSON")
-		}
-	}
 
-	if err := client.WritePolicy(args[0], &policy); err != nil {
+	var policy kes.Policy
+	if err = policy.UnmarshalJSON(data); err != nil {
+		return fmt.Errorf("Policy file is invalid JSON: %v", err)
+	}
+	if err = client.WritePolicy(args[0], &policy); err != nil {
 		return fmt.Errorf("Failed to add policy '%s': %v", args[0], err)
 	}
 	return nil
 }
 
-const showPolicyCmdUsage = `Downloads and prints key policies.
+const showPolicyCmdUsage = `Downloads and prints KES policies.
 
 It prints the policy definition of a named policy to STDOUT.
 By default, the policy definition is printed in a human-readable
-format to a terminal or as TOML to a UNIX pipe / file.
+format to a terminal or as JSON to a UNIX pipe / file.
 
 usage: %s <policy>
-  
-  --json               Encode policy as JSON instead of TOML. 
- 
+   
   -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
@@ -123,9 +118,7 @@ func showPolicy(args []string) error {
 		fmt.Fprintf(cli.Output(), showPolicyCmdUsage, cli.Name())
 	}
 
-	var formatJSON bool
 	var insecureSkipVerify bool
-	cli.BoolVar(&formatJSON, "json", false, "")
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 
@@ -151,14 +144,10 @@ func showPolicy(args []string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to fetch policy '%s': %v", args[0], err)
 	}
-	switch {
-	case isTerm(os.Stdout) && !formatJSON:
+	if isTerm(os.Stdout) {
 		fmt.Println(policy.String())
-	case formatJSON:
+	} else {
 		output, _ := policy.MarshalJSON()
-		os.Stdout.Write(output)
-	default:
-		output, _ := policy.MarshalTOML()
 		os.Stdout.Write(output)
 	}
 	return nil
