@@ -20,26 +20,6 @@ import (
 	"github.com/secure-io/sio-go/sioutil"
 )
 
-// EnforceHTTP2 returns a HTTP handler that verifies that
-// the request has been made using at least HTTP/2.0. If
-// it hasn't EnforceHTTP2 returns an error to the client
-// saying that the currently used HTTP version is not
-// supported.
-func EnforceHTTP2(f http.HandlerFunc) http.HandlerFunc {
-	var ErrProtocolNotSupported = kes.NewError(
-		http.StatusHTTPVersionNotSupported,
-		http.StatusText(http.StatusHTTPVersionNotSupported),
-	)
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !r.ProtoAtLeast(2, 0) { // We require at least HTTP/2.0
-			Error(w, ErrProtocolNotSupported)
-			return
-		}
-		f(w, r)
-	}
-}
-
 func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	var ErrMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
