@@ -166,11 +166,11 @@ keys:
     # The AWS SecretsManager key store. The server will store
     # secret keys at the AWS SecretsManager encrypted with
     # AWS-KMS. See: https://aws.amazon.com/secrets-manager
-    secrets_manager:
+    secretsmanager:
       endpoint: ""   # The AWS SecretsManager endpoint      - e.g.: secretsmanager.us-east-2.amazonaws.com
       region: ""     # The AWS region of the SecretsManager - e.g.: us-east-2
       kmskey: ""     # The AWS-KMS key ID used to en/decrypt secrets at the SecretsManager. By default (if not set) the default AWS-KMS key will be used.
       credentials:   # The AWS credentials for accessing secrets at the AWS SecretsManager.
-        access_key: "" # Your AWS Access Key
-        secret_key: "" # Your AWS Secret Key
+        accesskey: ""  # Your AWS Access Key
+        secretkey: ""  # Your AWS Secret Key
         token: ""      # Your AWS session token (usually optional)
