@@ -190,7 +190,8 @@ func (d *DEK) UnmarshalBinary(data []byte) error {
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version() (string, error) {
-	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/version", c.Endpoint))
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/version", c.Endpoint))
 	if err != nil {
 		return "", err
 	}
@@ -216,12 +217,8 @@ func (c *Client) Version() (string, error) {
 // application does not have the cryptographic key at
 // any point in time.
 func (c *Client) CreateKey(key string) error {
-	url := fmt.Sprintf("%s/v1/key/create/%s", c.Endpoint, key)
-	req, err := http.NewRequest(http.MethodPost, url, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Post(fmt.Sprintf("%s/v1/key/create/%s", c.Endpoint, key), "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -247,8 +244,9 @@ func (c *Client) ImportKey(name string, key []byte) error {
 		return err
 	}
 
+	client := retry(c.HTTPClient)
 	url := fmt.Sprintf("%s/v1/key/import/%s", c.Endpoint, name)
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -263,11 +261,12 @@ func (c *Client) ImportKey(name string, key []byte) error {
 // anymore.
 func (c *Client) DeleteKey(key string) error {
 	url := fmt.Sprintf("%s/v1/key/delete/%s", c.Endpoint, key)
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	req, err := http.NewRequest(http.MethodDelete, url, retryBody(nil))
 	if err != nil {
 		return err
 	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -310,8 +309,9 @@ func (c *Client) GenerateKey(key string, context []byte) (DEK, error) {
 		return DEK{}, err
 	}
 
+	client := retry(c.HTTPClient)
 	url := fmt.Sprintf("%s/v1/key/generate/%s", c.Endpoint, key)
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return DEK{}, err
 	}
@@ -351,8 +351,9 @@ func (c *Client) Decrypt(key string, ciphertext, context []byte) ([]byte, error)
 		return nil, err
 	}
 
+	client := retry(c.HTTPClient)
 	url := fmt.Sprintf("%s/v1/key/decrypt/%s", c.Endpoint, key)
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -377,8 +378,9 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 	if err != nil {
 		return err
 	}
+	client := retry(c.HTTPClient)
 	url := fmt.Sprintf("%s/v1/policy/write/%s", c.Endpoint, name)
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewReader(content))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(content))
 	if err != nil {
 		return err
 	}
@@ -389,7 +391,8 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 }
 
 func (c *Client) ReadPolicy(name string) (*Policy, error) {
-	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/policy/read/%s", c.Endpoint, name))
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/v1/policy/read/%s", c.Endpoint, name))
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +412,8 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 }
 
 func (c *Client) ListPolicies(pattern string) ([]string, error) {
-	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.Endpoint, url.PathEscape(pattern)))
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.Endpoint, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
@@ -427,11 +431,13 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 }
 
 func (c *Client) DeletePolicy(name string) error {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/policy/delete/%s", c.Endpoint, name), nil)
+	url := fmt.Sprintf("%s/v1/policy/delete/%s", c.Endpoint, name)
+	req, err := http.NewRequest(http.MethodDelete, url, retryBody(nil))
 	if err != nil {
 		return err
 	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -442,8 +448,9 @@ func (c *Client) DeletePolicy(name string) error {
 }
 
 func (c *Client) AssignIdentity(policy string, id Identity) error {
+	client := retry(c.HTTPClient)
 	url := fmt.Sprintf("%s/v1/identity/assign/%s/%s", c.Endpoint, policy, id.String())
-	resp, err := c.HTTPClient.Post(url, "application/json", nil)
+	resp, err := client.Post(url, "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -454,7 +461,8 @@ func (c *Client) AssignIdentity(policy string, id Identity) error {
 }
 
 func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
-	resp, err := c.HTTPClient.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.Endpoint, url.PathEscape(pattern)))
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/v1/identity/list/%s", c.Endpoint, url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
@@ -471,11 +479,13 @@ func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
 }
 
 func (c *Client) ForgetIdentity(id Identity) error {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/identity/forget/%s", c.Endpoint, id.String()), nil)
+	url := fmt.Sprintf("%s/v1/identity/forget/%s", c.Endpoint, id.String())
+	req, err := http.NewRequest(http.MethodDelete, url, retryBody(nil))
 	if err != nil {
 		return err
 	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -492,11 +502,8 @@ func (c *Client) ForgetIdentity(id Identity) error {
 // have sufficient permissions to subscribe to the
 // audit log.
 func (c *Client) TraceAuditLog() (*AuditStream, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/audit/trace", c.Endpoint), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/v1/log/audit/trace", c.Endpoint))
 	if err != nil {
 		return nil, err
 	}
@@ -513,11 +520,8 @@ func (c *Client) TraceAuditLog() (*AuditStream, error) {
 // have sufficient permissions to subscribe to the
 // error log.
 func (c *Client) TraceErrorLog() (*ErrorStream, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/log/error/trace", c.Endpoint), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.HTTPClient.Do(req)
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(fmt.Sprintf("%s/v1/log/error/trace", c.Endpoint))
 	if err != nil {
 		return nil, err
 	}
