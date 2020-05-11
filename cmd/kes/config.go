@@ -6,6 +6,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/minio/kes"
@@ -101,5 +102,39 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		file.Close()
 		return config, err
 	}
+
+	// Replace identities that refer to env. variables with the
+	// corresponding env. variable values.
+	// An identity refers to an env. variable if it has the form:
+	//  ${<env-var-name>}
+	// We then replace the identity with the env. variable value.
+	// Currently only identities can be customized via env. variables.
+	if refersToEnvVar(config.Root.String()) {
+		config.Root = kes.Identity(os.ExpandEnv(config.Root.String()))
+	}
+	for i, identity := range config.TLS.Proxy.Identities { // The TLS proxy identities section
+		if refersToEnvVar(identity.String()) {
+			config.TLS.Proxy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
+		}
+	}
+	for _, policy := range config.Policies { // The policy section
+		for i, identity := range policy.Identities {
+			if refersToEnvVar(identity.String()) {
+				policy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
+			}
+		}
+	}
 	return config, file.Close()
+}
+
+// refersToEnvVar returns true if s has the following form:
+//  ${<env-var-name}
+//
+// In this case s should be replaced by the referenced
+// env. variable.
+//
+// refersToEnvVar ignores any leading or trailing whitespaces.
+func refersToEnvVar(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}")
 }
