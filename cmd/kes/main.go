@@ -104,13 +104,13 @@ func isFlagPresent(set *flag.FlagSet, name string) bool {
 }
 
 func newClient(insecureSkipVerify bool) (*kes.Client, error) {
-	certPath := os.Getenv("KES_CLIENT_TLS_CERT_FILE")
-	keyPath := os.Getenv("KES_CLIENT_TLS_KEY_FILE")
+	certPath := os.Getenv("KES_CLIENT_CERT")
+	keyPath := os.Getenv("KES_CLIENT_KEY")
 	if certPath == "" {
-		return nil, errors.New("No client TLS certificate: env KES_CLIENT_TLS_CERT_FILE is not set or empty")
+		return nil, errors.New("No client TLS certificate: env KES_CLIENT_CERT is not set or empty")
 	}
 	if keyPath == "" {
-		return nil, errors.New("No client TLS private key: env KES_CLIENT_TLS_KEY_FILE is not set or empty")
+		return nil, errors.New("No client TLS private key: env KES_CLIENT_KEY is not set or empty")
 	}
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
