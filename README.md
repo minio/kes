@@ -38,10 +38,10 @@ GO111MODULE=on go get github.com/minio/kes/cmd/kes
 ## Getting Started
 
 We run a public KES server instance at `https://play.min.io:7373` for you to experiment with.
-Just follow the following steps to get a first impression of how easy it is to use KES as a client.
+Just follow the steps below to get a first impression of how easy it is to use KES as a client.
 All you need is `cURL`.
 
-If you instead want to run a KES server locally as your first steps then checout our
+If you instead want to run a KES server locally as your first steps then checkout our
 [Getting Started Guide](https://github.com/minio/kes/wiki/Getting-Started).
 
 #### 1. Fetch the root identity
