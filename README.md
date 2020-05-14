@@ -36,7 +36,68 @@ GO111MODULE=on go get github.com/minio/kes/cmd/kes
 > Minimum version required is go1.13
 
 ## Getting Started
-For your first steps checkout our [Getting Started](https://github.com/minio/kes/wiki/Getting-Started) guide.
+
+We run a public KES server instance at `https://play.min.io:7373` for you to experiment with.
+Just follow the following steps to get a first impression of how easy it is to use KES as a client.
+All you need is `cURL`.
+
+If you instead want to run a KES server locally as your first steps then checout our
+[Getting Started Guide](https://github.com/minio/kes/wiki/Getting-Started).
+
+#### 1. Fetch the root identity
+
+As an inital step, you will need to download the "private" key and certificate
+to authenticate to the KES server as the root identity.
+```sh
+curl -sSL --tlsv1.2 \
+   -O 'https://raw.githubusercontent.com/minio/kes/master/root.key' \
+   -O 'https://raw.githubusercontent.com/minio/kes/master/root.cert'
+```
+
+#### 2. Create a new master key
+
+Then, you can create a new master key named e.g. `my-key`.
+```sh
+curl -sSL --tlsv1.3 --http2 \
+    --key root.key \
+    --cert root.cert \
+    -X POST 'https://play.min.io:7373/v1/key/create/my-key'
+```
+> Note that creating a new key will fail with `key does already exist` if it already exist.
+
+#### 3. Generate a new data encryption key (DEK)
+
+Now, you can use that master key to derive a new data encryption key.
+```sh
+curl -sSL --tlsv1.3 --http2 \
+    --key root.key \
+    --cert root.cert \
+    --data '{}' \
+    -X POST 'https://play.min.io:7373/v1/key/generate/my-key'
+```
+You will get a plaintext and a ciphertext data key. The ciphertext data
+key is the encrypted version of the plaintext key. Your application would
+use the plaintext key to e.g. encrypt some application data but only remember
+the ciphertext key version.
+
+#### 4. Use the KES CLI client
+
+For more sophisticated tasks, like managing policies or audit log tracing, you
+may want to use the KES CLI. Therefore, point your CLI to our KES instance:
+```
+export KES_SERVER=https://play.min.io:7373
+export KES_CLIENT_KEY=root.key
+export KES_CLIENT_CERT=root.cert
+```
+
+Then run a KES CLI command. For example:
+```
+kes policy list
+```
+
+***
+
+If you want to learn more about KES checkout our [documentation](https://github.com/minio/kes/wiki).
 
 ## License
 Use of `KES` is governed by the AGPLv3 license that can be found in the [LICENSE](./LICENSE) file.
