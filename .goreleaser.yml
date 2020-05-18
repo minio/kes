@@ -1,0 +1,77 @@
+project_name: kes
+
+release:
+   name_template: "Version {{.Version}}"
+
+   github:
+    owner: minio
+    name: kes
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  -
+    dir: ./cmd/kes
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    ignore:
+      - goos: darwin
+        goarch: arm64
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm 
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X github.com/minio/kes/cmd/kes/main.version={{.Version}}"
+
+archives:
+  -
+    name_template: "{{ .Os }}-{{ .Arch }}"
+    format: zip
+    replacements:
+      arm: arm
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+ 
+signs:
+  -
+    signature: "${artifact}.minisig"
+    cmd: "sh"
+    args:
+      - '-c'
+      - 'echo "$MINISIGN_PASSWORD" | rsign sign ${artifact} -P RWRcOzQ19UrKLp4rkfssIwwWiWagluGJ8fpUBh/BeH+bZV3keFcdIJTF'
+    artifacts: all
+
+snapshot:
+  name_template: v0.0.0@{{.ShortCommit}}
+
+changelog:
+  sort: asc
+
+dockers:
+  -
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.release
+    image_templates:
+      - minio/kes:{{ .Tag }}
+      - minio/kes:latest
