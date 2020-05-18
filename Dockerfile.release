@@ -1,0 +1,6 @@
+FROM scratch
+MAINTAINER MinIO Development "dev@min.io"
+
+COPY kes /kes
+EXPOSE 7373
+ENTRYPOINT ["/kes"]
