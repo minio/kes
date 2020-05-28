@@ -332,6 +332,49 @@ func (c *Client) GenerateKey(key string, context []byte) (DEK, error) {
 	return DEK(response), nil
 }
 
+// Encrypt encrypts and authentictes the given plaintext
+// with the specified key and returns the corresponding
+// ciphertext on success.
+//
+// An optional context value gets authenticated but is not
+// encrypted. Therefore, the same context value must be provided
+// for decryption. Clients should remember or be able to
+// re-generate the context value.
+func (c *Client) Encrypt(key string, plaintext, context []byte) ([]byte, error) {
+	type Request struct {
+		Plaintext []byte `json:"plaintext"`
+		Context   []byte `json:"context,omitempty"` // A context is optional
+	}
+	body, err := json.Marshal(Request{
+		Plaintext: plaintext,
+		Context:   context,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	client := retry(c.HTTPClient)
+	url := fmt.Sprintf("%s/v1/key/encrypt/%s", c.Endpoint, key)
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	defer resp.Body.Close()
+
+	type Response struct {
+		Ciphertext []byte `json:"ciphertext"`
+	}
+	const limit = 1 << 20
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return response.Ciphertext, nil
+}
+
 // Decrypt tries to decrypt the given ciphertext with the
 // specified key and returns plaintext on success.
 //
@@ -365,7 +408,7 @@ func (c *Client) Decrypt(key string, ciphertext, context []byte) ([]byte, error)
 	type Response struct {
 		Plaintext []byte `json:"plaintext"`
 	}
-	const limit = 32 * 1024
+	const limit = 1 << 20
 	var response Response
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, err
@@ -401,7 +444,7 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 	}
 	defer resp.Body.Close()
 
-	const limit = 32 * 1024 * 1024
+	const limit = 32 * 1024 * 1024 // A policy might be large
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, limit))
 	decoder.DisallowUnknownFields()
 	var policy Policy
@@ -422,7 +465,7 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
-	const limit = 64 * 1024 * 1024
+	const limit = 64 * 1024 * 1024 // There might be many policies
 	var policies []string
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&policies); err != nil {
 		return nil, err
@@ -470,7 +513,7 @@ func (c *Client) ListIdentities(pattern string) (map[Identity]string, error) {
 		return nil, parseErrorResponse(resp)
 	}
 
-	const limit = 64 * 1024 * 1024
+	const limit = 64 * 1024 * 1024 // There might be many identities
 	response := map[Identity]string{}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, err

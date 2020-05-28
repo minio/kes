@@ -40,6 +40,12 @@ func EnforceHTTP2(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RequireMethod returns an http.HandlerFunc that checks whether
+// the method of a client request matches the expected method before
+// calling f.
+//
+// If the client request method does not match the given method
+// it returns an error and http.StatusMethodNotAllowed to the client.
 func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	var ErrMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
@@ -76,6 +82,11 @@ func ValidatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// LimitRequestBody returns an http.HandlerFunc that limits the
+// body of incoming requests to n bytes before calling f.
+//
+// It should be used to limit the amount of data a client can send
+// to prevent flooding/DoS attacks.
 func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, n)
@@ -83,6 +94,12 @@ func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// EnforcePolicies returns an http.Handler that verifies the
+// request using policy/role based identity authentication before
+// calling f.
+//
+// If the request is not authorized it will return an error to the
+// client and does not call f.
 func EnforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := roles.Verify(r); err != nil {
@@ -215,20 +232,31 @@ func HandleDeleteKey(store *secret.Store) http.HandlerFunc {
 	}
 }
 
+// HandleGenerateKey returns an http.HandlerFunc that generates
+// a data encryption key (DEK) at random and returns the plaintext
+// and ciphertext version of the DEK to the client. The DEK ciphertext
+// is the DEK plaintext encrypted with the secret key from the store.
+//
+// HandleGenerateKey behaves as HandleEncryptKey where the plaintext is
+// a randomly generated key.
+//
+// If the client provides an optional context value the
+// returned http.HandlerFunc will authenticate but not encrypt
+// the context value. The client has to provide the same
+// context value again for decryption.
 func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 	)
+	type Request struct {
+		Context []byte `json:"context"` // optional
+	}
+	type Response struct {
+		Plaintext  []byte `json:"plaintext"`
+		Ciphertext []byte `json:"ciphertext"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		type Request struct {
-			Context []byte `json:"context"`
-		}
-		type Response struct {
-			Plaintext  []byte `json:"plaintext"`
-			Ciphertext []byte `json:"ciphertext"`
-		}
-
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, ErrInvalidJSON)
@@ -263,20 +291,78 @@ func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
 	}
 }
 
+// HandleEncryptKey returns an http.HandlerFunc that encrypts
+// and authenticates a plaintext message sent by the client.
+//
+// It should be used to encrypt small amounts of data - like
+// other cryptographic keys or small metadata objects.
+// HandleEncryptKey should not be used to encrypt large data
+// streams.
+//
+// If the client provides an optional context value the
+// returned http.HandlerFunc will authenticate but not encrypt
+// the context value. The client has to provide the same
+// context value again for decryption.
+func HandleEncryptKey(store *secret.Store) http.HandlerFunc {
+	var (
+		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
+		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
+	)
+	type Request struct {
+		Plaintext []byte `json:"plaintext"`
+		Context   []byte `json:"context"` // optional
+	}
+	type Response struct {
+		Ciphertext []byte `json:"ciphertext"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			Error(w, ErrInvalidJSON)
+			return
+		}
+
+		name := pathBase(r.URL.Path)
+		if name == "" {
+			Error(w, ErrInvalidKeyName)
+			return
+		}
+		secret, err := store.Get(name)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		ciphertext, err := secret.Wrap(req.Plaintext, req.Context)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		json.NewEncoder(w).Encode(Response{
+			Ciphertext: ciphertext,
+		})
+	}
+}
+
+// HandleDecryptKey returns an http.HandlerFunc that decrypts
+// and verifies a ciphertext sent by the client procuded by
+// HandleEncryptKey or HandleGenerateKey.
+//
+// If the client has provided a context value during
+// encryption / key generation then the client has to provide
+// the same context value again.
 func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 	)
+	type Request struct {
+		Ciphertext []byte `json:"ciphertext"`
+		Context    []byte `json:"context"`
+	}
+	type Response struct {
+		Plaintext []byte `json:"plaintext"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		type Request struct {
-			Ciphertext []byte `json:"ciphertext"`
-			Context    []byte `json:"context"`
-		}
-		type Response struct {
-			Plaintext []byte `json:"plaintext"`
-		}
-
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, ErrInvalidJSON)

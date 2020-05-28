@@ -19,23 +19,24 @@ var validatePathHandlerTests = []struct {
 	{Pattern: "/v1/key/import/*", Path: "/v1/key/import/my-key", ShouldMatch: true},                      // 1
 	{Pattern: "/v1/key/delete/*", Path: "/v1/key/delete/my-key", ShouldMatch: true},                      // 2
 	{Pattern: "/v1/key/generate/*", Path: "/v1/key/generate/my-key", ShouldMatch: true},                  // 3
-	{Pattern: "/v1/key/decrypt/*", Path: "/v1/key/decrypt/my-key", ShouldMatch: true},                    // 4
-	{Pattern: "/v1/policy/write/*", Path: "/v1/policy/write/my-policy", ShouldMatch: true},               // 5
-	{Pattern: "/v1/policy/read/*", Path: "/v1/policy/read/my-policy", ShouldMatch: true},                 // 6
-	{Pattern: "/v1/policy/list/*", Path: "/v1/policy/list/my-policy", ShouldMatch: true},                 // 7
-	{Pattern: "/v1/policy/list/*", Path: "/v1/policy/list/*", ShouldMatch: true},                         // 8
-	{Pattern: "/v1/policy/delete/*", Path: "/v1/policy/delete/my-policy", ShouldMatch: true},             // 9
-	{Pattern: "/v1/identity/assign/*/*", Path: "/v1/identity/assign/af43c/my-policy", ShouldMatch: true}, // 10
-	{Pattern: "/v1/identity/list/*", Path: "/v1/identity/list/af43c", ShouldMatch: true},                 // 11
-	{Pattern: "/v1/identity/list/*", Path: "/v1/identity/list/*", ShouldMatch: true},                     // 12
-	{Pattern: "/v1/identity/forget/*", Path: "/v1/identity/forget/af43c", ShouldMatch: true},             // 13
+	{Pattern: "/v1/key/encrypt/*", Path: "/v1/key/encrypt/my-key", ShouldMatch: true},                    // 4
+	{Pattern: "/v1/key/decrypt/*", Path: "/v1/key/decrypt/my-key", ShouldMatch: true},                    // 5
+	{Pattern: "/v1/policy/write/*", Path: "/v1/policy/write/my-policy", ShouldMatch: true},               // 6
+	{Pattern: "/v1/policy/read/*", Path: "/v1/policy/read/my-policy", ShouldMatch: true},                 // 7
+	{Pattern: "/v1/policy/list/*", Path: "/v1/policy/list/my-policy", ShouldMatch: true},                 // 8
+	{Pattern: "/v1/policy/list/*", Path: "/v1/policy/list/*", ShouldMatch: true},                         // 9
+	{Pattern: "/v1/policy/delete/*", Path: "/v1/policy/delete/my-policy", ShouldMatch: true},             // 10
+	{Pattern: "/v1/identity/assign/*/*", Path: "/v1/identity/assign/af43c/my-policy", ShouldMatch: true}, // 11
+	{Pattern: "/v1/identity/list/*", Path: "/v1/identity/list/af43c", ShouldMatch: true},                 // 12
+	{Pattern: "/v1/identity/list/*", Path: "/v1/identity/list/*", ShouldMatch: true},                     // 13
+	{Pattern: "/v1/identity/forget/*", Path: "/v1/identity/forget/af43c", ShouldMatch: true},             // 14
 
-	{Pattern: "/v1/key/create/*", Path: "/v1/key/create/my-key/..", ShouldMatch: false},   // 14
-	{Pattern: "/v1/key/create/*", Path: "/v1/key/create/../my-key", ShouldMatch: false},   // 15
-	{Pattern: "/v1/key/decypt/*", Path: "/v1/key/create/my-key", ShouldMatch: false},      // 16
-	{Pattern: "/v1/key/generate/*", Path: "/v1/key/create/my-key/x", ShouldMatch: false},  // 17
-	{Pattern: "/v1/key/create/[a-z]", Path: "/v1/key/create/my-key0", ShouldMatch: false}, // 18
-	{Pattern: "/v1/key/decypt/*", Path: "/v1/key/create/./*/../a", ShouldMatch: false},    // 19
+	{Pattern: "/v1/key/create/*", Path: "/v1/key/create/my-key/..", ShouldMatch: false},   // 15
+	{Pattern: "/v1/key/create/*", Path: "/v1/key/create/../my-key", ShouldMatch: false},   // 16
+	{Pattern: "/v1/key/decypt/*", Path: "/v1/key/create/my-key", ShouldMatch: false},      // 17
+	{Pattern: "/v1/key/generate/*", Path: "/v1/key/create/my-key/x", ShouldMatch: false},  // 18
+	{Pattern: "/v1/key/create/[a-z]", Path: "/v1/key/create/my-key0", ShouldMatch: false}, // 19
+	{Pattern: "/v1/key/decypt/*", Path: "/v1/key/create/./*/../a", ShouldMatch: false},    // 20
 }
 
 func TestValidatePathHandler(t *testing.T) {
