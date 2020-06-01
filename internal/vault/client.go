@@ -7,6 +7,7 @@ package vault
 import (
 	"context"
 	"errors"
+	"path"
 	"sync/atomic"
 	"time"
 
@@ -75,7 +76,8 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 //
 // To renew the auth. token see: client.RenewToken(...).
 func (c *client) Authenticate(login AppRole) (token string, ttl time.Duration, err error) {
-	secret, err := c.Logical().Write("auth/approle/login", map[string]interface{}{
+	location := path.Join("auth", login.Engine, "login") // /auth/<engine>/login
+	secret, err := c.Logical().Write(location, map[string]interface{}{
 		"role_id":   login.ID,
 		"secret_id": login.Secret,
 	})

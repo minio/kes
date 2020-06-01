@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
@@ -31,6 +32,7 @@ import (
 // authentication should be retried
 // whenever it fails.
 type AppRole struct {
+	Engine string // The AppRole engine path
 	ID     string // The AppRole  ID
 	Secret string // The Approle secret ID
 	Retry  time.Duration
@@ -41,6 +43,13 @@ type AppRole struct {
 type Store struct {
 	// Addr is the HTTP address of the Vault server.
 	Addr string
+
+	// Engine is the path of the K/V engine to use.
+	//
+	// Vault allows multiple engines of the same type
+	// mounted at the same time and/or engines mounted
+	// at arbitrary paths.
+	Engine string
 
 	// Location is the location on Vault's K/V store
 	// where this KeyStore will save secret keys.
@@ -156,7 +165,7 @@ func (s *Store) Get(key string) (string, error) {
 		return "", errSealed
 	}
 
-	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
+	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
 	entry, err := s.client.Logical().Read(location)
 	if err != nil || entry == nil {
 		// Vault will not return an error if e.g. the key existed but has
@@ -196,7 +205,7 @@ func (s *Store) Create(key, value string) error {
 
 	// We try to check whether key exists on the K/V store.
 	// If so, we must not overwrite it.
-	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
+	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
 
 	// Vault will return nil for the secret as well as a nil-error
 	// if the specified entry does not exist.
@@ -254,7 +263,7 @@ func (s *Store) Delete(key string) error {
 	// exist. Instead, it responds with 204 No Content and
 	// no body. In this case the client also returns a nil-error
 	// Therefore, we can just try to delete it in any case.
-	location := fmt.Sprintf("/kv/%s/%s", s.Location, key)
+	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
 	_, err := s.client.Logical().Delete(location)
 	if err != nil {
 		s.logf("vault: failed to delete '%s': %v", location, err)

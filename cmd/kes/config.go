@@ -51,15 +51,17 @@ type serverConfig struct {
 		} `yaml:"fs"`
 
 		Vault struct {
-			Endpoint  string `yaml:"endpoint"`
-			Namespace string `yaml:"namespace"`
+			Endpoint   string `yaml:"endpoint"`
+			EnginePath string `yaml:"engine"`
+			Namespace  string `yaml:"namespace"`
 
 			Prefix string `yaml:"prefix"`
 
 			AppRole struct {
-				ID     string        `yaml:"id"`
-				Secret string        `yaml:"secret"`
-				Retry  time.Duration `yaml:"retry"`
+				EnginePath string        `yaml:"engine"`
+				ID         string        `yaml:"id"`
+				Secret     string        `yaml:"secret"`
+				Retry      time.Duration `yaml:"retry"`
 			} `yaml:"approle"`
 
 			TLS struct {
@@ -125,6 +127,22 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		}
 	}
 	return config, file.Close()
+}
+
+// SetDefaults set default values for fields that may be empty b/c not specified by user.
+func (config *serverConfig) SetDefaults() {
+	if config.Log.Audit == "" {
+		config.Log.Audit = "off" // If not set, default is off.
+	}
+	if config.Log.Error == "" {
+		config.Log.Error = "on" // If not set, default is on.
+	}
+	if config.Keys.Vault.EnginePath == "" {
+		config.Keys.Vault.EnginePath = "kv" // If not set, use the Vault default engine path.
+	}
+	if config.Keys.Vault.AppRole.EnginePath == "" {
+		config.Keys.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path.
+	}
 }
 
 // refersToEnvVar returns true if s has the following form:
