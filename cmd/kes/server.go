@@ -92,6 +92,8 @@ func server(args []string) error {
 	if err != nil {
 		return fmt.Errorf("Cannot read config file: %v", err)
 	}
+	config.SetDefaults()
+
 	if !isFlagPresent(cli, "addr") && config.Addr != "" {
 		addr = config.Addr
 	}
@@ -134,7 +136,7 @@ func server(args []string) error {
 
 	var errorLog *xlog.SystemLog
 	switch strings.ToLower(config.Log.Error) {
-	case "", "on": // If not set, error logging to STDERR is enabled
+	case "on":
 		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
 			errorLog = xlog.NewLogger(os.Stderr, "", stdlog.LstdFlags)
 		} else {
@@ -150,7 +152,7 @@ func server(args []string) error {
 	switch strings.ToLower(config.Log.Audit) {
 	case "on":
 		auditLog = xlog.NewLogger(os.Stdout, "", 0)
-	case "", "off": // If not set, audit logging to STDOUT is disabled
+	case "off":
 		auditLog = xlog.NewLogger(ioutil.Discard, "", 0)
 	default:
 		return fmt.Errorf("Audit log configuration '%s' is invalid", config.Log.Audit)
@@ -178,9 +180,11 @@ func server(args []string) error {
 	case config.Keys.Vault.Endpoint != "":
 		vaultStore := &vault.Store{
 			Addr:      config.Keys.Vault.Endpoint,
+			Engine:    config.Keys.Vault.EnginePath,
 			Location:  config.Keys.Vault.Prefix,
 			Namespace: config.Keys.Vault.Namespace,
 			AppRole: vault.AppRole{
+				Engine: config.Keys.Vault.AppRole.EnginePath,
 				ID:     config.Keys.Vault.AppRole.ID,
 				Secret: config.Keys.Vault.AppRole.Secret,
 				Retry:  config.Keys.Vault.AppRole.Retry,

@@ -150,9 +150,11 @@ keys:
   # https://www.vaultproject.io/api/secret/kv/kv-v1.html
   vault:
     endpoint: ""  # The Vault endpoint - e.g. https://127.0.0.1:8200
+    engine: ""    # The path of the K/V engine - e.g. secrets. If empty, defaults to: kv. (Vault default)
     namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
     prefix: ""    # An optional K/V prefix. The server will store keys under this prefix. 
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
+      engine: ""  # The path of the AppRole engine - e.g. authenticate. If empty, defaults to: approle. (Vault default)
       id: ""      # Your AppRole Role ID
       secret: ""  # Your AppRole Secret ID
       retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
