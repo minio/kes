@@ -225,7 +225,7 @@ func server(args []string) error {
 		proxy = &auth.TLSProxy{
 			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert),
 		}
-		if mtlsAuth == "verify" {
+		if strings.ToLower(mtlsAuth) != "off" {
 			proxy.VerifyOptions = new(x509.VerifyOptions)
 		}
 		for _, identity := range config.TLS.Proxy.Identities {
