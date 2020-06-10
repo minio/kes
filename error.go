@@ -98,7 +98,7 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 
 	var sb strings.Builder
-	if _, err := io.CopyN(&sb, resp.Body, size); err != nil {
+	if _, err := io.Copy(&sb, io.LimitReader(resp.Body, size)); err != nil {
 		return err
 	}
 	return NewError(resp.StatusCode, sb.String())
