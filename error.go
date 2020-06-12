@@ -12,10 +12,22 @@ import (
 )
 
 var (
+	// ErrNotAllowed represents a KES server response returned when the
+	// client has not sufficient policy permissions to perform a particular
+	// operation.
+	ErrNotAllowed Error = NewError(http.StatusForbidden, "prohibited by policy")
+
+	// ErrKeyNotFound represents a KES server response returned when a client
+	// tries to access or use a cryptographic key which does not exist.
 	ErrKeyNotFound Error = NewError(http.StatusNotFound, "key does not exist")
-	ErrKeyExists   Error = NewError(http.StatusBadRequest, "key does already exist")
-	ErrKeySealed   Error = NewError(http.StatusForbidden, "key is sealed")
-	ErrNotAllowed  Error = NewError(http.StatusForbidden, "prohibited by policy")
+
+	// ErrKeyExists represents a KES server response returned when a client tries
+	// to create a cryptographic key which already exists.
+	ErrKeyExists Error = NewError(http.StatusBadRequest, "key does already exist")
+
+	// ErrPolicyNotFound represents a KES server response returned when a client
+	// tries to access a policy which does not exist.
+	ErrPolicyNotFound Error = NewError(http.StatusNotFound, "policy does not exist")
 )
 
 // Error is the type of client-server API errors.

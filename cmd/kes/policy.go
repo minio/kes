@@ -93,7 +93,7 @@ func addPolicy(args []string) error {
 	if err = policy.UnmarshalJSON(data); err != nil {
 		return fmt.Errorf("Policy file is invalid JSON: %v", err)
 	}
-	if err = client.WritePolicy(args[0], &policy); err != nil {
+	if err = client.SetPolicy(args[0], &policy); err != nil {
 		return fmt.Errorf("Failed to add policy '%s': %v", args[0], err)
 	}
 	return nil
@@ -140,7 +140,7 @@ func showPolicy(args []string) error {
 	if err != nil {
 		return err
 	}
-	policy, err := client.ReadPolicy(name)
+	policy, err := client.GetPolicy(name)
 	if err != nil {
 		return fmt.Errorf("Failed to fetch policy '%s': %v", args[0], err)
 	}
@@ -181,7 +181,7 @@ func listPolicies(args []string) error {
 		cli.Usage()
 		os.Exit(2)
 	}
-	policy := "*"
+	var policy string
 	if len(args) == 1 {
 		policy = args[0]
 	}

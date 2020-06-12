@@ -81,8 +81,16 @@ func (r *Roles) Get(name string) (*kes.Policy, bool) {
 
 func (r *Roles) Delete(name string) {
 	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	delete(r.roles, name)
-	r.lock.Unlock()
+	if r.effectiveRoles != nil { // Remove all assigned identities
+		for id, policy := range r.effectiveRoles {
+			if name == policy {
+				delete(r.effectiveRoles, id)
+			}
+		}
+	}
 }
 
 func (r *Roles) Policies() (names []string) {
@@ -109,7 +117,7 @@ func (r *Roles) Assign(name string, id kes.Identity) error {
 	}
 	_, ok := r.roles[name]
 	if !ok {
-		return errors.New("key: policy does not exists")
+		return kes.ErrPolicyNotFound
 	}
 	if r.effectiveRoles == nil {
 		r.effectiveRoles = map[kes.Identity]string{}

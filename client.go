@@ -23,10 +23,10 @@ import (
 // functions.
 //
 // In general, a client just requires:
-// •  a KES server endpoint
-// •  a X.509 certificate for authentication.
+//   • a KES server endpoint
+//   • a X.509 certificate for authentication
 //
-// However, custom transport protcols, timeouts,
+// However, custom transport protocols, timeouts,
 // connection pooling, etc. can be specified via
 // a custom http.RoundTripper. For example:
 //   client := &Client{
@@ -416,7 +416,18 @@ func (c *Client) Decrypt(key string, ciphertext, context []byte) ([]byte, error)
 	return response.Plaintext, nil
 }
 
-func (c *Client) WritePolicy(name string, policy *Policy) error {
+// SetPolicy adds the given policy to the set of policies.
+// There can be just one policy with one particular name at
+// one point in time.
+//
+// If there is already a policy with the given name then SetPolicy
+// overwrites the existing policy with the given one.
+//
+// If there are identities assigned to an existing policy then
+// SetPolicy will not remove those identities before overwriting
+// the policy. Instead, it will just updated the policy entry such
+// that the given policy automatically applies to those identities.
+func (c *Client) SetPolicy(name string, policy *Policy) error {
 	content, err := json.Marshal(policy)
 	if err != nil {
 		return err
@@ -433,7 +444,9 @@ func (c *Client) WritePolicy(name string, policy *Policy) error {
 	return nil
 }
 
-func (c *Client) ReadPolicy(name string) (*Policy, error) {
+// GetPolicy returns the policy with the given name. If no such
+// policy exists then GetPolicy returns ErrPolicyNotFound.
+func (c *Client) GetPolicy(name string) (*Policy, error) {
 	client := retry(c.HTTPClient)
 	resp, err := client.Get(fmt.Sprintf("%s/v1/policy/read/%s", c.Endpoint, name))
 	if err != nil {
@@ -454,7 +467,17 @@ func (c *Client) ReadPolicy(name string) (*Policy, error) {
 	return &policy, nil
 }
 
+// ListPolicies returns a list of policies with names that
+// match the given glob pattern. For example
+//   policies, err := client.ListPolicies("*") // '*' matches any
+// returns the names of all existing policies.
+//
+// If no / an empty pattern is provided then ListPolicies uses
+// the pattern '*' as default.
 func (c *Client) ListPolicies(pattern string) ([]string, error) {
+	if pattern == "" { // The empty pattern never matches anything
+		pattern = "*" // => default to: list "all" policies
+	}
 	client := retry(c.HTTPClient)
 	resp, err := client.Get(fmt.Sprintf("%s/v1/policy/list/%s", c.Endpoint, url.PathEscape(pattern)))
 	if err != nil {
@@ -473,6 +496,17 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 	return policies, nil
 }
 
+// DeletePolicy removes the policy with the given name. It will not
+// return an error if no policy exists.
+//
+// If there are identities assigned to the deleted policies then these
+// identities will be removed as well.
+//
+// Therefore, setting an empty policy and deleting a policy have
+// slightly different implications. The former will revoke any
+// access permission for all identities assigned to the policy.
+// The later will remove the policy as well as all identities
+// assigned to it.
 func (c *Client) DeletePolicy(name string) error {
 	url := fmt.Sprintf("%s/v1/policy/delete/%s", c.Endpoint, name)
 	req, err := http.NewRequest(http.MethodDelete, url, retryBody(nil))

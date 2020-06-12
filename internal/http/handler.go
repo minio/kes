@@ -415,7 +415,6 @@ func HandleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 func HandleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 	var (
 		ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
-		ErrPolicyNotFound    = kes.NewError(http.StatusBadRequest, "policy does not exist")
 	)
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
@@ -426,7 +425,7 @@ func HandleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 
 		policy, ok := roles.Get(name)
 		if !ok {
-			Error(w, ErrPolicyNotFound)
+			Error(w, kes.ErrPolicyNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(policy)
@@ -465,7 +464,6 @@ func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
 		ErrIdentityRoot    = kes.NewError(http.StatusBadRequest, "identity is root")
 		ErrSelfAssign      = kes.NewError(http.StatusForbidden, "identity cannot assign policy to itself")
-		ErrPolicyNotFound  = kes.NewError(http.StatusBadRequest, "policy does not exist")
 	)
 	return func(w http.ResponseWriter, r *http.Request) {
 		identity := kes.Identity(pathBase(r.URL.Path))
@@ -484,7 +482,7 @@ func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 
 		policy := pathBase(strings.TrimSuffix(r.URL.Path, identity.String()))
 		if err := roles.Assign(policy, identity); err != nil {
-			Error(w, ErrPolicyNotFound)
+			Error(w, kes.ErrPolicyNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
