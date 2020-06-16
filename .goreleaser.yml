@@ -13,7 +13,7 @@ before:
 
 builds:
   -
-    dir: ./cmd/kes
+    main: ./cmd/kes
     goos:
       - linux
       - darwin
@@ -58,7 +58,7 @@ signs:
     cmd: "sh"
     args:
       - '-c'
-      - 'echo "$MINISIGN_PASSWORD" | rsign sign ${artifact} -P RWRcOzQ19UrKLp4rkfssIwwWiWagluGJ8fpUBh/BeH+bZV3keFcdIJTF'
+      - 'echo "${MINISIGN_PASSWORD}" | minisign -s /media/${USER}/minio/minisign.key -Sm ${artifact}'
     artifacts: all
 
 snapshot:
