@@ -18,7 +18,7 @@ KES is a stateless and distributed key-management system for high-performance ap
 
 You can also verify the binary with [minisign](https://jedisct1.github.io/minisign/) by downloading the corresponding [`.minisign`](https://github.com/minio/kes/releases/latest) signature file. Then run:
 ```
-minisign -Vm <OS-ARCH>.zip -P RWRcOzQ19UrKLp4rkfssIwwWiWagluGJ8fpUBh/BeH+bZV3keFcdIJTF
+minisign -Vm <OS-ARCH>.zip -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 ```
 
 ### Docker
