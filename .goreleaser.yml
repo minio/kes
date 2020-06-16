@@ -30,7 +30,7 @@ builds:
       - goos: windows
         goarch: arm64
       - goos: windows
-        goarch: arm 
+        goarch: arm
     env:
       - CGO_ENABLED=0
     flags:
@@ -51,14 +51,14 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
- 
+
 signs:
   -
     signature: "${artifact}.minisig"
     cmd: "sh"
     args:
       - '-c'
-      - 'echo "${MINISIGN_PASSWORD}" | minisign -s /media/${USER}/minio/minisign.key -Sm ${artifact}'
+      - 'minisign -s /media/${USER}/minio/minisign.key -Sm ${artifact} < /media/${USER}/minio/minisign-passphrase'
     artifacts: all
 
 snapshot:
