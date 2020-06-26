@@ -88,6 +88,22 @@ type serverConfig struct {
 				} `yaml:"credentials"`
 			} `yaml:"secretsmanager"`
 		} `yaml:"aws"`
+
+		Gemalto struct {
+			KeySecure struct {
+				Endpoint string `yaml:"endpoint"`
+
+				Login struct {
+					Token  string        `yaml:"token"`
+					Domain string        `yaml:"domain"`
+					Retry  time.Duration `yaml:"retry"`
+				} `yaml:"credentials"`
+
+				TLS struct {
+					CAPath string `yaml:"ca"`
+				} `yaml:"tls"`
+			} `yaml:"keysecure"`
+		} `yaml:"gemalto"`
 	} `yaml:"keys"`
 }
 
