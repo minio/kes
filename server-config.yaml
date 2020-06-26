@@ -164,6 +164,7 @@ keys:
       ca: ""      # Path to one or multiple PEM root CA certificates 
     status:     # Vault status configuration. The server will periodically reach out to Vault to check its status. 
       ping: 10s   # Duration until the server checks Vault's status again.
+
   aws:
     # The AWS SecretsManager key store. The server will store
     # secret keys at the AWS SecretsManager encrypted with
@@ -176,3 +177,15 @@ keys:
         accesskey: ""  # Your AWS Access Key
         secretkey: ""  # Your AWS Secret Key
         token: ""      # Your AWS session token (usually optional)
+
+   gemalto:
+     # The Gemalto KeySecure key store. The server will store
+     # keys as secrets on the KeySecure instance.
+     keysecure:
+       endpoint: ""    # The KeySecure endpoint - e.g. https://127.0.0.1
+       credentials:    # The authentication to access the KeySecure instance.
+         token: ""     # The refresh token to obtain new short-lived authentication tokens.
+         domain: ""    # The KeySecure domain for which the refresh token is valid. If empty, defaults to the root domain.
+         retry: 15s    # The time the KES server waits before it tries to re-authenticate after connection loss.
+       tls:            # The KeySecure client TLS configuration
+         ca: ""        # Path to one or multiple PEM-encoded CA certificates for verifying the KeySecure TLS certificate.

@@ -26,6 +26,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/fs"
+	"github.com/minio/kes/internal/gemalto"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/mem"
@@ -118,11 +119,17 @@ func server(args []string) error {
 
 	switch {
 	case config.Keys.Fs.Path != "" && config.Keys.Vault.Endpoint != "":
-		return errors.New("Ambiguous configuration: FS and Vault key store are specified at the same time")
+		return errors.New("Ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
 	case config.Keys.Fs.Path != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager key store are specified at the same time")
+		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
+	case config.Keys.Fs.Path != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
+		return errors.New("Ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		return errors.New("Ambiguous configuration: Vault and AWS SecretsManager key store are specified at the same time")
+		return errors.New("Ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
+	case config.Keys.Vault.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
+		return errors.New("Ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
+	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
+		return errors.New("Ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
 	}
 
 	if mlock {
@@ -215,6 +222,21 @@ func server(args []string) error {
 			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
 		}
 		store.Remote = awsStore
+	case config.Keys.Gemalto.KeySecure.Endpoint != "":
+		gemaltoStore := &gemalto.KeySecure{
+			Endpoint: config.Keys.Gemalto.KeySecure.Endpoint,
+			CAPath:   config.Keys.Gemalto.KeySecure.TLS.CAPath,
+			ErrorLog: errorLog.Log(),
+			Login: gemalto.Credentials{
+				Token:  config.Keys.Gemalto.KeySecure.Login.Token,
+				Domain: config.Keys.Gemalto.KeySecure.Login.Domain,
+				Retry:  config.Keys.Gemalto.KeySecure.Login.Retry,
+			},
+		}
+		if err := gemaltoStore.Authenticate(); err != nil {
+			return fmt.Errorf("Failed to connect to Gemalto KeySecure: %v", err)
+		}
+		store.Remote = gemaltoStore
 	default:
 		store.Remote = &mem.Store{}
 	}
