@@ -7,9 +7,11 @@ ENV CGO_ENABLED 0
 ENV GO111MODULE on
 ENV GOPROXY https://proxy.golang.org
 
+COPY . kes
+
 RUN  \
      apk add --no-cache git && \
-     go install -v -ldflags "-s -w" github.com/minio/kes/cmd/kes
+     cd kes && go install -v -ldflags "-s -w -X main.version=0.6.1" ./cmd/kes
 
 FROM alpine:3.10
 
