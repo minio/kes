@@ -1,18 +1,17 @@
-FROM golang:1.13-alpine
+FROM golang:1.14-alpine
 
 LABEL maintainer="MinIO Inc <dev@min.io>"
 
 ENV GOPATH /go
 ENV CGO_ENABLED 0
 ENV GO111MODULE on
-ENV GOPROXY https://proxy.golang.org
 
 RUN  \
      apk add --no-cache git && \
      go install -v -ldflags "-s -w" github.com/minio/kes/cmd/release && \
-     go install -v -ldflags "-s -w -X main.version=$(release)" github.com/minio/kes/cmd/kes
+     GOPROXY=$(go env GOPROXY) go install -v -ldflags "-s -w -X main.version=$(release)" github.com/minio/kes/cmd/kes
 
-FROM alpine:3.10
+FROM alpine:3.12
 
 EXPOSE 7373
 

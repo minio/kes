@@ -36,7 +36,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - "-s -w -X github.com/minio/kes/cmd/kes/main.version={{.Version}}"
+      - "-s -w -X main.version={{.Version}}"
 
 archives:
   -
