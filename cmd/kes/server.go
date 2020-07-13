@@ -6,22 +6,27 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	stdlog "log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
@@ -32,6 +37,7 @@ import (
 	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/secret"
 	"github.com/minio/kes/internal/vault"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const serverCmdUsage = `usage: %s [options]
@@ -58,6 +64,8 @@ const serverCmdUsage = `usage: %s [options]
                        Valid options are:
                           Require and verify      : --auth=on (default)
                           Require but don't verify: --auth=off
+
+  -q, --quiet          Do not print information on startup.
 `
 
 func server(args []string) error {
@@ -75,6 +83,8 @@ func server(args []string) error {
 		tlsKeyPath  string
 		tlsCertPath string
 		mtlsAuth    string
+
+		quiet quiet
 	)
 	cli.StringVar(&addr, "addr", "127.0.0.1:7373", "The address of the server")
 	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
@@ -83,6 +93,8 @@ func server(args []string) error {
 	cli.StringVar(&tlsKeyPath, "key", "", "Path to the TLS private key")
 	cli.StringVar(&tlsCertPath, "cert", "", "Path to the TLS certificate")
 	cli.StringVar(&mtlsAuth, "auth", "on", "Controls how the server handles mTLS authentication")
+	cli.Var(&quiet, "q", "Do not print information on startup")
+	cli.Var(&quiet, "quiet", "Do not print information on startup")
 	cli.Parse(args[1:])
 	if cli.NArg() != 0 {
 		cli.Usage()
@@ -165,83 +177,6 @@ func server(args []string) error {
 		return fmt.Errorf("Audit log configuration '%s' is invalid", config.Log.Audit)
 	}
 
-	var store = &secret.Store{}
-	switch {
-	case config.Keys.Fs.Path != "":
-		f, err := os.Stat(config.Keys.Fs.Path)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("Failed to open %s: %v", config.Keys.Fs.Path, err)
-		}
-		if err == nil && !f.IsDir() {
-			return fmt.Errorf("%s is not a directory", config.Keys.Fs.Path)
-		}
-		if os.IsNotExist(err) {
-			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {
-				return fmt.Errorf("Failed to create directory %s: %v", config.Keys.Fs.Path, err)
-			}
-		}
-		store.Remote = &fs.Store{
-			Dir:      config.Keys.Fs.Path,
-			ErrorLog: errorLog.Log(),
-		}
-	case config.Keys.Vault.Endpoint != "":
-		vaultStore := &vault.Store{
-			Addr:      config.Keys.Vault.Endpoint,
-			Engine:    config.Keys.Vault.EnginePath,
-			Location:  config.Keys.Vault.Prefix,
-			Namespace: config.Keys.Vault.Namespace,
-			AppRole: vault.AppRole{
-				Engine: config.Keys.Vault.AppRole.EnginePath,
-				ID:     config.Keys.Vault.AppRole.ID,
-				Secret: config.Keys.Vault.AppRole.Secret,
-				Retry:  config.Keys.Vault.AppRole.Retry,
-			},
-			StatusPingAfter: config.Keys.Vault.Status.Ping,
-			ErrorLog:        errorLog.Log(),
-			ClientKeyPath:   config.Keys.Vault.TLS.KeyPath,
-			ClientCertPath:  config.Keys.Vault.TLS.CertPath,
-			CAPath:          config.Keys.Vault.TLS.CAPath,
-		}
-		if err := vaultStore.Authenticate(context.Background()); err != nil {
-			return fmt.Errorf("Failed to connect to Vault: %v", err)
-		}
-		store.Remote = vaultStore
-	case config.Keys.Aws.SecretsManager.Endpoint != "":
-		awsStore := &aws.SecretsManager{
-			Addr:     config.Keys.Aws.SecretsManager.Endpoint,
-			Region:   config.Keys.Aws.SecretsManager.Region,
-			KMSKeyID: config.Keys.Aws.SecretsManager.KmsKey,
-			ErrorLog: errorLog.Log(),
-			Login: aws.Credentials{
-				AccessKey:    config.Keys.Aws.SecretsManager.Login.AccessKey,
-				SecretKey:    config.Keys.Aws.SecretsManager.Login.SecretKey,
-				SessionToken: config.Keys.Aws.SecretsManager.Login.SessionToken,
-			},
-		}
-		if err := awsStore.Authenticate(); err != nil {
-			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
-		}
-		store.Remote = awsStore
-	case config.Keys.Gemalto.KeySecure.Endpoint != "":
-		gemaltoStore := &gemalto.KeySecure{
-			Endpoint: config.Keys.Gemalto.KeySecure.Endpoint,
-			CAPath:   config.Keys.Gemalto.KeySecure.TLS.CAPath,
-			ErrorLog: errorLog.Log(),
-			Login: gemalto.Credentials{
-				Token:  config.Keys.Gemalto.KeySecure.Login.Token,
-				Domain: config.Keys.Gemalto.KeySecure.Login.Domain,
-				Retry:  config.Keys.Gemalto.KeySecure.Login.Retry,
-			},
-		}
-		if err := gemaltoStore.Authenticate(); err != nil {
-			return fmt.Errorf("Failed to connect to Gemalto KeySecure: %v", err)
-		}
-		store.Remote = gemaltoStore
-	default:
-		store.Remote = &mem.Store{}
-	}
-	store.StartGC(context.Background(), config.Cache.Expiry.Any, config.Cache.Expiry.Unused)
-
 	var proxy *auth.TLSProxy
 	if len(config.TLS.Proxy.Identities) != 0 {
 		proxy = &auth.TLSProxy{
@@ -285,6 +220,119 @@ func server(args []string) error {
 			}
 		}
 	}
+
+	var (
+		store            = &secret.Store{}
+		keyStore         string
+		keyStoreEndpoint string
+	)
+	switch {
+	case config.Keys.Fs.Path != "":
+		f, err := os.Stat(config.Keys.Fs.Path)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("Failed to open %s: %v", config.Keys.Fs.Path, err)
+		}
+		if err == nil && !f.IsDir() {
+			return fmt.Errorf("%s is not a directory", config.Keys.Fs.Path)
+		}
+		if os.IsNotExist(err) {
+			msg := fmt.Sprintf("Creating directory '%s' ... ", config.Keys.Fs.Path)
+			quiet.Print(msg)
+			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {
+				return fmt.Errorf("Failed to create directory %s: %v", config.Keys.Fs.Path, err)
+			}
+			quiet.ClearMessage(msg)
+		}
+		store.Remote = &fs.Store{
+			Dir:      config.Keys.Fs.Path,
+			ErrorLog: errorLog.Log(),
+		}
+
+		keyStore = "Filesystem"
+		if keyStoreEndpoint, err = filepath.Abs(config.Keys.Fs.Path); err != nil {
+			keyStoreEndpoint = config.Keys.Fs.Path
+		}
+	case config.Keys.Vault.Endpoint != "":
+		vaultStore := &vault.Store{
+			Addr:      config.Keys.Vault.Endpoint,
+			Engine:    config.Keys.Vault.EnginePath,
+			Location:  config.Keys.Vault.Prefix,
+			Namespace: config.Keys.Vault.Namespace,
+			AppRole: vault.AppRole{
+				Engine: config.Keys.Vault.AppRole.EnginePath,
+				ID:     config.Keys.Vault.AppRole.ID,
+				Secret: config.Keys.Vault.AppRole.Secret,
+				Retry:  config.Keys.Vault.AppRole.Retry,
+			},
+			StatusPingAfter: config.Keys.Vault.Status.Ping,
+			ErrorLog:        errorLog.Log(),
+			ClientKeyPath:   config.Keys.Vault.TLS.KeyPath,
+			ClientCertPath:  config.Keys.Vault.TLS.CertPath,
+			CAPath:          config.Keys.Vault.TLS.CAPath,
+		}
+
+		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", vaultStore.Addr)
+		quiet.Print(msg)
+		if err := vaultStore.Authenticate(context.Background()); err != nil {
+			return fmt.Errorf("Failed to connect to Vault: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = vaultStore
+
+		keyStore = "Hashicorp Vault"
+		keyStoreEndpoint = config.Keys.Vault.Endpoint
+	case config.Keys.Aws.SecretsManager.Endpoint != "":
+		awsStore := &aws.SecretsManager{
+			Addr:     config.Keys.Aws.SecretsManager.Endpoint,
+			Region:   config.Keys.Aws.SecretsManager.Region,
+			KMSKeyID: config.Keys.Aws.SecretsManager.KmsKey,
+			ErrorLog: errorLog.Log(),
+			Login: aws.Credentials{
+				AccessKey:    config.Keys.Aws.SecretsManager.Login.AccessKey,
+				SecretKey:    config.Keys.Aws.SecretsManager.Login.SecretKey,
+				SessionToken: config.Keys.Aws.SecretsManager.Login.SessionToken,
+			},
+		}
+
+		msg := fmt.Sprintf("Authenticating to AWS SecretsManager '%s' ... ", awsStore.Addr)
+		quiet.Print(msg)
+		if err := awsStore.Authenticate(); err != nil {
+			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = awsStore
+
+		keyStore = "AWS SecretsManager"
+		keyStoreEndpoint = config.Keys.Aws.SecretsManager.Endpoint
+	case config.Keys.Gemalto.KeySecure.Endpoint != "":
+		gemaltoStore := &gemalto.KeySecure{
+			Endpoint: config.Keys.Gemalto.KeySecure.Endpoint,
+			CAPath:   config.Keys.Gemalto.KeySecure.TLS.CAPath,
+			ErrorLog: errorLog.Log(),
+			Login: gemalto.Credentials{
+				Token:  config.Keys.Gemalto.KeySecure.Login.Token,
+				Domain: config.Keys.Gemalto.KeySecure.Login.Domain,
+				Retry:  config.Keys.Gemalto.KeySecure.Login.Retry,
+			},
+		}
+
+		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
+		quiet.Printf(msg)
+		if err := gemaltoStore.Authenticate(); err != nil {
+			return fmt.Errorf("Failed to connect to Gemalto KeySecure: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = gemaltoStore
+
+		keyStore = "Gemalto KeySecure"
+		keyStoreEndpoint = config.Keys.Gemalto.KeySecure.Endpoint
+	default:
+		store.Remote = &mem.Store{}
+
+		keyStore = "In-Memory"
+		keyStoreEndpoint = "non-persistent"
+	}
+	store.StartGC(context.Background(), config.Cache.Expiry.Any, config.Cache.Expiry.Unused)
 
 	const maxBody = 1 << 20
 	mux := http.NewServeMux()
@@ -344,10 +392,206 @@ func server(args []string) error {
 			fmt.Fprintf(cli.Output(), "Abnormal server shutdown: %v\n", err)
 		}
 	}()
+
+	// The following code prints a server startup message similar to:
+	//
+	// Endpoint: https://127.0.0.1:7373        https://192.168.161.34:7373
+	//           https://189.27.2.1:7373
+	//
+	// Root:     3ecfcdf38fcbe141ae26a1030f81e96b753365a46760ae6b578698a97c59fd22
+	// Auth:     on    [ only clients with trusted certificates can connect ]
+	//
+	// Keys:     Filesystem: /tmp/keys
+	//
+	// CLI:      export KES_SERVER=https://127.0.0.1:7373
+	//           export KES_CLIENT_KEY=<client-private-key>   // e.g. $HOME/root.key
+	//           export KES_CLIENT_CERT=<client-certificate>  // e.g. $HOME/root.cert
+	//           kes --help
+	//
+	// -----------------------------------------
+	// We don't need to worry about non-terminal / windows terminals b/c
+	// the color package only prints terminal color sequences if the
+	// terminal supports colorized output (see: color.NoColor).
+	//
+	// If quiet is set to true, all quiet.Print* statements become no-ops.
+	var (
+		blue   = color.New(color.FgBlue)
+		bold   = color.New(color.Bold)
+		italic = color.New(color.Italic)
+	)
+	ip, port, err := serverAddr(addr)
+	if err != nil {
+		return err
+	}
+
+	const margin = 10 // len("Endpoint: ")
+	quiet.Print(blue.Sprint("Endpoint: "))
+	quiet.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
+	quiet.Println()
+
+	if r, err := hex.DecodeString(rootIdentity); err == nil && len(r) == sha256.Size {
+		quiet.Println(blue.Sprint("Root:    "), rootIdentity)
+	} else {
+		quiet.Println(blue.Sprint("Root:    "), "_     [ disabled ]")
+	}
+	if auth := strings.ToLower(mtlsAuth); auth == "on" {
+		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))
+	} else {
+		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgYellow).Sprint("off"), color.YellowString("  [ any client can connect but policies still apply ]"))
+	}
+	quiet.Println()
+
+	quiet.Println(blue.Sprint("Keys:    "), fmt.Sprintf("%s: %s", keyStore, keyStoreEndpoint))
+	quiet.Println()
+
+	if runtime.GOOS == "windows" {
+		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("set KES_SERVER=https://%v:%s", ip, port))
+		quiet.Println("         ", bold.Sprint("set KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+`   // e.g. root.key`)
+		quiet.Println("         ", bold.Sprint("set KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+`  // e.g. root.cert`)
+		quiet.Println("         ", bold.Sprint("kes --help"))
+	} else {
+		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("export KES_SERVER=https://%v:%s", ip, port))
+		quiet.Println("         ", bold.Sprint("export KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+"   // e.g. $HOME/root.key")
+		quiet.Println("         ", bold.Sprint("export KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+"  // e.g. $HOME/root.cert")
+		quiet.Println("         ", bold.Sprint("kes --help"))
+	}
+
+	// Start the HTTPS server
 	if err := server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
 		return fmt.Errorf("Cannot start server: %v", err)
 	}
 	return nil
+}
+
+// quiet is a boolean flag.Value that can print
+// to STDOUT.
+//
+// If quiet is set to true then all quiet.Print*
+// calls become no-ops and no output is printed to
+// STDOUT.
+type quiet bool
+
+var _ flag.Getter = (*quiet)(nil) // compiler check
+
+// IsBoolFlag returns true indicating that quiet is a
+// boolean flag.
+//
+// Implemented to satisfy a private interface of the
+// flag package.
+func (*quiet) IsBoolFlag() bool { return true }
+
+// Set sets the flag's value to s. The string s
+// may be "true"/"on" or "flase"/"off".
+func (q *quiet) Set(s string) error {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "on", "":
+		*q = true
+	case "false", "off":
+		*q = false
+	default:
+		return errors.New("parse error") // Same as flag.errParse
+	}
+	return nil
+}
+
+// String retruns the string representation of quiet.
+// It returns either "true" or "false".
+func (q *quiet) String() string {
+	if *q {
+		return "true"
+	}
+	return "false"
+}
+
+// Get returns the value of quiet as boolean.
+func (q *quiet) Get() interface{} { return bool(*q) }
+
+// Print behaves as fmt.Print if quiet is false.
+// Otherwise, Print does nothing.
+func (q quiet) Print(a ...interface{}) {
+	if !q {
+		fmt.Print(a...)
+	}
+}
+
+// Printf behaves as fmt.Printf if quiet is false.
+// Otherwise, Printf does nothing.
+func (q quiet) Printf(format string, a ...interface{}) {
+	if !q {
+		fmt.Printf(format, a...)
+	}
+}
+
+// Println behaves as fmt.Println if quiet is false.
+// Otherwise, Println does nothing.
+func (q quiet) Println(a ...interface{}) {
+	if !q {
+		fmt.Println(a...)
+	}
+}
+
+// ClearMessage tries to erase the given message from STDOUT
+// if STDOUT is a terminal that supports terminal control sequences.
+//
+// Otherwise, ClearMessage just prints an empty newline.
+func (q quiet) ClearMessage(msg string) {
+	if color.NoColor {
+		q.Println()
+		return
+	}
+
+	const (
+		eraseLine = "\033[2K\r"
+		moveUp    = "\033[1A"
+	)
+	width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
+	if err != nil { // If we cannot get the width, just erasure one line
+		q.Print(eraseLine)
+		return
+	}
+
+	// Erase and move up one line as long as the message is not empty.
+	for len(msg) > 0 {
+		q.Print(eraseLine)
+
+		if len(msg) < width {
+			break
+		}
+		q.Print(moveUp)
+		msg = msg[width:]
+	}
+}
+
+// alignEndpoints turns the given IPs into endpoints of the form
+// https://<ip>:<port> and returns a string representation of all
+// endpoints.
+//
+// The returned string has two endpoints per line and after every new
+// line leftMargin whitespaces are added to algin each line properly.
+//
+// alginEndpoints returns a string like:
+//  https://<ip-1>:<port>   https://<ip-2>:<port>
+//  <margin> https://<ip-3>:<port>   https://<ip-4>:<port>
+//  <margin> https://<ip-6>:<port>   https://<ip-5>:<port>
+//  ...
+func alignEndpoints(leftMargin int, IPs []net.IP, port string) string {
+	const maxEndpointSize = 28 // len("https://255.255.255.255:7373")
+
+	var (
+		endpoints string
+		n         int
+	)
+	for _, ip := range IPs {
+		endpoint := fmt.Sprintf("https://%v:%s", ip, port)
+		endpoint += strings.Repeat(" ", 2+maxEndpointSize-len(endpoint)) // pad with white spaces
+		if n == 2 {
+			endpoints += "\n" + strings.Repeat(" ", leftMargin)
+			n = 0
+		}
+		endpoints += endpoint
+		n++
+	}
+	return endpoints
 }
 
 // timeout returns and HTTP handler that runs f
@@ -497,4 +741,55 @@ func (tw *timeoutWriter) Push(target string, opts *http.PushOptions) error {
 		return tw.pusher.Push(target, opts)
 	}
 	return http.ErrNotSupported
+}
+
+// interfaceIP4Addrs returns a list of the system's unicast
+// IPv4 interface addresses.
+func interfaceIP4Addrs() []net.IP {
+	interfaces, err := net.InterfaceAddrs()
+	if err != nil {
+		return []net.IP{}
+	}
+
+	var ip4Addr []net.IP
+	for _, iface := range interfaces {
+		var ip net.IP
+		switch addr := iface.(type) {
+		case *net.IPNet:
+			ip = addr.IP.To4()
+		case *net.IPAddr:
+			ip = addr.IP.To4()
+		}
+		if ip != nil {
+			ip4Addr = append(ip4Addr, ip)
+		}
+	}
+	return ip4Addr
+}
+
+// serverAddr takes an address string <IP>:<port> and
+// splits it into an IP address and port number.
+//
+// It returns an error if the given addr is not well-formed
+// or not a valid IP address.
+//
+// If addr does not contain an IP (":<port>") then ip will be
+// 0.0.0.0.
+func serverAddr(addr string) (ip net.IP, port string, err error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, "", fmt.Errorf("Invalid server address: %s", addr)
+	}
+	if host == "" {
+		host = "0.0.0.0"
+	}
+
+	ip = net.ParseIP(host)
+	if ip == nil {
+		return nil, "", fmt.Errorf("Invalid server address: %s", addr)
+	}
+	if ip.IsUnspecified() {
+		ip = net.IPv4(127, 0, 0, 1)
+	}
+	return ip, port, err
 }
