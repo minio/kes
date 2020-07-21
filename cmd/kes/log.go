@@ -7,14 +7,18 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/xterm"
+
+	ui "github.com/gizak/termui/v3"
 )
 
 const logCmdUsage = `usage: %s <command>
@@ -52,6 +56,11 @@ Connects to a KES server and traces log events.
 
 usage: %s [flags]
 
+  --type               Specify the log event type. (default: audit)
+                       Valid options are:
+                          --type=audit  
+                          --type=error
+
   --json               Print log events as JSON.
 
   -k, --insecure       Skip X.509 certificate validation during TLS handshake.
@@ -65,8 +74,13 @@ func logTrace(args []string) error {
 		fmt.Fprintf(cli.Output(), logTraceCmdUsage, cli.Name())
 	}
 
-	var jsonOutput bool
-	var insecureSkipVerify bool
+	var (
+		typeFlag   string
+		jsonOutput bool
+
+		insecureSkipVerify bool
+	)
+	cli.StringVar(&typeFlag, "type", "audit", "Log event type [ audit | error ]")
 	cli.BoolVar(&jsonOutput, "json", false, "Print log events as JSON")
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
@@ -79,60 +93,200 @@ func logTrace(args []string) error {
 	if err != nil {
 		return err
 	}
-	stream, err := client.TraceAuditLog()
-	if err != nil {
+
+	switch strings.ToLower(typeFlag) {
+	case "audit":
+		stream, err := client.TraceAuditLog()
+		if err != nil {
+			return err
+		}
+		defer stream.Close()
+
+		if !isTerm(os.Stdout) || jsonOutput {
+			closeOn(stream, os.Interrupt, os.Kill)
+			for stream.Next() {
+				fmt.Println(string(stream.Bytes()))
+			}
+			return stream.Err()
+		}
+		return traceAuditLogWithUI(stream)
+	case "error":
+		stream, err := client.TraceErrorLog()
+		if err != nil {
+			return err
+		}
+		defer stream.Close()
+
+		if !isTerm(os.Stdout) || jsonOutput {
+			closeOn(stream, os.Interrupt, os.Kill)
+			for stream.Next() {
+				fmt.Println(string(stream.Bytes()))
+			}
+			return stream.Err()
+		}
+		return traceErrorLogWithUI(stream)
+	default:
+		return fmt.Errorf("Unknown log event type: '%s'", typeFlag)
+	}
+}
+
+// traceAuditLogWithUI iterates over the audit log
+// event stream and prints a table-like UI to STDOUT.
+//
+// Each event is displayed as a new row and the UI is
+// automatically adjusted to the terminal window size.
+func traceAuditLogWithUI(stream *kes.AuditStream) error {
+	table := xterm.NewTable("Time", "Identity", "Status", "API Operations", "Response")
+	table.Header()[0].Width = 0.12
+	table.Header()[1].Width = 0.15
+	table.Header()[2].Width = 0.15
+	table.Header()[3].Width = 0.45
+	table.Header()[4].Width = 0.12
+
+	table.Header()[0].Alignment = xterm.AlignCenter
+	table.Header()[1].Alignment = xterm.AlignCenter
+	table.Header()[2].Alignment = xterm.AlignCenter
+	table.Header()[3].Alignment = xterm.AlignLeft
+	table.Header()[4].Alignment = xterm.AlignCenter
+
+	// Initialize the terminal UI and listen on resize
+	// events and Ctrl-C / Escape key events.
+	if err := ui.Init(); err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer table.Draw() // Draw the table AFTER closing the UI one more time.
+	defer ui.Close()   // Closing the UI cleans the screen.
 
-	sigCh := make(chan os.Signal)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigCh
-		if err := stream.Close(); err != nil {
-			fmt.Fprintln(cli.Output(), err)
+		events := ui.PollEvents()
+		for {
+			switch event := <-events; {
+			case event.Type == ui.ResizeEvent:
+				table.Draw()
+			case event.ID == "<C-c>" || event.ID == "<Escape>":
+				if err := stream.Close(); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+				}
+				return
+			}
 		}
 	}()
 
-	isTerminal := isTerm(os.Stdout)
+	var (
+		green = color.New(color.FgGreen)
+		red   = color.New(color.FgRed)
+	)
+	table.Draw()
 	for stream.Next() {
-		if !isTerminal || jsonOutput {
-			fmt.Println(string(stream.Bytes()))
-			continue
-		}
-
 		event := stream.Event()
-		identity := event.Request.Identity
-		if len(identity) > 7 {
-			identity = identity[:7]
-		}
+		hh, mm, ss := event.Time.Clock()
 
-		var status string
-		if runtime.GOOS == "windows" { // don't colorize on windows
-			status = fmt.Sprintf("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
+		var (
+			identity = xterm.NewCell(event.Request.Identity)
+			status   = xterm.NewCell(fmt.Sprintf("%d %s", event.Response.StatusCode, http.StatusText(event.Response.StatusCode)))
+			path     = xterm.NewCell(event.Request.Path)
+			reqTime  = xterm.NewCell(fmt.Sprintf("%02d:%02d:%02d", hh, mm, ss))
+			respTime *xterm.Cell
+		)
+		if event.Response.StatusCode == http.StatusOK {
+			status.Color = green
 		} else {
-			identity = color.YellowString(identity)
-			if event.Response.StatusCode == http.StatusOK {
-				status = color.GreenString("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
-			} else {
-				status = color.RedString("[%d %s]", event.Response.StatusCode, http.StatusText(event.Response.StatusCode))
-			}
+			status.Color = red
 		}
 
 		// Truncate duration values such that we show reasonable
 		// time values - like 1.05s or 345.76ms.
-		respTime := event.Response.Time
 		switch {
-		case respTime >= time.Second:
-			respTime = respTime.Truncate(10 * time.Millisecond)
-		case respTime >= time.Millisecond:
-			respTime = respTime.Truncate(10 * time.Microsecond)
+		case event.Response.Time >= time.Second:
+			respTime = xterm.NewCell(event.Response.Time.Truncate(10 * time.Millisecond).String())
+		case event.Response.Time >= time.Millisecond:
+			respTime = xterm.NewCell(event.Response.Time.Truncate(10 * time.Microsecond).String())
 		default:
-			respTime = respTime.Truncate(time.Microsecond)
+			respTime = xterm.NewCell(event.Response.Time.Truncate(time.Microsecond).String())
 		}
 
-		const format = "%s %s %-25s %10s\n"
-		fmt.Printf(format, identity, status, event.Request.Path, respTime)
+		table.AddRow(reqTime, identity, status, path, respTime)
+		table.Draw()
 	}
 	return stream.Err()
+}
+
+// traceErrorLogWithUI iterates over the error log
+// event stream and prints a table-like UI to STDOUT.
+//
+// Each event is displayed as a new row and the UI is
+// automatically adjusted to the terminal window size.
+func traceErrorLogWithUI(stream *kes.ErrorStream) error {
+	table := xterm.NewTable("Time", "Error")
+	table.Header()[0].Width = 0.12
+	table.Header()[1].Width = 0.87
+
+	table.Header()[0].Alignment = xterm.AlignCenter
+	table.Header()[1].Alignment = xterm.AlignLeft
+
+	// Initialize the terminal UI and listen on resize
+	// events and Ctrl-C / Escape key events.
+	if err := ui.Init(); err != nil {
+		return err
+	}
+	defer table.Draw() // Draw the table AFTER closing the UI one more time.
+	defer ui.Close()   // Closing the UI cleans the screen.
+
+	go func() {
+		events := ui.PollEvents()
+		for {
+			switch event := <-events; {
+			case event.Type == ui.ResizeEvent:
+				table.Draw()
+			case event.ID == "<C-c>" || event.ID == "<Escape>":
+				if err := stream.Close(); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+				}
+				return
+			}
+		}
+	}()
+
+	table.Draw()
+	for stream.Next() {
+		// An error event message has the following form: YY/MM/DD hh/mm/ss <message>.
+		// We split this message into 3 segements:
+		//  1. YY/MM/DD
+		//  2. hh/mm/ss
+		//  3. <message>
+		// The 2nd segment is the day-time and 3rd segment is the actual error message.
+		// We replace any '\n' with a whitespace to avoid multi-line table rows.
+		segements := strings.SplitN(stream.Event().Message, " ", 3)
+		var (
+			message *xterm.Cell
+			reqTime *xterm.Cell
+		)
+		if len(segements) == 3 {
+			message = xterm.NewCell(strings.ReplaceAll(segements[2], "\n", " "))
+			reqTime = xterm.NewCell(segements[1])
+		} else {
+			hh, mm, ss := time.Now().Clock()
+
+			message = xterm.NewCell(strings.ReplaceAll(stream.Event().Message, "\n", " "))
+			reqTime = xterm.NewCell(fmt.Sprintf("%02d:%02d:%02d", hh, mm, ss))
+		}
+		table.AddRow(reqTime, message)
+		table.Draw()
+	}
+	return stream.Err()
+}
+
+// closeOn closes c if one of the given system signals
+// occurs. If c.Close() returns an error this error is
+// written to STDERR.
+func closeOn(c io.Closer, signals ...os.Signal) {
+	sigCh := make(chan os.Signal)
+	signal.Notify(sigCh, signals...)
+
+	go func() {
+		<-sigCh
+		if err := c.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}()
 }
