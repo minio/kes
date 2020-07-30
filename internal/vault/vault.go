@@ -14,7 +14,6 @@ package vault
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -152,14 +151,20 @@ func (s *Store) Authenticate(context context.Context) error {
 	return nil
 }
 
-var errSealed = kes.NewError(http.StatusForbidden, "key store is sealed")
+var (
+	errSealed = kes.NewError(http.StatusForbidden, "key store is sealed")
+
+	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
+	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
+	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+)
 
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
 func (s *Store) Get(key string) (string, error) {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return "", errNoConnection
+		s.logf("vault: no connection to vault server: '%s'", s.Addr)
+		return "", errGetKey
 	}
 	if s.client.Sealed() {
 		return "", errSealed
@@ -174,19 +179,19 @@ func (s *Store) Get(key string) (string, error) {
 			return "", kes.ErrKeyNotFound
 		}
 		s.logf("vault: failed to read '%s': %v", location, err)
-		return "", err
+		return "", errGetKey
 	}
 
 	// Verify that we got a well-formed response from Vault
 	v, ok := entry.Data[key]
 	if !ok || v == nil {
 		s.logf("vault: failed to read '%s': entry exists but no secret key is present", location)
-		return "", errors.New("vault: K/V entry does not contain any value")
+		return "", errGetKey
 	}
 	value, ok := v.(string)
 	if !ok {
 		s.logf("vault: failed to read '%s': invalid K/V format", location)
-		return "", errors.New("vault: invalid K/V entry format")
+		return "", errGetKey
 	}
 	return value, nil
 }
@@ -196,8 +201,8 @@ func (s *Store) Get(key string) (string, error) {
 // it returns kes.ErrKeyExists.
 func (s *Store) Create(key, value string) error {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return errNoConnection
+		s.logf("vault: no connection to vault server: '%s'", s.Addr)
+		return errCreateKey
 	}
 	if s.client.Sealed() {
 		return errSealed
@@ -229,7 +234,7 @@ func (s *Store) Create(key, value string) error {
 		return kes.ErrKeyExists
 	case err != nil:
 		s.logf("vault: failed to create '%s': %v", location, err)
-		return err
+		return errCreateKey
 	}
 
 	// Finally, we create the value since it seems that it
@@ -243,7 +248,7 @@ func (s *Store) Create(key, value string) error {
 	})
 	if err != nil {
 		s.logf("vault: failed to create '%s': %v", location, err)
-		return err
+		return errCreateKey
 	}
 	return nil
 }
@@ -252,8 +257,8 @@ func (s *Store) Create(key, value string) error {
 // from Vault, if it exists.
 func (s *Store) Delete(key string) error {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return errNoConnection
+		s.logf("vault: no connection to vault server: '%s'", s.Addr)
+		return errDeleteKey
 	}
 	if s.client.Sealed() {
 		return errSealed
@@ -267,24 +272,9 @@ func (s *Store) Delete(key string) error {
 	_, err := s.client.Logical().Delete(location)
 	if err != nil {
 		s.logf("vault: failed to delete '%s': %v", location, err)
+		return errDeleteKey
 	}
-	return err
-}
-
-// errNoConnection is the error returned and logged by
-// the key store if the vault client hasn't been initialized.
-//
-// This error is returned by Create, Get, Delete, a.s.o.
-// in case of an invalid configuration - i.e. when Authenticate()
-// hasn't been called.
-var errNoConnection = errors.New("vault: no connection to vault server")
-
-func (s *Store) log(v ...interface{}) {
-	if s.ErrorLog == nil {
-		log.Println(v...)
-	} else {
-		s.ErrorLog.Println(v...)
-	}
+	return nil
 }
 
 func (s *Store) logf(format string, v ...interface{}) {
