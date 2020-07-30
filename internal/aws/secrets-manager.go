@@ -5,7 +5,6 @@
 package aws
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -63,6 +62,12 @@ type SecretsManager struct {
 
 var _ secret.Remote = (*SecretsManager)(nil)
 
+var (
+	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
+	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
+	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+)
+
 // Create stores the given key-value pair at the AWS SecretsManager
 // if and only if it doesn't exists. If such an entry already exists
 // it returns kes.ErrKeyExists.
@@ -72,8 +77,8 @@ var _ secret.Remote = (*SecretsManager)(nil)
 // encrypting secrets at the AWS SecretsManager.
 func (s *SecretsManager) Create(key, value string) error {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return errNoConnection
+		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		return errCreateKey
 	}
 
 	createOpt := secretsmanager.CreateSecretInput{
@@ -90,9 +95,8 @@ func (s *SecretsManager) Create(key, value string) error {
 				return kes.ErrKeyExists
 			}
 		}
-		err = fmt.Errorf("aws: failed to create '%s': %v", key, err)
-		s.log(err)
-		return err
+		s.logf("aws: failed to create '%s': %v", key, err)
+		return errCreateKey
 	}
 	return nil
 }
@@ -101,8 +105,8 @@ func (s *SecretsManager) Create(key, value string) error {
 // If no entry for key exists, it returns kes.ErrKeyNotFound.
 func (s *SecretsManager) Get(key string) (string, error) {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return "", errNoConnection
+		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		return "", errGetKey
 	}
 
 	response, err := s.client.GetSecretValue(&secretsmanager.GetSecretValueInput{
@@ -117,9 +121,8 @@ func (s *SecretsManager) Get(key string) (string, error) {
 				return "", kes.ErrKeyNotFound
 			}
 		}
-		err = fmt.Errorf("aws: failed to read '%s': %v", key, err)
-		s.log(err)
-		return "", err
+		s.logf("aws: failed to read '%s': %v", key, err)
+		return "", errGetKey
 	}
 
 	// AWS has two different ways to store a secret. Either as
@@ -139,8 +142,8 @@ func (s *SecretsManager) Get(key string) (string, error) {
 // it exists.
 func (s *SecretsManager) Delete(key string) error {
 	if s.client == nil {
-		s.log(errNoConnection)
-		return errNoConnection
+		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		return errDeleteKey
 	}
 
 	_, err := s.client.DeleteSecret(&secretsmanager.DeleteSecretInput{
@@ -153,9 +156,8 @@ func (s *SecretsManager) Delete(key string) error {
 				return nil
 			}
 		}
-		err = fmt.Errorf("aws: failed to delete '%s': %v", key, err)
-		s.log(err)
-		return err
+		s.logf("aws: failed to delete '%s': %v", key, err)
+		return errDeleteKey
 	}
 	return nil
 }
@@ -196,19 +198,10 @@ func (s *SecretsManager) Authenticate() error {
 	return nil
 }
 
-// errNoConnection is the error returned and logged by
-// the key store if the AWS Secrets Manager client hasn't
-// been initialized.
-//
-// This error is returned by Create, Get, Delete, a.s.o.
-// in case of an invalid configuration - i.e. when Authenticate()
-// hasn't been called.
-var errNoConnection = errors.New("aws: no connection to AWS secrets manager")
-
-func (s *SecretsManager) log(v ...interface{}) {
+func (s *SecretsManager) logf(format string, v ...interface{}) {
 	if s.ErrorLog == nil {
-		log.Println(v...)
+		log.Printf(format, v...)
 	} else {
-		s.ErrorLog.Println(v...)
+		s.ErrorLog.Printf(format, v...)
 	}
 }
