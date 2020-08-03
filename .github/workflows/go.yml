@@ -54,3 +54,25 @@ jobs:
         GO111MODULE: on
       run: |
          go test ./...
+
+  integration:
+    name: Integration Test Go ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.14.x]
+    steps:
+    - name: Set up Go ${{ matrix.go-version }}
+      uses: actions/setup-go@v1
+      with:
+        go-version: ${{ matrix.go-version }}
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v1
+
+    - name: Integration Test
+      env:
+        GO111MODULE: on
+      run: |
+         go test -integration ./...
