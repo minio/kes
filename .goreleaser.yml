@@ -40,17 +40,10 @@ builds:
 
 archives:
   -
-    name_template: "{{ .Os }}-{{ .Arch }}"
-    format: zip
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
     replacements:
       arm: arm
-    files:
-      - README.md
-      - LICENSE
-
-checksum:
-  name_template: checksums.txt
-  algorithm: sha256
 
 signs:
   -

@@ -8,17 +8,17 @@ KES is a stateless and distributed key-management system for high-performance ap
 
 ### Binary Releases
 
-| OS      | ARCH  | Binary            |
-|:-------:|:-----:|:-----------------:|
-| Linux   | amd64 | [linux-amd64](https://github.com/minio/kes/releases/latest/download/linux-amd64.zip)
-| Linux   | arm64 | [linux-arm64](https://github.com/minio/kes/releases/latest/download/linux-arm64.zip)
-| Linux   | arm   | [linux-arm](https://github.com/minio/kes/releases/latest/download/linux-arm.zip)
-| Apple   | amd64 | [darwin-amd64](https://github.com/minio/kes/releases/latest/download/darwin-amd64.zip)
-| Windows | amd64 | [windows-amd64](https://github.com/minio/kes/releases/latest/download/windows-amd64.zip)
+| OS      | ARCH  | Binary                                                                                       |
+|:-------:|:-----:|:--------------------------------------------------------------------------------------------:|
+| Linux   | amd64 | [linux-amd64](https://github.com/minio/kes/releases/latest/download/kes-linux-amd64)         |
+| Linux   | arm64 | [linux-arm64](https://github.com/minio/kes/releases/latest/download/kes-linux-arm64)         |
+| Linux   | arm   | [linux-arm](https://github.com/minio/kes/releases/latest/download/kes-linux-arm)             |
+| Apple   | amd64 | [darwin-amd64](https://github.com/minio/kes/releases/latest/download/kes-darwin-amd64)       |
+| Windows | amd64 | [windows-amd64](https://github.com/minio/kes/releases/latest/download/kes-windows-amd64.exe) |
 
-You can also verify the binary with [minisign](https://jedisct1.github.io/minisign/) by downloading the corresponding [`.minisign`](https://github.com/minio/kes/releases/latest) signature file. Then run:
+You can also verify the binary with [minisign](https://jedisct1.github.io/minisign/) by downloading the corresponding [`.minisig`](https://github.com/minio/kes/releases/latest) signature file. Then run:
 ```
-minisign -Vm <OS-ARCH>.zip -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
+minisign -Vm kes-<OS>-<ARCH> -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 ```
 
 ### Docker
