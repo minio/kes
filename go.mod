@@ -1,6 +1,6 @@
 module github.com/minio/kes
 
-go 1.13
+go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.26.3
