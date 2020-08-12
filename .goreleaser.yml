@@ -64,7 +64,7 @@ dockers:
   -
     goos: linux
     goarch: amd64
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.release
     image_templates:
       - minio/kes:{{ .Tag }}
       - minio/kes:latest
