@@ -96,7 +96,7 @@ func logTrace(args []string) error {
 
 	switch strings.ToLower(typeFlag) {
 	case "audit":
-		stream, err := client.TraceAuditLog()
+		stream, err := client.AuditLog()
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func logTrace(args []string) error {
 		}
 		return traceAuditLogWithUI(stream)
 	case "error":
-		stream, err := client.TraceErrorLog()
+		stream, err := client.ErrorLog()
 		if err != nil {
 			return err
 		}
