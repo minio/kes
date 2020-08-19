@@ -480,7 +480,7 @@ func (c *Client) ListPolicies(pattern string) ([]string, error) {
 		pattern = "*" // => default to: list "all" policies
 	}
 	client := retry(c.HTTPClient)
-	resp, err := client.Get(endpoint(c.Endpoint, "/v1/policy/list", c.Endpoint, url.PathEscape(pattern)))
+	resp, err := client.Get(endpoint(c.Endpoint, "/v1/policy/list", url.PathEscape(pattern)))
 	if err != nil {
 		return nil, err
 	}
