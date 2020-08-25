@@ -575,7 +575,7 @@ func (c *Client) ForgetIdentity(id Identity) error {
 
 // AuditLog returns a stream of audit events produced by the
 // KES server. The stream does not contain any events that
-// happend in the past.
+// happened in the past.
 //
 // It returns ErrNotAllowed if the client does not
 // have sufficient permissions to subscribe to the
@@ -594,7 +594,7 @@ func (c *Client) AuditLog() (*AuditStream, error) {
 
 // ErrorLog returns a stream of error events produced by the
 // KES server. The stream does not contain any events that
-// happend in the past.
+// happened in the past.
 //
 // It returns ErrNotAllowed if the client does not
 // have sufficient permissions to subscribe to the

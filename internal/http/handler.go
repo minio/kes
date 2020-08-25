@@ -16,7 +16,9 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	xlog "github.com/minio/kes/internal/log"
+	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/secret"
+	"github.com/prometheus/common/expfmt"
 	"github.com/secure-io/sio-go/sioutil"
 )
 
@@ -535,11 +537,7 @@ func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
 		log.AddOutput(out)
 		defer log.RemoveOutput(out)
 
-		// TODO(aead): set appropriate content-type.
-		// For audit logs we could either set "application/x-ndjson"
-		// or "application/octet-stream". However, for error logs
-		// "application/x-ndjson" would be incorrect unless/until we
-		// implement JSON error logging.
+		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.WriteHeader(http.StatusOK)
 
 		<-r.Context().Done() // Wait for the client to close the connection
@@ -568,14 +566,25 @@ func HandleTraceErrorLog(log *xlog.SystemLog) http.HandlerFunc {
 		log.AddOutput(out)
 		defer log.RemoveOutput(out)
 
-		// TODO(aead): set appropriate content-type.
-		// For audit logs we could either set "application/x-ndjson"
-		// or "application/octet-stream". However, for error logs
-		// "application/x-ndjson" would be incorrect unless/until we
-		// implement JSON error logging.
+		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.WriteHeader(http.StatusOK)
 
 		<-r.Context().Done() // Wait for the client to close the connection
+	}
+}
+
+// HandleMetrics returns an HTTP handler that collects all outstanding
+// metrics information and writes them to the client.
+func HandleMetrics(metrics *metric.Metrics) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// We encode the metrics depending upon what encoding
+		// formats are accepted/supported by the client.
+		contentType := expfmt.Negotiate(r.Header)
+
+		w.Header().Set("Content-Type", string(contentType))
+		w.WriteHeader(http.StatusOK)
+
+		metrics.EncodeTo(expfmt.NewEncoder(w, contentType))
 	}
 }
 
