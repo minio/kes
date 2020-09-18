@@ -30,7 +30,7 @@ func TLSProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 		// However, there is no simple and clean solution
 		// that does not require some extended changes.
 		// (One option may be another http.HandlerFunc type)
-		// For now, we can keep this until we've sattled
+		// For now, we can keep this until we've settled
 		// on a cleaner solution.
 
 		aw, ok := w.(*log.AuditResponseWriter)

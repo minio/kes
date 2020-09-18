@@ -37,17 +37,17 @@ tls:
       # certificate of the kes client forwarded by the TLS proxy.
       cert: X-Tls-Client-Cert
 
-# The (pre-defined) policy definitions. 
+# The (pre-defined) policy definitions.
 #
 # A policy must have an unique name (e.g my-app) and specifies which
 # server APIs can be accessed. An API path pattern is a glob pattern
 # of the following form:
 #   <API-version>/<API>/<operation>/[<argument-0>/<argument-1>/...]>
-# 
+#
 # Each KES server API has an unique path - e.g. /v1/key/create/<key-name>.
 # A client request is allowed if and only if the request URL path matches
 # one of the policy path patterns.
-# 
+#
 # A policy has zero (by default) or more assigned identities. However,
 # an identity can never be assigned to more than one policy at the same
 # time. So, one policy has N assigned identities but one identity is
@@ -71,6 +71,7 @@ policy:
     - c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731
 
   my-app-ops:
+    paths:
     - /v1/key/delete/my-app*
     - /v1/policy/show/my-app
     - /v1/identity/assign/my-app/*
@@ -99,15 +100,15 @@ log:
   # Enable/Disable logging error events to STDERR. Valid values
   # are "on" or "off". If not set the default is "on". If no error
   # events should be logged to STDERR it has to be set explicitly
-  # to: "off".  
+  # to: "off".
   error: on
-  
+
   # Enable/Disable logging audit events to STDOUT. Valid values
   # are "on" and "off". If not set the default is "off".
   # Logging audit events to STDOUT may flood your console since
   # there will be one audit log event per request-response pair.
   #
-  # For tracing/monitoring audit logs take a look at the 
+  # For tracing/monitoring audit logs take a look at the
   # /v1/log/audit/trace API.
   #
   # Each audit event is a JSON object representing a request-response
@@ -127,14 +128,14 @@ log:
   # request-response pair - including invalid requests.
   audit: off
 
-# The keys section specifies which KMS - or in general key store - is 
+# The keys section specifies which KMS - or in general key store - is
 # used to store and fetch encryption keys.
 # A KES server can only use one KMS / key store at the same time.
 # If no store is explicitly specified the server will use store
 # keys in-memory. In this case all keys are lost when the KES server
 # restarts.
 keys:
-  # Configuration for storing keys on the filesytem.
+  # Configuration for storing keys on the filesystem.
   # The path must be path to a directory. If it doesn't
   # exist then the KES server will create the directory.
   #
@@ -142,7 +143,7 @@ keys:
   # and development. It should not be used for production.
   fs:
     path: "" # Path to directory. Keys will be stored as files.
-  
+
   # Hashicorp Vault configuration. The KES server will store/fetch
   # secret keys at/from Vault's key-value backend.
   #
@@ -152,17 +153,17 @@ keys:
     endpoint: ""  # The Vault endpoint - e.g. https://127.0.0.1:8200
     engine: ""    # The path of the K/V engine - e.g. secrets. If empty, defaults to: kv. (Vault default)
     namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
-    prefix: ""    # An optional K/V prefix. The server will store keys under this prefix. 
+    prefix: ""    # An optional K/V prefix. The server will store keys under this prefix.
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
       engine: ""  # The path of the AppRole engine - e.g. authenticate. If empty, defaults to: approle. (Vault default)
       id: ""      # Your AppRole Role ID
       secret: ""  # Your AppRole Secret ID
       retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
-    tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification  
+    tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification
       key: ""     # Path to the TLS client private key for mTLS authentication to Vault
-      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vailt
-      ca: ""      # Path to one or multiple PEM root CA certificates 
-    status:     # Vault status configuration. The server will periodically reach out to Vault to check its status. 
+      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vault
+      ca: ""      # Path to one or multiple PEM root CA certificates
+    status:     # Vault status configuration. The server will periodically reach out to Vault to check its status.
       ping: 10s   # Duration until the server checks Vault's status again.
 
   aws:
@@ -178,14 +179,14 @@ keys:
         secretkey: ""  # Your AWS Secret Key
         token: ""      # Your AWS session token (usually optional)
 
-   gemalto:
-     # The Gemalto KeySecure key store. The server will store
-     # keys as secrets on the KeySecure instance.
-     keysecure:
-       endpoint: ""    # The KeySecure endpoint - e.g. https://127.0.0.1
-       credentials:    # The authentication to access the KeySecure instance.
-         token: ""     # The refresh token to obtain new short-lived authentication tokens.
-         domain: ""    # The KeySecure domain for which the refresh token is valid. If empty, defaults to the root domain.
-         retry: 15s    # The time the KES server waits before it tries to re-authenticate after connection loss.
-       tls:            # The KeySecure client TLS configuration
-         ca: ""        # Path to one or multiple PEM-encoded CA certificates for verifying the KeySecure TLS certificate.
+  gemalto:
+    # The Gemalto KeySecure key store. The server will store
+    # keys as secrets on the KeySecure instance.
+    keysecure:
+      endpoint: ""    # The KeySecure endpoint - e.g. https://127.0.0.1
+      credentials:    # The authentication to access the KeySecure instance.
+        token: ""     # The refresh token to obtain new short-lived authentication tokens.
+        domain: ""    # The KeySecure domain for which the refresh token is valid. If empty, defaults to the root domain.
+        retry: 15s    # The time the KES server waits before it tries to re-authenticate after connection loss.
+      tls:            # The KeySecure client TLS configuration
+        ca: ""        # Path to one or multiple PEM-encoded CA certificates for verifying the KeySecure TLS certificate.

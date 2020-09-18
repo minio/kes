@@ -15,10 +15,10 @@ const keyCmdUsage = `usage: %s <command>
     create               Create a new secret key at a kes server.
     delete               Delete a secret key from a kes server.
 
-    derive               Derive a new key from a secret key.     
-    decrypt              Decrypt an encrypted key with a secret key. 
+    derive               Derive a new key from a secret key.
+    decrypt              Decrypt an encrypted key with a secret key.
 
-  -h, --help             Show this list of command line optios.
+  -h, --help             Show this list of command line options.
 `
 
 func key(args []string) error {

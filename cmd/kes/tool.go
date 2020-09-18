@@ -11,7 +11,7 @@ import (
 )
 
 const toolCmdUsage = `usage: %s <command>
-  
+
   identity             Identity management tools.
 
   -h, --help           Show list of command-line options

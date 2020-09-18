@@ -24,7 +24,7 @@ const (
 // By default, text is aligned to the left.
 type Alignment int
 
-// Format alignes the given text and returns a
+// Format aligns the given text and returns a
 // string that is exactly length runes long.
 //
 // If text is exactly length runes long then Format
@@ -32,7 +32,7 @@ type Alignment int
 //
 // If text consists of fewer then length runes then
 // Format pads text to the given length with whitespaces
-// depending on the aligment:
+// depending on the alignment:
 //  - AlignLeft:   whitespaces are added at the end
 //  - AlignRight:  whitespaces are added at the beginning
 //  - AlignCenter: whitespaces are added at the end and

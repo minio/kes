@@ -59,7 +59,7 @@ func toolIdentity(args []string) error {
 	}
 }
 
-const newIdentityCmdUsage = `usage: %s [options] <name> 
+const newIdentityCmdUsage = `usage: %s [options] <name>
 
   --key                Path to the private key (default: ./private.key)
   --cert               Path to the certificate (default: ./public.cert)

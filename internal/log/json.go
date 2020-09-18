@@ -23,7 +23,7 @@ import (
 //     "message":"<content>"
 //   }
 //
-// Note that a JSONWriter does not try to concatinate
+// Note that a JSONWriter does not try to concatenate
 // multiple Write calls into the same JSON object.
 // The main purpose of a JSONWriter is to convert
 // the output of a log.Logger into JSON.

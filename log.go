@@ -52,7 +52,7 @@ type ErrorStream struct {
 }
 
 // Err returns the first non-EOF error that was encountered
-// while iterating over the stream and unmarshaling ErrorEvents.
+// while iterating over the stream and un-marshaling ErrorEvents.
 //
 // Err does not return any error returned from Close.
 func (s *ErrorStream) Err() error { return s.err }
@@ -162,7 +162,7 @@ type AuditStream struct {
 }
 
 // Err returns the first non-EOF error that was encountered
-// while iterating over the stream and unmarshaling AuditEvents.
+// while iterating over the stream and un-marshaling AuditEvents.
 //
 // Err does not return any error returned from Close.
 func (s *AuditStream) Err() error { return s.err }

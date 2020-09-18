@@ -96,7 +96,7 @@ func (r *retry) Do(req *http.Request) (*http.Response, error) {
 	//
 	// A request can only be retried if we can seek to the
 	// start of the request body. Otherwise, we may send a
-	// parial response body when we retry the request.
+	// partial response body when we retry the request.
 	var body RetryReader
 	if req.Body != nil {
 		var ok bool

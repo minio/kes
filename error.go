@@ -78,7 +78,7 @@ func (e Error) Error() string { return e.message }
 //
 // If the response status code is < 400, e.g. 200 OK,
 // parseErrorResponse returns nil and does not attempt
-// to read or close the responde body.
+// to read or close the response body.
 //
 // If resp is an error response, parseErrorResponse reads
 // and closes the response body.

@@ -344,7 +344,7 @@ func HandleEncryptKey(store *secret.Store) http.HandlerFunc {
 }
 
 // HandleDecryptKey returns an http.HandlerFunc that decrypts
-// and verifies a ciphertext sent by the client procuded by
+// and verifies a ciphertext sent by the client produced by
 // HandleEncryptKey or HandleGenerateKey.
 //
 // If the client has provided a context value during

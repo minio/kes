@@ -17,7 +17,7 @@ import (
 )
 
 // RetryReader returns an io.ReadSeeker that can be
-// used as request body for retriable requests via
+// used as request body for retryable requests via
 // Seek(0, io.SeekStart).
 // The returned io.ReadSeeker implements io.Closer.
 //
@@ -44,7 +44,7 @@ func (nopCloser) Close() error { return nil }
 //
 // If a request contains a non-nil body then this
 // body must implement io.Seeker. Any io.ReadSeeker
-// can be turned into a requst body via the RetryReader
+// can be turned into a request body via the RetryReader
 // function.
 //
 // Retry retries a request at most N times and waits
@@ -181,7 +181,7 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 			return nil, &url.Error{
 				Op:  req.Method,
 				URL: req.URL.String(),
-				Err: errors.New("http: request body does not implemement io.Seeker"),
+				Err: errors.New("http: request body does not implement io.Seeker"),
 			}
 		}
 	}

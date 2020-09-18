@@ -71,7 +71,7 @@ type Store struct {
 
 // Create adds the given secret with the given name to
 // the secret store. If there is already a secret with
-// this name then it does not replacce the secret and
+// this name then it does not replace the secret and
 // returns kes.ErrKeyExists.
 func (s *Store) Create(name string, secret Secret) (err error) {
 	if err = s.Remote.Create(name, secret.String()); err != nil {
@@ -112,7 +112,7 @@ func (s *Store) Get(name string) (Secret, error) {
 
 // StartGC starts the cache garbage collection background process.
 // The GC will discard all cached secrets after expiry. Further,
-// it will discard all entries that havn't been used for unusedExpiry.
+// it will discard all entries that haven't been used for unusedExpiry.
 //
 // If expiry is 0 the GC will not discard any secrets. Similarly, if
 // the unusedExpiry is 0 then the GC will not discard unused secrets.

@@ -4,7 +4,7 @@ KES is a stateless and distributed key-management system for high-performance ap
 ## Architecture
 [![KES](https://raw.githubusercontent.com/minio/kes/master/.github/arch.png)](https://min.io)
 
-## Install 
+## Install
 
 ### Binary Releases
 
@@ -33,7 +33,7 @@ docker pull minio/kes
 ```
 GO111MODULE=on go get github.com/minio/kes/cmd/kes
 ```
-> You will need a working Go environment. Therefore, please follow [How to install Go](https://golang.org/doc/install). 
+> You will need a working Go environment. Therefore, please follow [How to install Go](https://golang.org/doc/install).
 > Minimum version required is go1.14
 
 ## Getting Started
@@ -47,7 +47,7 @@ If you instead want to run a KES server locally as your first steps then checkou
 
 #### 1. Fetch the root identity
 
-As an inital step, you will need to download the "private" key and certificate
+As an initial step, you will need to download the "private" key and certificate
 to authenticate to the KES server as the root identity.
 ```sh
 curl -sSL --tlsv1.2 \

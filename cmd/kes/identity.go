@@ -14,7 +14,7 @@ import (
 )
 
 const identityCmdUsage = `usage: %s <command>
-  
+
   assign               Assign an identity to a policy.
   list                 List identities at the KES server.
   forget               Forget an identity.
@@ -50,7 +50,7 @@ func identity(args []string) error {
 
 const assignIdentityCmdUsage = `usage: %s <identity> <policy>
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -81,7 +81,7 @@ func assignIdentity(args []string) error {
 
 const listIdentityCmdUsage = `usage: %s [<pattern>]
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
 `
@@ -140,8 +140,8 @@ func listIdentity(args []string) error {
 
 const forgetIdentityCmdUsage = `usage: %s <identity>
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake  
-  
+  -k, --insecure       Skip X.509 certificate validation during TLS handshake
+
   -h, --help           Show list of command-line options
 `
 

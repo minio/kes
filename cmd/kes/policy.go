@@ -18,7 +18,7 @@ import (
 const policyCmdUsage = `Manage named KES policies.
 
 usage: %s <command>
-  
+
   add                  Add a new named policy.
   show                 Download and print a named policy.
   list                 List named policies.
@@ -60,7 +60,7 @@ It reads a JSON encoded policy from the specified file and
 adds it to the policy set of the KES server.
 
 usage: %s <policy> <file>
-  
+
   -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options
@@ -106,7 +106,7 @@ By default, the policy definition is printed in a human-readable
 format to a terminal or as JSON to a UNIX pipe / file.
 
 usage: %s <policy>
-   
+
   -k, --insecure       Skip X.509 certificate validation during TLS handshake
 
   -h, --help           Show list of command-line options

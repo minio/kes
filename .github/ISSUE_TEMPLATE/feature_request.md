@@ -15,7 +15,7 @@ assignees: aead
 #### Additional context
 
 1. Are there alternative solutions?
-<!-- If yes, please elaborate -->   
+<!-- If yes, please elaborate -->
 
 2. Would your solution cause a major breaking API change?
 <!-- If yes, which part of the API? -->

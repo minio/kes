@@ -58,7 +58,7 @@ usage: %s [flags]
 
   --type               Specify the log event type. (default: audit)
                        Valid options are:
-                          --type=audit  
+                          --type=audit
                           --type=error
 
   --json               Print log events as JSON.
@@ -250,20 +250,20 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) error {
 	table.Draw()
 	for stream.Next() {
 		// An error event message has the following form: YY/MM/DD hh/mm/ss <message>.
-		// We split this message into 3 segements:
+		// We split this message into 3 segments:
 		//  1. YY/MM/DD
 		//  2. hh/mm/ss
 		//  3. <message>
 		// The 2nd segment is the day-time and 3rd segment is the actual error message.
 		// We replace any '\n' with a whitespace to avoid multi-line table rows.
-		segements := strings.SplitN(stream.Event().Message, " ", 3)
+		segments := strings.SplitN(stream.Event().Message, " ", 3)
 		var (
 			message *xterm.Cell
 			reqTime *xterm.Cell
 		)
-		if len(segements) == 3 {
-			message = xterm.NewCell(strings.ReplaceAll(segements[2], "\n", " "))
-			reqTime = xterm.NewCell(segements[1])
+		if len(segments) == 3 {
+			message = xterm.NewCell(strings.ReplaceAll(segments[2], "\n", " "))
+			reqTime = xterm.NewCell(segments[1])
 		} else {
 			hh, mm, ss := time.Now().Clock()
 

@@ -54,7 +54,7 @@ func TestJSONWriterWrite(t *testing.T) {
 		}
 
 		// Apart from testing that the JSONWriter produces expected output
-		// we also test that the output can be unmarshaled to an ErrorEvent.
+		// we also test that the output can be un-marshaled to an ErrorEvent.
 		// This ensures that the JSONWriter actually implements JSON marshaling
 		// of the ErrorEvent type.
 
