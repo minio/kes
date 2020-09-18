@@ -61,7 +61,7 @@ type Client struct {
 }
 
 // NewClient returns a new KES client with the given
-// KES server endpoint that uses the given TLS certficate
+// KES server endpoint that uses the given TLS certificate
 // mTLS authentication.
 //
 // The TLS certificate must be valid for client authentication.
@@ -121,7 +121,7 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 // However, only the ciphertext representation gets
 // encoded. The plaintext should never be stored
 // anywhere.
-// Therefore, after unmarshaling there will be no
+// Therefore, after un-marshaling there will be no
 // plaintext representation. To obtain it the
 // ciphertext must be decrypted.
 type DEK struct {
@@ -333,7 +333,7 @@ func (c *Client) GenerateKey(name string, context []byte) (DEK, error) {
 	return DEK(response), nil
 }
 
-// Encrypt encrypts and authentictes the given plaintext
+// Encrypt encrypts and authenticates the given plaintext
 // with the specified key and returns the corresponding
 // ciphertext on success.
 //

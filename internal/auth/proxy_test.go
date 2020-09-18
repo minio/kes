@@ -13,24 +13,24 @@ import (
 )
 
 var tlsProxyAddTests = []struct {
-	Identites []kes.Identity
+	Identities []kes.Identity
 }{
 	{
-		Identites: nil,
+		Identities: nil,
 	},
 	{
-		Identites: []kes.Identity{
+		Identities: []kes.Identity{
 			"57eb2da320a48ebe2750e95c50b3d64240aef4cd5d54c28a4f25155e88c98580",
 		},
 	},
 	{
-		Identites: []kes.Identity{
+		Identities: []kes.Identity{
 			kes.IdentityUnknown,
 			"57eb2da320a48ebe2750e95c50b3d64240aef4cd5d54c28a4f25155e88c98580",
 		},
 	},
 	{
-		Identites: []kes.Identity{
+		Identities: []kes.Identity{
 			kes.IdentityUnknown,
 			"57eb2da320a48ebe2750e95c50b3d64240aef4cd5d54c28a4f25155e88c98580",
 			"163d766f3e88f2a02b15a46bc541cc679c4cbb0a060405f298d5fc0d9d876bb3",
@@ -41,7 +41,7 @@ var tlsProxyAddTests = []struct {
 func TestTLSProxyAdd(t *testing.T) {
 	for i, test := range tlsProxyAddTests {
 		var proxy TLSProxy
-		for j, identity := range test.Identites {
+		for j, identity := range test.Identities {
 			proxy.Add(identity)
 			if !identity.IsUnknown() && !proxy.Is(identity) {
 				t.Fatalf("Test %d: %d-th identity '%s' should be a proxy but is not", i, j, identity)

@@ -45,15 +45,15 @@ const serverCmdUsage = `usage: %s [options]
   --addr               The address of the server (default: 127.0.0.1:7373)
   --config             Path to the server configuration file
   --root               The identity of root - who can perform any operation.
-                       A root identity must be specified - either via this 
-                       flag or within the config file. This flag takes 
+                       A root identity must be specified - either via this
+                       flag or within the config file. This flag takes
                        precedence over the config file.
 
   --mlock              Lock all allocated memory pages to prevent the OS from
                        swapping them to the disk and eventually leak secrets.
 
   --key                Path to the TLS private key. It takes precedence over
-                       the config file. 
+                       the config file.
   --cert               Path to the TLS certificate. It takes precedence over
                        the config file.
 
@@ -706,7 +706,7 @@ func (tw *timeoutWriter) WriteHeader(statusCode int) {
 func (tw *timeoutWriter) Write(p []byte) (int, error) {
 	// We must not hold the lock while writing to the
 	// underlying http.ResponseWriter (via Write([]byte))
-	// b/c e.g. a slow/malisious client would block the
+	// b/c e.g. a slow/malicious client would block the
 	// lock.Unlock.
 	// In this case we cannot accquire the lock when we
 	// want to mark the timeoutWriter as timed out (See: timeout()).

@@ -200,7 +200,7 @@ func (r *Roles) Verify(req *http.Request) error {
 	return policy.Verify(req)
 }
 
-// Identify computes the idenitiy of the X.509
+// Identify computes the identity of the X.509
 // certificate presented by the peer who sent
 // the request.
 //

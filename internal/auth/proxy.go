@@ -33,7 +33,7 @@ type TLSProxy struct {
 	CertHeader string
 
 	// The X.509 certificate verification options used when
-	// verifiying the certificate that has been sent by the
+	// verifying the certificate that has been sent by the
 	// actual kes client and forwarded by the TLS proxy as
 	// part of the request headers.
 	//

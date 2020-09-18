@@ -46,7 +46,7 @@ type client struct {
 // from the given KeySecure endpoint via the given refresh
 // token.
 //
-// Athenticate should be called to obtain the first authentication
+// Authenticate should be called to obtain the first authentication
 // token. This token can then be renewed via RenewAuthToken.
 func (c *client) Authenticate(endpoint string, login Credentials) error {
 	type Request struct {

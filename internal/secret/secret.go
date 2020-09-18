@@ -128,9 +128,9 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 // returns the resuting plaintext. It returns an
 // error if ciphertext is malformed or not authentic.
 func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error) {
-	// TODO(aead): The Go JSON unmarshaling is malleable.
+	// TODO(aead): The Go JSON un-marshaling is malleable.
 	// For instance, it ignores the first key-value pair if
-	// the same key is present more than nonce or ignores
+	// the same key is present more than once or ignores
 	// unknown keys by default.
 
 	type SealedSecret struct {

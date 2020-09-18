@@ -6,7 +6,7 @@
 // stores secret keys as key-value entries on the
 // Hashicorp Vault K/V secret backend.
 //
-// Vault is a KMS implementation with many featues.
+// Vault is a KMS implementation with many features.
 // This packages only leverages the key-value store.
 // For an introduction to Vault see: https://www.vaultproject.io/
 // For an K/V API overview see: https://www.vaultproject.io/api/secret/kv/kv-v1.html
