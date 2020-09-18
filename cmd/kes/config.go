@@ -104,6 +104,19 @@ type serverConfig struct {
 				} `yaml:"tls"`
 			} `yaml:"keysecure"`
 		} `yaml:"gemalto"`
+
+		GCP struct {
+			SecretManager struct {
+				ProjectID   string `yaml:"project_id"`
+				Endpoint    string `yaml:"endpoint"`
+				Credentials struct {
+					Client   string `yaml:"client_email"`
+					ClientID string `yaml:"client_id"`
+					KeyID    string `yaml:"private_key_id"`
+					Key      string `yaml:"private_key"`
+				} `yaml:"credentials"`
+			} `yaml:"secretmanager"`
+		} `yaml:"gcp"`
 	} `yaml:"keys"`
 }
 
@@ -158,6 +171,9 @@ func (config *serverConfig) SetDefaults() {
 	}
 	if config.Keys.Vault.AppRole.EnginePath == "" {
 		config.Keys.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path.
+	}
+	if config.Keys.GCP.SecretManager.ProjectID != "" && config.Keys.GCP.SecretManager.Endpoint == "" {
+		config.Keys.GCP.SecretManager.Endpoint = "secretmanager.googleapis.com:443"
 	}
 }
 

@@ -190,3 +190,24 @@ keys:
         retry: 15s    # The time the KES server waits before it tries to re-authenticate after connection loss.
       tls:            # The KeySecure client TLS configuration
         ca: ""        # Path to one or multiple PEM-encoded CA certificates for verifying the KeySecure TLS certificate.
+
+  gcp:
+    # The Google Cloud Platform secret manager.
+    # for more information take a look at:
+    # https://cloud.google.com/secret-manager
+    secretmanager:
+      # The project ID is a unique, user-assigned ID that can be used by Google APIs.
+      # The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens.
+      # It must start with a letter, and cannot have a trailing hyphen.
+      # See: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
+      project_id: ""
+      # An optional GCP SecretManager endpoint. If not set, defaults to: secretmanager.googleapis.com:443
+      endpoint: ""
+      # The credentials for your GCP service account. If running inside GCP (app engine) the credentials
+      # can be empty and will be fetched from the app engine environment automatically.
+      credentials:
+        client_email:   "" # The service account email                          - e.g. <account>@<project-ID>.iam.gserviceaccount.com
+        client_id:      "" # The service account client ID                      - e.g. 113491952745362495489"
+        private_key_id: "" # The service account private key                    - e.g. 381514ebd3cf45a64ca8adc561f0ce28fca5ec06
+        private_key:    "" # The raw encoded private key of the service account - e.g "-----BEGIN PRIVATE KEY-----\n ... \n-----END PRIVATE KEY-----\n
+
