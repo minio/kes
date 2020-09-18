@@ -31,6 +31,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/fs"
+	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
@@ -136,12 +137,20 @@ func server(args []string) error {
 		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
 	case config.Keys.Fs.Path != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("Ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
+	case config.Keys.Fs.Path != "" && config.Keys.GCP.SecretManager.ProjectID != "":
+		return errors.New("Ambiguous configuration: FS and GCP secret manager are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
 		return errors.New("Ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("Ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
+	case config.Keys.Vault.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
+		return errors.New("Ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
 	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("Ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
+	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
+		return errors.New("Ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
+	case config.Keys.Gemalto.KeySecure.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
+		return errors.New("Ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
 	}
 
 	if mlock {
@@ -326,6 +335,29 @@ func server(args []string) error {
 
 		keyStore = "Gemalto KeySecure"
 		keyStoreEndpoint = config.Keys.Gemalto.KeySecure.Endpoint
+	case config.Keys.GCP.SecretManager.ProjectID != "":
+		gcpStore := &gcp.SecretManager{
+			Endpoint:  config.Keys.GCP.SecretManager.Endpoint,
+			ProjectID: config.Keys.GCP.SecretManager.ProjectID,
+			ErrorLog:  errorLog.Log(),
+		}
+
+		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", gcpStore.ProjectID)
+		quiet.Printf(msg)
+		err := gcpStore.Authenticate(gcp.Credentials{
+			ClientID: config.Keys.GCP.SecretManager.Credentials.ClientID,
+			Client:   config.Keys.GCP.SecretManager.Credentials.Client,
+			KeyID:    config.Keys.GCP.SecretManager.Credentials.KeyID,
+			Key:      config.Keys.GCP.SecretManager.Credentials.Key,
+		})
+		if err != nil {
+			return fmt.Errorf("Failed to connect to GCP SecretManager: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = gcpStore
+
+		keyStore = "GCP SecretManager"
+		keyStoreEndpoint = config.Keys.GCP.SecretManager.Endpoint + " | Project: " + config.Keys.GCP.SecretManager.ProjectID
 	default:
 		store.Remote = &mem.Store{}
 
