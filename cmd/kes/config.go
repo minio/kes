@@ -129,7 +129,9 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	if err != nil {
 		return config, err
 	}
-	if err = yaml.NewDecoder(file).Decode(&config); err != nil {
+	decoder := yaml.NewDecoder(file)
+	decoder.SetStrict(true) // Reject unknown fields in the config file
+	if err = decoder.Decode(&config); err != nil {
 		file.Close()
 		return config, err
 	}
