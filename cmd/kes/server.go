@@ -42,51 +42,67 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-const serverCmdUsage = `usage: %s [options]
+const serverCmdUsage = `Usage:
+    kes server [options]
 
-  --addr               The address of the server (default: 127.0.0.1:7373)
-  --config             Path to the server configuration file
-  --root               The identity of root - who can perform any operation.
-                       A root identity must be specified - either via this
-                       flag or within the config file. This flag takes
-                       precedence over the config file.
+Options:
+    --addr <IP:PORT>       The address of the server (default: 127.0.0.1:7373)
+    --config <PATH>        Path to the server configuration file
+    --root  <IDENTITY>     The identity of root - who can perform any operation.
+                           A root identity must be specified - either via this
+                           flag or within the config file. This flag takes
+                           precedence over the config file
 
-  --mlock              Lock all allocated memory pages to prevent the OS from
-                       swapping them to the disk and eventually leak secrets.
+    --mlock                Lock all allocated memory pages to prevent the OS from
+                           swapping them to the disk and eventually leak secrets
 
-  --key                Path to the TLS private key. It takes precedence over
-                       the config file.
-  --cert               Path to the TLS certificate. It takes precedence over
-                       the config file.
+    --key <PATH>           Path to the TLS private key. It takes precedence over
+                           the config file
+    --cert <PATH>          Path to the TLS certificate. It takes precedence over
+                           the config file
 
-  --auth               Controls how the server handles mTLS authentication (default: on)
-                       By default, the server requires a client certificate
-                       and verifies that certificate has been issued by a
-                       trusted CA.
-                       Valid options are:
-                          Require and verify      : --auth=on (default)
-                          Require but don't verify: --auth=off
+    --auth {on|off}        Controls how the server handles mTLS authentication.
+                           By default, the server requires a client certificate
+                           and verifies that certificate has been issued by a
+                           trusted CA.
+                           Valid options are:
+                              Require and verify      : --auth=on (default)
+                              Require but don't verify: --auth=off
 
-  -q, --quiet          Do not print information on startup.
+    -q, --quiet            Do not print information on startup
+    -h, --help             Show list of command-line options
+
+Starts a KES server. The server address can be specified in the config file but
+may be overwriten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
+the PORT to 7373.
+
+The server's root identity can be specified in the config file but may be overwriten
+by the --root flag. The IDENTITY should be a hash of a TLS public key encoded as hex
+string. If the IDENTITY is not a public key hash e.g. --root="not-a-hash", the root
+identity is effectively disabled.
+
+The client TLS verification can be disabled by setting --auth=off. The server then
+accepts arbitrary client certificates but still maps them to policies. So, it disables
+authentication but not authorization.
+
+Examples:
+    $ export KES_ROOT_IDENTITY=$(kes tool identity of root.cert)
+    $ kes server --key=private.key --cert=public.crt --root="$KES_ROOT_IDENTITY" --auth=off
 `
 
-func server(args []string) error {
+func server(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), serverCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, serverCmdUsage) }
 
 	var (
 		addr         string
 		configPath   string
 		rootIdentity string
 		mlock        bool
-
-		tlsKeyPath  string
-		tlsCertPath string
-		mtlsAuth    string
-
-		quiet quiet
+		tlsKeyPath   string
+		tlsCertPath  string
+		mtlsAuth     string
+		quiet        quiet
 	)
 	cli.StringVar(&addr, "addr", "127.0.0.1:7373", "The address of the server")
 	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
@@ -98,14 +114,14 @@ func server(args []string) error {
 	cli.Var(&quiet, "q", "Do not print information on startup")
 	cli.Var(&quiet, "quiet", "Do not print information on startup")
 	cli.Parse(args[1:])
-	if cli.NArg() != 0 {
-		cli.Usage()
-		os.Exit(2)
+
+	if cli.NArg() > 0 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
 	config, err := loadServerConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("Cannot read config file: %v", err)
+		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
 	config.SetDefaults()
 
@@ -114,52 +130,52 @@ func server(args []string) error {
 	}
 	if rootIdentity == "" {
 		if config.Root == "" {
-			return errors.New("No root identity has been specified")
+			stdlog.Fatal("Error: no root identity has been specified")
 		}
 		rootIdentity = config.Root.String()
 	}
 	if tlsKeyPath == "" {
 		if config.TLS.KeyPath == "" {
-			return errors.New("No private key file has been specified")
+			stdlog.Fatal("Error: no private key file has been specified")
 		}
 		tlsKeyPath = config.TLS.KeyPath
 	}
 	if tlsCertPath == "" {
 		if config.TLS.CertPath == "" {
-			return errors.New("No certificate file has been specified")
+			stdlog.Fatal("Error: no certificate file has been specified")
 		}
 		tlsCertPath = config.TLS.CertPath
 	}
 
 	switch {
 	case config.Keys.Fs.Path != "" && config.Keys.Vault.Endpoint != "":
-		return errors.New("Ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
 	case config.Keys.Fs.Path != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		return errors.New("Ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
 	case config.Keys.Fs.Path != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("Ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Keys.Fs.Path != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		return errors.New("Ambiguous configuration: FS and GCP secret manager are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: FS and GCP secret manager are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		return errors.New("Ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("Ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Keys.Vault.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		return errors.New("Ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
 	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("Ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		return errors.New("Ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
 	case config.Keys.Gemalto.KeySecure.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		return errors.New("Ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
+		stdlog.Fatal("Error: ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
 	}
 
 	if mlock {
 		if runtime.GOOS != "linux" {
-			return errors.New("Cannot lock memory: syscall requires a linux system")
+			stdlog.Fatal("Error: cannot lock memory: syscall requires a linux system")
 		}
 		if err := mlockall(); err != nil {
-			return fmt.Errorf("Cannot lock memory: %v - See: 'man mlockall'", err)
+			stdlog.Fatalf("Error: failed to lock memory: %v - See: 'man mlockall'", err)
 		}
 	}
 
@@ -174,7 +190,7 @@ func server(args []string) error {
 	case "off":
 		errorLog = xlog.NewLogger(ioutil.Discard, "", stdlog.LstdFlags)
 	default:
-		return fmt.Errorf("Error log configuration '%s' is invalid", config.Log.Error)
+		stdlog.Fatalf("Error: %q is an invalid error log configuration", config.Log.Error)
 	}
 
 	var auditLog *xlog.SystemLog
@@ -184,7 +200,7 @@ func server(args []string) error {
 	case "off":
 		auditLog = xlog.NewLogger(ioutil.Discard, "", 0)
 	default:
-		return fmt.Errorf("Audit log configuration '%s' is invalid", config.Log.Audit)
+		stdlog.Fatalf("Error: %q is an invalid audit log configuration", config.Log.Audit)
 	}
 
 	var proxy *auth.TLSProxy
@@ -197,7 +213,7 @@ func server(args []string) error {
 		}
 		for _, identity := range config.TLS.Proxy.Identities {
 			if identity == kes.Identity(rootIdentity) {
-				return fmt.Errorf("Cannot use root identity '%s' as TLS proxy", identity)
+				stdlog.Fatalf("Error: cannot use root identity %q as TLS proxy", identity)
 			}
 			if !identity.IsUnknown() {
 				proxy.Add(identity)
@@ -211,19 +227,19 @@ func server(args []string) error {
 	for name, policy := range config.Policies {
 		p, err := kes.NewPolicy(policy.Paths...)
 		if err != nil {
-			return fmt.Errorf("Policy '%s' contains invalid path: %v", name, err)
+			stdlog.Fatalf("Error: policy %q contains invalid glob patterns: %v", name, err)
 		}
 		roles.Set(name, p)
 
 		for _, identity := range policy.Identities {
 			if identity == kes.Identity(rootIdentity) {
-				return fmt.Errorf("Cannot assign policy '%s' to root identity '%s'", name, identity)
+				stdlog.Fatalf("Error: cannot assign policy %q to root identity %q", name, identity)
 			}
 			if proxy != nil && proxy.Is(identity) {
-				return fmt.Errorf("Cannot assign policy '%s' to TLS proxy '%s'", name, identity)
+				stdlog.Fatalf("Error: cannot assign policy %q to TLS proxy %q", name, identity)
 			}
 			if roles.IsAssigned(identity) {
-				return fmt.Errorf("Cannot assign policy '%s' to identity '%s': this identity already has a policy", name, identity)
+				stdlog.Fatalf("Error: cannot assign policy %q to identity %q: this identity already has a policy", name, identity)
 			}
 			if !identity.IsUnknown() {
 				roles.Assign(name, identity)
@@ -240,16 +256,16 @@ func server(args []string) error {
 	case config.Keys.Fs.Path != "":
 		f, err := os.Stat(config.Keys.Fs.Path)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("Failed to open %s: %v", config.Keys.Fs.Path, err)
+			stdlog.Fatalf("Error: failed to open %q: %v", config.Keys.Fs.Path, err)
 		}
 		if err == nil && !f.IsDir() {
-			return fmt.Errorf("%s is not a directory", config.Keys.Fs.Path)
+			stdlog.Fatalf("Error: %q is not a directory", config.Keys.Fs.Path)
 		}
 		if os.IsNotExist(err) {
 			msg := fmt.Sprintf("Creating directory '%s' ... ", config.Keys.Fs.Path)
 			quiet.Print(msg)
 			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {
-				return fmt.Errorf("Failed to create directory %s: %v", config.Keys.Fs.Path, err)
+				stdlog.Fatalf("Error: failed to create directory %q: %v", config.Keys.Fs.Path, err)
 			}
 			quiet.ClearMessage(msg)
 		}
@@ -284,7 +300,7 @@ func server(args []string) error {
 		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", vaultStore.Addr)
 		quiet.Print(msg)
 		if err := vaultStore.Authenticate(context.Background()); err != nil {
-			return fmt.Errorf("Failed to connect to Vault: %v", err)
+			stdlog.Fatalf("Error: failed to connect to Vault: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = vaultStore
@@ -307,7 +323,7 @@ func server(args []string) error {
 		msg := fmt.Sprintf("Authenticating to AWS SecretsManager '%s' ... ", awsStore.Addr)
 		quiet.Print(msg)
 		if err := awsStore.Authenticate(); err != nil {
-			return fmt.Errorf("Failed to connect to AWS Secrets Manager: %v", err)
+			stdlog.Fatalf("Error: failed to connect to AWS Secrets Manager: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = awsStore
@@ -329,7 +345,7 @@ func server(args []string) error {
 		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
 		quiet.Printf(msg)
 		if err := gemaltoStore.Authenticate(); err != nil {
-			return fmt.Errorf("Failed to connect to Gemalto KeySecure: %v", err)
+			stdlog.Fatalf("Error: failed to connect to Gemalto KeySecure: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = gemaltoStore
@@ -352,7 +368,7 @@ func server(args []string) error {
 			Key:      config.Keys.GCP.SecretManager.Credentials.Key,
 		})
 		if err != nil {
-			return fmt.Errorf("Failed to connect to GCP SecretManager: %v", err)
+			stdlog.Fatalf("Error: failed to connect to GCP SecretManager: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = gcpStore
@@ -411,7 +427,7 @@ func server(args []string) error {
 	case "off":
 		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
 	default:
-		return fmt.Errorf("Invalid option for --auth: %s", mtlsAuth)
+		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuth)
 	}
 
 	sigCh := make(chan os.Signal)
@@ -425,7 +441,7 @@ func server(args []string) error {
 			err = server.Close()
 		}
 		if err != nil {
-			fmt.Fprintf(cli.Output(), "Abnormal server shutdown: %v\n", err)
+			stdlog.Fatalf("Error: abnormal server shutdown: %v", err)
 		}
 	}()
 
@@ -455,10 +471,7 @@ func server(args []string) error {
 		bold   = color.New(color.Bold)
 		italic = color.New(color.Italic)
 	)
-	ip, port, err := serverAddr(addr)
-	if err != nil {
-		return err
-	}
+	ip, port := serverAddr(addr)
 
 	const margin = 10 // len("Endpoint: ")
 	quiet.Print(blue.Sprint("Endpoint: "))
@@ -494,9 +507,8 @@ func server(args []string) error {
 
 	// Start the HTTPS server
 	if err := server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
-		return fmt.Errorf("Cannot start server: %v", err)
+		stdlog.Fatalf("Error: failed to start server: %v", err)
 	}
-	return nil
 }
 
 // quiet is a boolean flag.Value that can print
@@ -806,15 +818,12 @@ func interfaceIP4Addrs() []net.IP {
 // serverAddr takes an address string <IP>:<port> and
 // splits it into an IP address and port number.
 //
-// It returns an error if the given addr is not well-formed
-// or not a valid IP address.
-//
 // If addr does not contain an IP (":<port>") then ip will be
 // 0.0.0.0.
-func serverAddr(addr string) (ip net.IP, port string, err error) {
+func serverAddr(addr string) (ip net.IP, port string) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, "", fmt.Errorf("Invalid server address: %s", addr)
+		stdlog.Fatalf("Error: invalid server address: %q", addr)
 	}
 	if host == "" {
 		host = "0.0.0.0"
@@ -822,10 +831,10 @@ func serverAddr(addr string) (ip net.IP, port string, err error) {
 
 	ip = net.ParseIP(host)
 	if ip == nil {
-		return nil, "", fmt.Errorf("Invalid server address: %s", addr)
+		stdlog.Fatalf("Error: invalid server address: %q", addr)
 	}
 	if ip.IsUnspecified() {
 		ip = net.IPv4(127, 0, 0, 1)
 	}
-	return ip, port, err
+	return ip, port
 }

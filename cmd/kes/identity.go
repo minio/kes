@@ -7,110 +7,128 @@ package main
 import (
 	"flag"
 	"fmt"
+	stdlog "log"
 	"os"
 	"sort"
 
 	"github.com/minio/kes"
 )
 
-const identityCmdUsage = `usage: %s <command>
+const identityCmdUsage = `Usage:
+    kes identity <command>
 
-  assign               Assign an identity to a policy.
-  list                 List identities at the KES server.
-  forget               Forget an identity.
+    assign                 Assign an identity to a policy.
+    list                   List identities at the KES server.
+    forget                 Forget an identity.
 
-  -h, --help           Show list of command-line options
+Options:
+    -h, --help             Show list of command-line options
 `
 
-func identity(args []string) error {
+func identity(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), identityCmdUsage, cli.Name())
-	}
-
+	cli.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
 	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) == 0 {
+
+	if cli.NArg() == 0 {
 		cli.Usage()
-		os.Exit(2)
+		os.Exit(1)
 	}
 
-	switch args[0] {
+	switch args := cli.Args(); args[0] {
 	case "assign":
-		return assignIdentity(args)
+		assignIdentity(args)
 	case "list":
-		return listIdentity(args)
+		listIdentity(args)
 	case "forget":
-		return forgetIdentity(args)
+		forgetIdentity(args)
 	default:
-		cli.Usage()
-		os.Exit(2)
-		return nil // for the compiler
+		stdlog.Fatalf("Error: %q is not a kes identity command. See 'kes identity --help'", args[0])
 	}
 }
 
-const assignIdentityCmdUsage = `usage: %s <identity> <policy>
+const assignIdentityCmdUsage = `Usage:
+    kes identity assign [options] <identity> <policy>
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-  -h, --help           Show list of command-line options
+Assigns policies to identities. An identity is the cryptographic hash of
+the public key that is part of the client TLS certificate. An identity
+can be computed using:
+    $ kes tool identity of <certificate>
+
+Examples:
+    $ MY_APP_IDENTITY=$(kes tool identity of my-app.crt)
+    $ kes identity assign "$MY_APP_IDENTITY" my-app-policy
 `
 
-func assignIdentity(args []string) error {
+func assignIdentity(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), assignIdentityCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, assignIdentityCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
-		cli.Usage()
-		os.Exit(2)
+	cli.Parse(args[1:])
+
+	if cli.NArg() == 0 {
+		stdlog.Fatal("Error: no identity specified")
+	}
+	if cli.NArg() == 1 {
+		stdlog.Fatal("Error: no policy specified")
+	}
+	if cli.NArg() > 2 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
+	var (
+		client   = newClient(insecureSkipVerify)
+		identity = kes.Identity(cli.Arg(0))
+		policy   = cli.Arg(1)
+	)
+	if err := client.AssignIdentity(policy, identity); err != nil {
+		stdlog.Fatalf("Error: failed to assign identity %q to policy %q: %v", identity, policy, err)
 	}
-	if err := client.AssignIdentity(args[1], kes.Identity(args[0])); err != nil {
-		return fmt.Errorf("Failed to assign policy '%s' to '%s': %v", args[1], args[0], err)
-	}
-	return nil
 }
 
-const listIdentityCmdUsage = `usage: %s [<pattern>]
+const listIdentityCmdUsage = `Usage:
+    kes identity list [options] [<pattern>]
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-  -h, --help           Show list of command-line options
+Lists all identities that match the optional glob <pattern>. If the pattern
+is omitted the pattern '*' is used by default. This pattern matches any identity,
+and therefore, lists all identities.
+
+Examples:
+    $ kes identity list "3ecf*"
 `
 
-func listIdentity(args []string) error {
+func listIdentity(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), listIdentityCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, listIdentityCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
-		cli.Usage()
-		os.Exit(2)
-	}
-	pattern := "*"
-	if len(args) == 1 {
-		pattern = args[0]
+	cli.Parse(args[1:])
+
+	if cli.NArg() > 1 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
+	var pattern = "*"
+	if cli.NArg() == 1 {
+		pattern = cli.Arg(0)
 	}
-	identityRoles, err := client.ListIdentities(pattern)
+
+	identityRoles, err := newClient(insecureSkipVerify).ListIdentities(pattern)
 	if err != nil {
-		return fmt.Errorf("Cannot list identities: %v", err)
+		stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 	}
 	identities := make([]string, 0, len(identityRoles))
 	for id := range identityRoles {
@@ -135,36 +153,45 @@ func listIdentity(args []string) error {
 		}
 		fmt.Print("}")
 	}
-	return nil
 }
 
-const forgetIdentityCmdUsage = `usage: %s <identity>
+const forgetIdentityCmdUsage = `Usage:
+    kes identity forget <identity>
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-  -h, --help           Show list of command-line options
+Forgets an identity by removing the association between an identity and a policy.
+An identity without a policy can not perform any action anymore. Therefore, forget
+disables access for the given <identity>.
+
+Examples:
+    $ MY_APP_IDENTITY=$(kes tool identity of my-app.crt)
+    $ kes identity forget "$MY_APP_IDENTITY"
 `
 
-func forgetIdentity(args []string) error {
+func forgetIdentity(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), forgetIdentityCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, forgetIdentityCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
-		cli.Usage()
-		os.Exit(2)
+	cli.Parse(args[1:])
+
+	if cli.NArg() == 0 {
+		stdlog.Fatal("Error: no identity specified")
+	}
+	if cli.NArg() > 2 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
+	var (
+		client   = newClient(insecureSkipVerify)
+		identity = kes.Identity(cli.Arg(0))
+	)
+	if err := client.ForgetIdentity(identity); err != nil {
+		stdlog.Fatalf("Error: failed to forget identity %q: %v", identity, err)
 	}
-	if err := client.ForgetIdentity(kes.Identity(args[0])); err != nil {
-		return fmt.Errorf("Cannot forget '%s': %v", args[0], err)
-	}
-	return nil
 }
