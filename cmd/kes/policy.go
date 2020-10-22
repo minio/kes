@@ -8,191 +8,186 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	stdlog "log"
 	"os"
 	"sort"
 
 	"github.com/minio/kes"
 )
 
-const policyCmdUsage = `Manage named KES policies.
+const policyCmdUsage = `Usage:
+    kes policy <command>
 
-usage: %s <command>
+Commands:
+    add                    Add a new policy
+    show                   Download and print a policy
+    list                   List policies
+    delete                 Delete a policy
 
-  add                  Add a new named policy.
-  show                 Download and print a named policy.
-  list                 List named policies.
-  delete               Delete a named policy.
-
-  -h, --help           Show list of command-line options
+Options:
+    -h, --help             Show list of command-line options
 `
 
-func policy(args []string) error {
+func policy(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), policyCmdUsage, cli.Name())
+	cli.Usage = func() { fmt.Fprintf(os.Stderr, policyCmdUsage) }
+	cli.Parse(args[1:])
+
+	if cli.NArg() == 0 {
+		cli.Usage()
+		os.Exit(1)
 	}
 
-	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) == 0 {
-		cli.Usage()
-		os.Exit(2)
-	}
-	switch args[0] {
+	switch args := cli.Args(); args[0] {
 	case "add":
-		return addPolicy(args)
+		addPolicy(args)
 	case "show":
-		return showPolicy(args)
+		showPolicy(args)
 	case "list":
-		return listPolicies(args)
+		listPolicies(args)
 	case "delete":
-		return deletePolicy(args)
+		deletePolicy(args)
 	default:
-		cli.Usage()
-		os.Exit(2)
-		return nil // for the compiler
+		stdlog.Fatalf("Error: %q is not a kes policy command. See 'kes policy --help'", args[0])
 	}
 }
 
-const addPolicyCmdUsage = `Adds a named policy to the policy set of the KES server.
+const addPolicyCmdUsage = `Usage:
+    kes policy add [options] <name> [<path>]
 
-It reads a JSON encoded policy from the specified file and
-adds it to the policy set of the KES server.
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-usage: %s <policy> <file>
+Creates a new policy with the given <name> at the KES server.
+The path must point to a KES policy json file. If the <path> is
+omitted the policy file is read from standard input.
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
-
-  -h, --help           Show list of command-line options
+Examples:
+    $ kes policy add my-policy ./policy.json
 `
 
-func addPolicy(args []string) error {
+func addPolicy(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), addPolicyCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprintf(os.Stderr, addPolicyCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) != 2 {
-		cli.Usage()
-		os.Exit(2)
+	cli.Parse(args[1:])
+
+	if cli.NArg() == 0 {
+		stdlog.Fatal("Error: no policy name specified")
+	}
+	if cli.NArg() > 2 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
-	}
-	data, err := ioutil.ReadFile(args[1])
-	if err != nil {
-		return fmt.Errorf("Cannot read policy file '%s': %v", args[1], err)
+	var (
+		name  = args[0]
+		input = os.Stdin
+	)
+	if cli.NArg() == 2 && cli.Arg(1) != "-" {
+		f, err := os.Open(cli.Arg(1))
+		if err != nil {
+			stdlog.Fatalf("Error: failed to open %q: %v", cli.Arg(1), err)
+		}
+		defer f.Close()
+		input = f
 	}
 
 	var policy kes.Policy
-	if err = policy.UnmarshalJSON(data); err != nil {
-		return fmt.Errorf("Policy file is invalid JSON: %v", err)
+	if err := json.NewDecoder(input).Decode(&policy); err != nil {
+		if input == os.Stdin {
+			stdlog.Fatalf("Error: failed to read policy file from standard input: %v", err)
+		}
+		stdlog.Fatalf("Error: failed to read policy file from %q: %v", input.Name(), err)
 	}
-	if err = client.SetPolicy(args[0], &policy); err != nil {
-		return fmt.Errorf("Failed to add policy '%s': %v", args[0], err)
+
+	client := newClient(insecureSkipVerify)
+	if err := client.SetPolicy(name, &policy); err != nil {
+		stdlog.Fatalf("Error: failed to add policy %q: %v", name, err)
 	}
-	return nil
 }
 
-const showPolicyCmdUsage = `Downloads and prints KES policies.
+const showPolicyCmdUsage = `Usage:
+    kes policy show [options] <name>
 
-It prints the policy definition of a named policy to STDOUT.
-By default, the policy definition is printed in a human-readable
-format to a terminal or as JSON to a UNIX pipe / file.
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-usage: %s <policy>
+Downloads and displays the KES policy referenced by <name>.
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
-
-  -h, --help           Show list of command-line options
+Examples:
+    $ kes policy show my-policy
 `
 
-func showPolicy(args []string) error {
+func showPolicy(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), showPolicyCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, showPolicyCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.Parse(args[1:])
 
-	if args = parseCommandFlags(cli, args[1:]); len(args) == 0 {
-		cli.Usage()
-		os.Exit(2)
+	if cli.NArg() == 0 {
+		stdlog.Fatal("Error: no policy name specified")
+	}
+	if cli.NArg() > 2 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	name := args[0]
-	if len(args) > 1 {
-		cli.Parse(args[1:])
-		if cli.NArg() > 0 || cli.NFlag() != 1 {
-			cli.Usage()
-			os.Exit(2)
-		}
-	}
-
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
-	}
+	var name = cli.Arg(0)
+	client := newClient(insecureSkipVerify)
 	policy, err := client.GetPolicy(name)
 	if err != nil {
-		return fmt.Errorf("Failed to fetch policy '%s': %v", args[0], err)
+		stdlog.Fatalf("Error: failed to fetch policy %q: %v", name, err)
 	}
 	if isTerm(os.Stdout) {
 		fmt.Println(policy.String())
 	} else {
-		output, _ := policy.MarshalJSON()
+		output, err := policy.MarshalJSON()
+		if err != nil {
+			stdlog.Fatalf("Error: %v", err)
+		}
 		os.Stdout.Write(output)
 	}
-	return nil
 }
 
-const listPoliciesCmdUsage = `List named policies.
+const listPoliciesCmdUsage = `Usage:
+    kes policy list [options] [<pattern>]
 
-It prints the name of each policy that matches the pattern
-to STDOUT. If no pattern is specified the default pattern
-which matches any policy name is used. By default, the
-policy definition is printed in a human-readable format
-to a terminal or as JSON to a UNIX pipe / file.
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-usage: %s [<pattern>]
+Lists all policies at the KES server that match the given <pattern>.
+If the <pattern> is omitted the default pattern '*' is used. This
+pattern matches any policy name, and therefore, lists all policies.
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
-
-  -h, --help           Show list of command-line options
+Examples:
+    $ kes policy list my-pol* 
 `
 
-func listPolicies(args []string) error {
+func listPolicies(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Print(cli.Output(), listPoliciesCmdUsage)
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, listPoliciesCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) > 1 {
-		cli.Usage()
-		os.Exit(2)
-	}
-	var policy string
-	if len(args) == 1 {
-		policy = args[0]
+	cli.Parse(args[1:])
+
+	var pattern = "*"
+	if cli.NArg() == 1 {
+		pattern = cli.Arg(0)
 	}
 
-	client, err := newClient(insecureSkipVerify)
+	policies, err := newClient(insecureSkipVerify).ListPolicies(pattern)
 	if err != nil {
-		return err
-	}
-	policies, err := client.ListPolicies(policy)
-	if err != nil {
-		return fmt.Errorf("Failed to list policies: %v", err)
+		stdlog.Fatalf("Error: failed to list policies matching %q: %v", pattern, err)
 	}
 	sort.Strings(policies)
 	if isTerm(os.Stdout) {
@@ -204,39 +199,39 @@ func listPolicies(args []string) error {
 	} else {
 		json.NewEncoder(os.Stdout).Encode(policies)
 	}
-	return nil
 }
 
-const deletePolicyCmdUsage = `Deletes a named policy.
+const deletePolicyCmdUsage = `Usage:
+    kes policy delete [options] <name>
 
-usage: %s <policy>
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
 
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake
+Deletes the policy referenced by <name>.
 
-  -h, --help           Show list of command-line options
+Examples:
+    $ kes policy delete my-policy
 `
 
-func deletePolicy(args []string) error {
+func deletePolicy(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), deletePolicyCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprint(os.Stderr, deletePolicyCmdUsage) }
 
 	var insecureSkipVerify bool
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.Parse(args[1:])
 
-	if args = parseCommandFlags(cli, args[1:]); len(args) != 1 {
-		cli.Usage()
-		os.Exit(2)
+	if cli.NArg() == 0 {
+		stdlog.Fatal("Error: no policy name specified")
+	}
+	if cli.NArg() > 2 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
+	var name = cli.Arg(0)
+	if err := newClient(insecureSkipVerify).DeletePolicy(name); err != nil {
+		stdlog.Fatalf("Error: failed to delete policy %q: %v", name, err)
 	}
-	if err := client.DeletePolicy(args[0]); err != nil {
-		return fmt.Errorf("Failed to delete policy '%s': %v", args[0], err)
-	}
-	return nil
 }

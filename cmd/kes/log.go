@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	stdlog "log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,84 +22,81 @@ import (
 	ui "github.com/gizak/termui/v3"
 )
 
-const logCmdUsage = `usage: %s <command>
+const logCmdUsage = `Usage:
+    kes log <command>
 
-    trace              Trace server log events.
+Commands:
+    trace                  Trace server log events.
 
-  -h, --help           Show list of command-line options.
+Options:
+    -h, --help             Show list of command-line options.
 `
 
-func log(args []string) error {
+func log(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), logCmdUsage, cli.Name())
-	}
-
+	cli.Usage = func() { fmt.Fprintf(os.Stderr, logCmdUsage) }
 	cli.Parse(args[1:])
-	if args = cli.Args(); len(args) == 0 {
+
+	if cli.NArg() == 0 {
 		cli.Usage()
 		os.Exit(2)
 	}
 
-	switch args[0] {
+	switch args = cli.Args(); args[0] {
 	case "trace":
-		return logTrace(args)
+		logTrace(args)
 	default:
-		cli.Usage()
-		os.Exit(2)
-		return nil // for the compiler
+		stdlog.Fatalf("Error: %q is not a kes log command. See 'kes log --help'", args[0])
 	}
 }
 
-const logTraceCmdUsage = `Trace server log events.
+const traceLogCmdUsage = `Usage:
+    kes log trace [options]
 
-Connects to a KES server and traces log events.
+Options:
+    --type {audit|error}   Specify the log event type.
+                           Valid options are:
+                             --type=audit (default)
+                             --type=error
 
-usage: %s [flags]
+    --json                 Print log events as JSON.
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake.
+    -h, --help             Show list of command-line options.
 
-  --type               Specify the log event type. (default: audit)
-                       Valid options are:
-                          --type=audit
-                          --type=error
+Subscribes to the KES server {audit | error} log. If standard output is
+a terminal it displays a table-view terminal UI that shows the stream of
+log events. Otherwise, or when --json is specified, the log events are
+written to standard output in JSON format.
 
-  --json               Print log events as JSON.
-
-  -k, --insecure       Skip X.509 certificate validation during TLS handshake.
-
-  -h, --help           Show list of command-line options.
+Examples:
+    $ kes log trace
 `
 
-func logTrace(args []string) error {
+func logTrace(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() {
-		fmt.Fprintf(cli.Output(), logTraceCmdUsage, cli.Name())
-	}
+	cli.Usage = func() { fmt.Fprintf(os.Stderr, traceLogCmdUsage) }
 
 	var (
-		typeFlag   string
-		jsonOutput bool
-
+		typeFlag           string
+		jsonOutput         bool
 		insecureSkipVerify bool
 	)
 	cli.StringVar(&typeFlag, "type", "audit", "Log event type [ audit | error ]")
 	cli.BoolVar(&jsonOutput, "json", false, "Print log events as JSON")
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	if args = parseCommandFlags(cli, args[1:]); len(args) != 0 {
-		cli.Usage()
-		os.Exit(2)
+	cli.Parse(args[1:])
+
+	if cli.NArg() > 0 {
+		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client, err := newClient(insecureSkipVerify)
-	if err != nil {
-		return err
-	}
-
+	client := newClient(insecureSkipVerify)
 	switch strings.ToLower(typeFlag) {
 	case "audit":
 		stream, err := client.AuditLog()
 		if err != nil {
-			return err
+			stdlog.Fatalf("Error: failed to connect to audit log: %v", err)
 		}
 		defer stream.Close()
 
@@ -107,13 +105,14 @@ func logTrace(args []string) error {
 			for stream.Next() {
 				fmt.Println(string(stream.Bytes()))
 			}
-			return stream.Err()
+			stdlog.Fatalf("Error: audit log closed with: %v", stream.Err())
+			return
 		}
-		return traceAuditLogWithUI(stream)
+		traceAuditLogWithUI(stream)
 	case "error":
 		stream, err := client.ErrorLog()
 		if err != nil {
-			return err
+			stdlog.Fatalf("Error: failed to connect to error log: %v", err)
 		}
 		defer stream.Close()
 
@@ -122,11 +121,11 @@ func logTrace(args []string) error {
 			for stream.Next() {
 				fmt.Println(string(stream.Bytes()))
 			}
-			return stream.Err()
+			stdlog.Fatalf("Error: error log closed with: %v", stream.Err())
 		}
-		return traceErrorLogWithUI(stream)
+		traceErrorLogWithUI(stream)
 	default:
-		return fmt.Errorf("Unknown log event type: '%s'", typeFlag)
+		stdlog.Fatalf("Error: invalid log type --type: %q", typeFlag)
 	}
 }
 
@@ -135,7 +134,7 @@ func logTrace(args []string) error {
 //
 // Each event is displayed as a new row and the UI is
 // automatically adjusted to the terminal window size.
-func traceAuditLogWithUI(stream *kes.AuditStream) error {
+func traceAuditLogWithUI(stream *kes.AuditStream) {
 	table := xterm.NewTable("Time", "Identity", "Status", "API Operations", "Response")
 	table.Header()[0].Width = 0.12
 	table.Header()[1].Width = 0.15
@@ -152,7 +151,7 @@ func traceAuditLogWithUI(stream *kes.AuditStream) error {
 	// Initialize the terminal UI and listen on resize
 	// events and Ctrl-C / Escape key events.
 	if err := ui.Init(); err != nil {
-		return err
+		stdlog.Fatalf("Error: %v", err)
 	}
 	defer table.Draw() // Draw the table AFTER closing the UI one more time.
 	defer ui.Close()   // Closing the UI cleans the screen.
@@ -165,7 +164,7 @@ func traceAuditLogWithUI(stream *kes.AuditStream) error {
 				table.Draw()
 			case event.ID == "<C-c>" || event.ID == "<Escape>":
 				if err := stream.Close(); err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					fmt.Fprintln(os.Stderr, fmt.Sprintf("Error: audit log stream closed with: %v", err))
 				}
 				return
 			}
@@ -208,7 +207,9 @@ func traceAuditLogWithUI(stream *kes.AuditStream) error {
 		table.AddRow(reqTime, identity, status, path, respTime)
 		table.Draw()
 	}
-	return stream.Err()
+	if err := stream.Err(); err != nil {
+		stdlog.Fatalf("Error: audit log stream closed with: %v", err)
+	}
 }
 
 // traceErrorLogWithUI iterates over the error log
@@ -216,7 +217,7 @@ func traceAuditLogWithUI(stream *kes.AuditStream) error {
 //
 // Each event is displayed as a new row and the UI is
 // automatically adjusted to the terminal window size.
-func traceErrorLogWithUI(stream *kes.ErrorStream) error {
+func traceErrorLogWithUI(stream *kes.ErrorStream) {
 	table := xterm.NewTable("Time", "Error")
 	table.Header()[0].Width = 0.12
 	table.Header()[1].Width = 0.87
@@ -227,7 +228,7 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) error {
 	// Initialize the terminal UI and listen on resize
 	// events and Ctrl-C / Escape key events.
 	if err := ui.Init(); err != nil {
-		return err
+		stdlog.Fatalf("Error: %v", err)
 	}
 	defer table.Draw() // Draw the table AFTER closing the UI one more time.
 	defer ui.Close()   // Closing the UI cleans the screen.
@@ -240,7 +241,7 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) error {
 				table.Draw()
 			case event.ID == "<C-c>" || event.ID == "<Escape>":
 				if err := stream.Close(); err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					fmt.Fprintln(os.Stderr, fmt.Sprintf("Error: error log stream closed with: %v", err))
 				}
 				return
 			}
@@ -273,7 +274,9 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) error {
 		table.AddRow(reqTime, message)
 		table.Draw()
 	}
-	return stream.Err()
+	if err := stream.Err(); err != nil {
+		stdlog.Fatalf("Error: error log stream closed with: %v", err)
+	}
 }
 
 // closeOn closes c if one of the given system signals
