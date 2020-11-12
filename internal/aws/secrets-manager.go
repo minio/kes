@@ -5,9 +5,11 @@
 package aws
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -66,6 +68,7 @@ var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
 	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
 	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
 // Create stores the given key-value pair at the AWS SecretsManager
@@ -77,7 +80,7 @@ var (
 // encrypting secrets at the AWS SecretsManager.
 func (s *SecretsManager) Create(key, value string) error {
 	if s.client == nil {
-		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return errCreateKey
 	}
 
@@ -95,7 +98,7 @@ func (s *SecretsManager) Create(key, value string) error {
 				return kes.ErrKeyExists
 			}
 		}
-		s.logf("aws: failed to create '%s': %v", key, err)
+		s.logf("aws: failed to create %q: %v", key, err)
 		return errCreateKey
 	}
 	return nil
@@ -105,7 +108,7 @@ func (s *SecretsManager) Create(key, value string) error {
 // If no entry for key exists, it returns kes.ErrKeyNotFound.
 func (s *SecretsManager) Get(key string) (string, error) {
 	if s.client == nil {
-		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return "", errGetKey
 	}
 
@@ -116,12 +119,12 @@ func (s *SecretsManager) Get(key string) (string, error) {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeDecryptionFailure:
-				return "", kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access '%s': %v", key, err))
+				return "", kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access %q: %v", key, err))
 			case secretsmanager.ErrCodeResourceNotFoundException:
 				return "", kes.ErrKeyNotFound
 			}
 		}
-		s.logf("aws: failed to read '%s': %v", key, err)
+		s.logf("aws: failed to read %q: %v", key, err)
 		return "", errGetKey
 	}
 
@@ -142,7 +145,7 @@ func (s *SecretsManager) Get(key string) (string, error) {
 // it exists.
 func (s *SecretsManager) Delete(key string) error {
 	if s.client == nil {
-		s.logf("aws: no connection to AWS secrets manager: '%s'", s.Addr)
+		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return errDeleteKey
 	}
 
@@ -156,10 +159,69 @@ func (s *SecretsManager) Delete(key string) error {
 				return nil
 			}
 		}
-		s.logf("aws: failed to delete '%s': %v", key, err)
+		s.logf("aws: failed to delete %q: %v", key, err)
 		return errDeleteKey
 	}
 	return nil
+}
+
+// List returns a new Iterator over the names of
+// all stored keys.
+func (s *SecretsManager) List(ctx context.Context) (secret.Iterator, error) {
+	if s.client == nil {
+		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
+		return nil, errDeleteKey
+	}
+
+	values := make(chan string, 10)
+	iterator := &iterator{
+		values: values,
+	}
+	go func() {
+		defer close(values)
+		err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
+			for _, secret := range page.SecretList {
+				values <- *secret.Name
+			}
+			return lastPage
+		})
+		if err != nil {
+			s.logf("aws: failed to list keys: %v", err)
+			iterator.SetErr(errListKey)
+		}
+	}()
+	return iterator, nil
+}
+
+type iterator struct {
+	values <-chan string
+	last   string
+
+	lock sync.Mutex
+	err  error
+}
+
+func (i *iterator) Next() bool {
+	v, ok := <-i.values
+	if !ok {
+		return false
+	}
+	i.last = v
+	return true
+}
+
+func (i *iterator) Value() string { return i.last }
+
+func (i *iterator) Err() error {
+	i.lock.Lock()
+	defer i.lock.Unlock()
+	return i.err
+}
+
+func (i *iterator) SetErr(err error) {
+	i.lock.Lock()
+	i.err = err
+	i.lock.Unlock()
 }
 
 // Authenticate tries to establish a connection to

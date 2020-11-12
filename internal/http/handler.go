@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -389,6 +390,72 @@ func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
 		json.NewEncoder(w).Encode(Response{
 			Plaintext: plaintext,
 		})
+	}
+}
+
+// HandleListKeys returns an http.HandlerFunc that lists
+// all keys stored by the secret.Store that match the
+// glob pattern specified by the client.
+//
+// If an error occurs after a response has been written
+// to the client the returned http.HandlerFunc sends an
+// HTTP trailer containing this error.
+// The client is expected to check for an error trailer
+// and only consider the listing complete if it receives
+// no such trailer.
+func HandleListKeys(store *secret.Store) http.HandlerFunc {
+	type Response struct {
+		Name string
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Trailer", "Status, Error")
+
+		iterator, err := store.List(r.Context())
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		var (
+			pattern    = pathBase(r.URL.Path)
+			encoder    = json.NewEncoder(w)
+			hasWritten bool
+		)
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		for iterator.Next() {
+			if ok, err := path.Match(pattern, iterator.Value()); ok && err == nil {
+				hasWritten = true
+				err = encoder.Encode(Response{
+					Name: iterator.Value(),
+				})
+
+				// Once we encounter ErrHandlerTimeout the client connection
+				// has time'd out and we can stop sending responses.
+				if err == http.ErrHandlerTimeout {
+					break
+				}
+
+				// If there is another error we be conservative and try to
+				// inform the client that something went wrong. However,
+				// if we fail to write to the underlying connection there is
+				// not really something we can do except stop iterating and
+				// not waste server resources.
+				if err != nil {
+					ErrorTrailer(w, err)
+					return
+				}
+			}
+		}
+		if err := iterator.Err(); err != nil {
+			if !hasWritten {
+				Error(w, err)
+			} else {
+				ErrorTrailer(w, err)
+			}
+			return
+		}
+		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
+		w.Header().Set("Error", "")
 	}
 }
 

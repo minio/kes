@@ -164,7 +164,7 @@ func traceAuditLogWithUI(stream *kes.AuditStream) {
 				table.Draw()
 			case event.ID == "<C-c>" || event.ID == "<Escape>":
 				if err := stream.Close(); err != nil {
-					fmt.Fprintln(os.Stderr, fmt.Sprintf("Error: audit log stream closed with: %v", err))
+					fmt.Fprintf(os.Stderr, "Error: audit log stream closed with: %v\n", err)
 				}
 				return
 			}
@@ -241,7 +241,7 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) {
 				table.Draw()
 			case event.ID == "<C-c>" || event.ID == "<Escape>":
 				if err := stream.Close(); err != nil {
-					fmt.Fprintln(os.Stderr, fmt.Sprintf("Error: error log stream closed with: %v", err))
+					fmt.Fprintf(os.Stderr, "Error: error log stream closed with: %v\n", err)
 				}
 				return
 			}

@@ -8,8 +8,10 @@
 package fs
 
 import (
+	"context"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,13 @@ type Store struct {
 
 var _ secret.Remote = (*Store)(nil)
 
+var (
+	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
+	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
+	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
+)
+
 // Create creates a new file in the directory if no file
 // with the name 'key' does not exists and writes value
 // to it.
@@ -50,7 +59,7 @@ func (s *Store) Create(key, value string) error {
 	}
 	if err != nil {
 		s.logf("fs: cannot open %s: %v", path, err)
-		return err
+		return errCreateKey
 	}
 	defer file.Close()
 
@@ -59,7 +68,7 @@ func (s *Store) Create(key, value string) error {
 		if rmErr := os.Remove(path); rmErr != nil {
 			s.logf("fs: cannot remove %s: %v", path, rmErr)
 		}
-		return err
+		return errCreateKey
 	}
 
 	if err = file.Sync(); err != nil { // Ensure that we wrote the value to disk
@@ -67,7 +76,7 @@ func (s *Store) Create(key, value string) error {
 		if rmErr := os.Remove(path); rmErr != nil {
 			s.logf("fs: cannot remove %s: %v", path, rmErr)
 		}
-		return err
+		return errCreateKey
 	}
 	return nil
 }
@@ -84,7 +93,7 @@ func (s *Store) Delete(key string) error {
 	if err != nil {
 		s.logf("fs: failed to delete '%s': %v", path, err)
 	}
-	return err
+	return errDeleteKey
 }
 
 // Get returns the secret key associated with the given name.
@@ -100,17 +109,60 @@ func (s *Store) Get(key string) (string, error) {
 	}
 	if err != nil {
 		s.logf("fs: cannot open '%s': %v", path, err)
-		return "", err
+		return "", errGetKey
 	}
 	defer file.Close()
 
 	var value strings.Builder
 	if _, err := io.Copy(&value, io.LimitReader(file, secret.MaxSize)); err != nil {
 		s.logf("fs: failed to read from '%s': %v", path, err)
-		return "", err
+		return "", errGetKey
 	}
 	return value.String(), nil
 }
+
+// List returns a new Iterator over the names of
+// all stored keys.
+func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+	file, err := os.Open(s.Dir)
+	if err != nil {
+		s.logf("fs: cannot open '%s': %v", s.Dir, err)
+		return nil, errListKey
+	}
+	defer file.Close()
+
+	files, err := file.Readdir(0)
+	if err != nil {
+		s.logf("fs: failed to list keys: %v", err)
+		return nil, errListKey
+	}
+	return &iterator{
+		values: files,
+	}, nil
+}
+
+type iterator struct {
+	values []os.FileInfo
+	last   string
+}
+
+var _ secret.Iterator = (*iterator)(nil)
+
+func (i *iterator) Next() bool {
+	for len(i.values) > 0 {
+		if i.values[0].Mode().IsRegular() {
+			i.last = i.values[0].Name()
+			i.values = i.values[1:]
+			return true
+		}
+		i.values = i.values[1:]
+	}
+	return false
+}
+
+func (i *iterator) Value() string { return i.last }
+
+func (*iterator) Err() error { return nil }
 
 func (s *Store) logf(format string, v ...interface{}) {
 	if s.ErrorLog == nil {

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	gcpiterator "google.golang.org/api/iterator"
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
@@ -100,6 +101,7 @@ var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
 	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
 	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
 // Create stores the given key-value pair at GCP secret manager
@@ -197,6 +199,49 @@ func (s *SecretManager) Delete(key string) error {
 	}
 	return nil
 }
+
+// List returns a new Iterator over the names of
+// all stored keys.
+func (s *SecretManager) List(ctx context.Context) (secret.Iterator, error) {
+	if s.client == nil {
+		s.logf("gcp: no connection to GCP secret manager: '%s' '%s'", s.Endpoint, s.ProjectID)
+		return nil, errListKey
+	}
+	location := path.Join("projects", s.ProjectID, "*")
+	return &iterator{
+		src: s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
+			Parent: location,
+		}),
+		errHandler: func(err error) {
+			s.logf("gcp: failed to list %q: %v", location, err)
+		},
+	}, nil
+}
+
+type iterator struct {
+	src        *secretmanager.SecretIterator
+	errHandler func(error)
+	last       string
+	err        error
+}
+
+func (i *iterator) Next() bool {
+	v, err := i.src.Next()
+	if err == gcpiterator.Done {
+		return false
+	}
+	if err != nil {
+		i.errHandler(err)
+		i.err = errListKey
+		return false
+	}
+	i.last = v.GetName()
+	return true
+}
+
+func (i *iterator) Value() string { return i.last }
+
+func (i *iterator) Err() error { return i.err }
 
 // Authenticate tries to auth and connect to GCP secret manager
 // using the given credentials.
