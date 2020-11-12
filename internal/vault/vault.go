@@ -15,14 +15,17 @@ package vault
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/secret"
 )
 
 // AppRole holds the Vault AppRole
@@ -157,6 +160,7 @@ var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
 	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
 	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
+	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
 // Get returns the value associated with the given key.
@@ -276,6 +280,87 @@ func (s *Store) Delete(key string) error {
 	}
 	return nil
 }
+
+// List returns a new Iterator over the names of
+// all stored keys.
+func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+	if s.client == nil {
+		s.logf("vault: no connection to vault server: '%s'", s.Addr)
+		return nil, errListKey
+	}
+	if s.client.Sealed() {
+		return nil, errSealed
+	}
+
+	// We don't use the Vault SDK vault.Logical.List(string) API
+	// here since the SDK does not allow us to specify a context.
+	// However, if the client closes the connection (or a timeout
+	// occurs, etc.) we want to abort the listing immediately.
+	// Therefore, we have to use low-level SDK functionality here.
+
+	location := path.Join(s.Engine, s.Location)
+	r := s.client.NewRequest("LIST", path.Join("/v1", location))
+	r.Method = "GET"
+	r.Params.Set("list", "true")
+
+	resp, err := s.client.RawRequestWithContext(ctx, r)
+	if err != nil && err != context.Canceled {
+		s.logf("vault: failed to list %q: %v", location, err)
+		return nil, errListKey
+	}
+	defer resp.Body.Close()
+
+	// Vault returns all keys in one request and does not provide a
+	// (reasonable) way to parse the response in batches or use some
+	// form of pagination. Therefore, we limit the response body to
+	// a some reasonable limit to not exceed memory resources.
+	const MaxBody = 32 * 1 << 20
+	secret, err := vaultapi.ParseSecret(io.LimitReader(resp.Body, MaxBody))
+	if err != nil {
+		s.logf("vault: failed to list %q: %v", location, err)
+		return nil, errListKey
+	}
+	if secret == nil { // The secret may be nil even when there was no error.
+		return &iterator{}, nil // We return an empty iterator in this case.
+	}
+
+	// Vault returns a generic map that should contain
+	// an array containing all key names. This array
+	// however is again a generic []interface{} instead
+	// of a dedicated type or []string.
+	values, ok := secret.Data["keys"].([]interface{})
+	if !ok {
+		s.logf("vault: failed to list '%s': invalid key listing format", location)
+		return nil, errListKey
+	}
+	return &iterator{
+		values: values,
+	}, nil
+}
+
+type iterator struct {
+	values []interface{}
+	last   string
+}
+
+var _ secret.Iterator = (*iterator)(nil)
+
+func (i *iterator) Next() bool {
+	for len(i.values) > 0 {
+		v := fmt.Sprint(i.values[0])
+		i.values = i.values[1:]
+
+		if !strings.HasSuffix(v, "/") {
+			i.last = v
+			return true
+		}
+	}
+	return false
+}
+
+func (i *iterator) Value() string { return i.last }
+
+func (*iterator) Err() error { return nil }
 
 func (s *Store) logf(format string, v ...interface{}) {
 	if s.ErrorLog == nil {

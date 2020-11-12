@@ -6,11 +6,14 @@ package kes_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/minio/kes"
@@ -252,6 +255,97 @@ func TestDecryptKey(t *testing.T) {
 		if !bytes.Equal(plaintext, test.Plaintext) {
 			t.Fatalf("Test %d: Plaintext mismatch: got '%s' - want '%s'", i, plaintext, test.Plaintext)
 		}
+	}
+}
+
+var listKeysTests = []struct {
+	Keys    []string
+	Pattern string
+	Listing []kes.KeyDescription
+}{
+	{
+		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
+		Pattern: "",
+		Listing: []kes.KeyDescription{
+			{Name: "my-key"},
+			{Name: "my-key1"},
+			{Name: "my-key2"},
+			{Name: "my-key3"},
+		},
+	},
+	{
+		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
+		Pattern: "my-key*",
+		Listing: []kes.KeyDescription{
+			{Name: "my-key"},
+			{Name: "my-key1"},
+			{Name: "my-key2"},
+			{Name: "my-key3"},
+		},
+	},
+	{
+		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
+		Pattern: "my-key?",
+		Listing: []kes.KeyDescription{
+			{Name: "my-key1"},
+			{Name: "my-key2"},
+			{Name: "my-key3"},
+		},
+	},
+	{
+		Keys:    []string{"my-key_2020-02-12", "my-key_2020-03-01", "my-key_2020-03-27", "my-key_2020-05-01"},
+		Pattern: "my-key_2020-0[1-4]-[0-1][0-9]", // All keys from Jan. to Apr. within the first 20 days of each month.
+		Listing: []kes.KeyDescription{
+			{Name: "my-key_2020-02-12"},
+			{Name: "my-key_2020-03-01"},
+		},
+	},
+}
+
+func TestListKeys(t *testing.T) {
+	if !*IsIntegrationTest {
+		t.SkipNow()
+	}
+	t.SkipNow() // TODO(aead): enable test once play.min.io:7373 has been updated and supports the /v1/key/list/ API
+
+	client, err := newClient()
+	if err != nil {
+		t.Fatalf("Failed to create KES client: %v", err)
+	}
+
+	f := func(t *testing.T, i int, names []string, pattern string, listing ...kes.KeyDescription) {
+		for _, name := range names {
+			if err := client.CreateKey(name); err != nil && err != kes.ErrKeyExists {
+				t.Fatalf("Test %d: Failed to create key %q: %v", i, name, err)
+			}
+			defer client.DeleteKey(name)
+		}
+		keys, err := client.ListKeys(context.Background(), pattern)
+		if err != nil {
+			t.Fatalf("Test %d: Failed to list keys: %v", i, err)
+		}
+
+		var descriptions []kes.KeyDescription
+		for keys.Next() {
+			descriptions = append(descriptions, keys.Value())
+		}
+		if err = keys.Err(); err != nil {
+			t.Fatalf("Test %d: Failed to list keys: %v", i, err)
+		}
+		if len(descriptions) != len(listing) {
+			t.Fatalf("Test %d: Listings don't match: got %d elements - want %d", i, len(descriptions), len(listing))
+		}
+		sort.Slice(descriptions, func(j, k int) bool {
+			return strings.Compare(descriptions[j].Name, descriptions[k].Name) < 0
+		})
+		for j := range descriptions {
+			if descriptions[j] != listing[j] {
+				t.Fatalf("Test %d: Listings don't match: got %d-th element '%v' - want '%v'", i, j, descriptions[j], listing[j])
+			}
+		}
+	}
+	for i, test := range listKeysTests {
+		f(t, i, test.Keys, test.Pattern, test.Listing...)
 	}
 }
 

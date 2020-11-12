@@ -5,7 +5,9 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	stdlog "log"
@@ -18,6 +20,7 @@ const keyCmdUsage = `Usage:
 Commands:
     create                  Create a new secret key at a KES server.
     delete                  Delete a secret key from a KES server.
+	list                    List secret key names at a KES server.
     derive                  Derive a new key from a secret key.
     decrypt                 Decrypt a ciphertext with secret key.
 
@@ -38,6 +41,8 @@ func key(args []string) {
 	switch args = cli.Args(); args[0] {
 	case "create":
 		createKey(args)
+	case "list":
+		listKeys(args)
 	case "delete":
 		deleteKey(args)
 	case "derive":
@@ -229,6 +234,67 @@ func deriveKey(args []string) {
 	} else {
 		const format = `{"plaintext":"%s","ciphertext":"%s"}`
 		fmt.Printf(format, base64.StdEncoding.EncodeToString(key.Plaintext), base64.StdEncoding.EncodeToString(key.Ciphertext))
+	}
+}
+
+const listKeyCmdUsage = `Usage:
+    kes key list [options] [<pattern>]
+
+Options:
+    --json                 Print key names as JSON
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake
+    -h, --help             Show list of command-line options
+
+Lists the description for all keys that match the optional <pattern>. If no
+pattern is provided the default pattern ('*') is used - which matches any
+key name, and therefore, lists all keys.
+
+Examples:
+    $ kes key list my-key*
+`
+
+func listKeys(args []string) {
+	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
+	cli.Usage = func() { fmt.Fprint(os.Stderr, listKeyCmdUsage) }
+
+	var (
+		insecureSkipVerify bool
+		jsonFlag           bool
+	)
+	cli.BoolVar(&jsonFlag, "json", false, "Print key names as JSON")
+	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
+	cli.Parse(args[1:])
+
+	if cli.NArg() > 1 {
+		stdlog.Fatal("Error: too many arguments")
+	}
+
+	var pattern = "*"
+	if cli.NArg() == 1 {
+		pattern = cli.Arg(0)
+	}
+	iterator, err := newClient(insecureSkipVerify).ListKeys(context.Background(), pattern)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to list keys matching %q: %v", pattern, err)
+	}
+
+	if !isTerm(os.Stdout) || jsonFlag {
+		encoder := json.NewEncoder(os.Stdout)
+		for iterator.Next() {
+			encoder.Encode(iterator.Value())
+		}
+	} else {
+		for iterator.Next() {
+			fmt.Println(iterator.Value().Name)
+		}
+	}
+	if err = iterator.Err(); err != nil {
+		iterator.Close()
+		stdlog.Fatalf("Error: %v", err)
+	}
+	if err = iterator.Close(); err != nil {
+		stdlog.Fatalf("Error: %v", err)
 	}
 }
 

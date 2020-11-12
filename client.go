@@ -6,6 +6,7 @@ package kes
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding"
 	"encoding/base64"
@@ -185,6 +186,83 @@ func (d *DEK) UnmarshalBinary(data []byte) error {
 
 	d.Plaintext = nil // Forget any previous plaintext
 	copy(d.Ciphertext, data)
+	return nil
+}
+
+// KeyIterator iterates over list of KeyDescription objects.
+//   for iterator.Next() {
+//       _ = iterator.Value() // Use the KeyDescription
+//   }
+//   if err := iterator.Err(); err != nil {
+//   }
+//
+// Once done with iterating over the list of KeyDescription
+// objects, an iterator should be closed using the Close
+// method.
+//
+// In general, a KeyIterator does not provide any guarantees
+// about ordering or the when its underlying source is modified
+// concurrently.
+// Particularly, if a key is created or deleted at the KES a
+// KeyIterator may or may not be affected by this change.
+type KeyIterator struct {
+	response *http.Response
+	decoder  *json.Decoder
+
+	last   KeyDescription
+	err    error
+	closed bool
+}
+
+// KeyDescription describes a cryptographic key at a KES server.
+type KeyDescription struct {
+	// Name is the name of the cryptographic key.
+	Name string `json:"name"`
+}
+
+// Next returns true if there is another KeyDescription.
+// This KeyDescription can be retrieved via the Value method.
+//
+// It returns false once there is no more KeyDescription
+// or if the KeyIterator encountered an error. The error,
+// if any, can be retrieved via the Err method.
+func (i *KeyIterator) Next() bool {
+	if i.closed || i.err != nil {
+		return false
+	}
+	if err := i.decoder.Decode(&i.last); err != nil {
+		if err == io.EOF {
+			i.err = i.Close()
+		} else {
+			i.err = err
+		}
+		return false
+	}
+	return true
+}
+
+// Value returns the current KeyDescription. It returns
+// the same KeyDescription until Next is called again.
+//
+// If KeyIterator has been closed or if Next has not been
+// called once resp. once Next returns false then the
+// behavior of Value is undefined.
+func (i *KeyIterator) Value() KeyDescription { return i.last }
+
+// Err returns the first error encountered by the KeyIterator,
+// if any.
+func (i *KeyIterator) Err() error { return i.err }
+
+// Close closes the underlying connection to the KES server
+// and returns any encountered error, if any.
+func (i *KeyIterator) Close() error {
+	i.closed = true
+	if err := i.response.Body.Close(); err != nil {
+		return err
+	}
+	if err := parseErrorTrailer(i.response.Trailer); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -415,6 +493,33 @@ func (c *Client) Decrypt(name string, ciphertext, context []byte) ([]byte, error
 		return nil, err
 	}
 	return response.Plaintext, nil
+}
+
+// ListKeys returns a new KeyIterator that iterates over all keys
+// matching the given glob pattern.
+//
+// The KeyIterator will stop once the given context.Done() completes,
+// an error occurs while iterating or once there are no more
+// KeyDescription objects - whatever happens first.
+//
+// If the pattern is empty it defaults to "*".
+func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, error) {
+	if pattern == "" { // The empty pattern never matches anything
+		pattern = "*" // => default to: list all keys
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(endpoint(c.Endpoint, "/v1/key/list", url.PathEscape(pattern)))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	return &KeyIterator{
+		response: resp,
+		decoder:  json.NewDecoder(resp.Body),
+	}, nil
 }
 
 // SetPolicy adds the given policy to the set of policies.

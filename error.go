@@ -6,8 +6,10 @@ package kes
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -114,4 +116,28 @@ func parseErrorResponse(resp *http.Response) error {
 		return err
 	}
 	return NewError(resp.StatusCode, sb.String())
+}
+
+func parseErrorTrailer(trailer http.Header) error {
+	status, err := strconv.Atoi(trailer.Get("Status"))
+	if err != nil {
+		return fmt.Errorf("kes: invalid HTTP trailer - Status: %q", trailer.Get("Status"))
+	}
+	if status == http.StatusOK {
+		return nil
+	}
+
+	errMessage := trailer.Get("Error")
+	if errMessage == "" {
+		return NewError(status, "")
+	}
+
+	type Response struct {
+		Message string `json:"message"`
+	}
+	var response Response
+	if err = json.Unmarshal([]byte(errMessage), &response); err != nil {
+		return err
+	}
+	return NewError(status, response.Message)
 }

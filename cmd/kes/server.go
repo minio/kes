@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -386,29 +385,30 @@ func server(args []string) {
 	const MaxBody = 1 << 20 // 1 MiB
 	metrics := metric.New()
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store))))))))))))
-	mux.Handle("/v1/key/import/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store))))))))))))
-	mux.Handle("/v1/key/delete/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(store))))))))))))
-	mux.Handle("/v1/key/generate/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(store))))))))))))
-	mux.Handle("/v1/key/encrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/encrypt/*", xhttp.LimitRequestBody(MaxBody/2, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleEncryptKey(store))))))))))))
-	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(store))))))))))))
+	mux.Handle("/v1/key/create/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store))))))))))))
+	mux.Handle("/v1/key/import/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store))))))))))))
+	mux.Handle("/v1/key/delete/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(store))))))))))))
+	mux.Handle("/v1/key/generate/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(store))))))))))))
+	mux.Handle("/v1/key/encrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/encrypt/*", xhttp.LimitRequestBody(MaxBody/2, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleEncryptKey(store))))))))))))
+	mux.Handle("/v1/key/decrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(store))))))))))))
+	mux.Handle("/v1/key/list/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/key/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListKeys(store))))))))))))
 
-	mux.Handle("/v1/policy/write/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/policy/write/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleWritePolicy(roles))))))))))))
-	mux.Handle("/v1/policy/read/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/read/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleReadPolicy(roles))))))))))))
-	mux.Handle("/v1/policy/list/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListPolicies(roles))))))))))))
-	mux.Handle("/v1/policy/delete/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/policy/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeletePolicy(roles))))))))))))
+	mux.Handle("/v1/policy/write/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/policy/write/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleWritePolicy(roles))))))))))))
+	mux.Handle("/v1/policy/read/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/read/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleReadPolicy(roles))))))))))))
+	mux.Handle("/v1/policy/list/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListPolicies(roles))))))))))))
+	mux.Handle("/v1/policy/delete/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/policy/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeletePolicy(roles))))))))))))
 
-	mux.Handle("/v1/identity/assign/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/identity/assign/*/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleAssignIdentity(roles))))))))))))
-	mux.Handle("/v1/identity/list/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/identity/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListIdentities(roles))))))))))))
-	mux.Handle("/v1/identity/forget/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/identity/forget/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleForgetIdentity(roles))))))))))))
+	mux.Handle("/v1/identity/assign/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/identity/assign/*/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleAssignIdentity(roles))))))))))))
+	mux.Handle("/v1/identity/list/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/identity/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListIdentities(roles))))))))))))
+	mux.Handle("/v1/identity/forget/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/identity/forget/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleForgetIdentity(roles))))))))))))
 
 	mux.Handle("/v1/log/audit/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/audit/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceAuditLog(auditLog)))))))))))
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/error/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceErrorLog(errorLog)))))))))))
 
-	mux.Handle("/v1/metrics", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics))))))))))))
+	mux.Handle("/v1/metrics", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics))))))))))))
 
-	mux.Handle("/version", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.HandleVersion(version))))))))))) // /version is accessible to any identity
-	mux.Handle("/", timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.EnforceHTTP2(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound)))))))
+	mux.Handle("/version", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.HandleVersion(version))))))))))) // /version is accessible to any identity
+	mux.Handle("/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.EnforceHTTP2(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound)))))))
 
 	server := http.Server{
 		Addr:    addr,
@@ -640,155 +640,6 @@ func alignEndpoints(leftMargin int, IPs []net.IP, port string) string {
 		n++
 	}
 	return endpoints
-}
-
-// timeout returns and HTTP handler that runs f
-// with the given time limit.
-//
-// If the time limit exceeds before f has written
-// any response to the client, timeout will return
-// http.StatusServiceUnavailable (503) to the client.
-//
-// If the time limit exceeds after f has written
-// a response to the client timeout will not write
-// any response to the client. However, it will return
-// such that the HTTP server eventually closes the
-// underlying connection.
-// Any further attempt by f to write to the client after
-// the timeout limit has been exceeded will fail with
-// http.ErrHandlerTimeout.
-//
-// If f implements a long-running job then it should either
-// stop once request.Context().Done() completes or once
-// if a responseWriter.Write(...) call returns http.ErrHandlerTimeout.
-func timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancelCtx := context.WithTimeout(r.Context(), after)
-		defer cancelCtx()
-
-		r = r.WithContext(ctx)
-		tw := newTimeoutWriter(w)
-
-		done := make(chan struct{})
-		panicChan := make(chan interface{}, 1)
-		go func() {
-			defer func() {
-				if p := recover(); p != nil {
-					panicChan <- p
-				}
-			}()
-			f(tw, r)
-			close(done)
-		}()
-
-		select {
-		case p := <-panicChan:
-			panic(p)
-		case <-ctx.Done():
-			tw.timeout()
-		case <-done:
-		}
-	}
-}
-
-var _ http.ResponseWriter = (*timeoutWriter)(nil)
-var _ http.Flusher = (*timeoutWriter)(nil)
-var _ http.Pusher = (*timeoutWriter)(nil)
-
-// timeoutWriter is a http.ResponseWriter that implements
-// http.Flusher and http.Pusher. It synchronizes a potential
-// timeout and the writes by the http.ResponseWriter it wraps.
-type timeoutWriter struct {
-	writer  http.ResponseWriter
-	flusher http.Flusher
-	pusher  http.Pusher
-
-	lock       sync.Mutex
-	timedOut   bool
-	hasWritten bool
-}
-
-func newTimeoutWriter(w http.ResponseWriter) *timeoutWriter {
-	tw := &timeoutWriter{
-		writer: w,
-	}
-	if flusher, ok := w.(http.Flusher); ok {
-		tw.flusher = flusher
-	}
-	if pusher, ok := w.(http.Pusher); ok {
-		tw.pusher = pusher
-	}
-	return tw
-}
-
-// timeout returns http.StatusServiceUnavailable to the client
-// if no response has been written to the client, yet.
-func (tw *timeoutWriter) timeout() {
-	tw.lock.Lock()
-	defer tw.lock.Unlock()
-
-	tw.timedOut = true
-	if !tw.hasWritten {
-		tw.hasWritten = true
-		http.Error(tw.writer, "timeout", http.StatusServiceUnavailable)
-	}
-}
-
-func (tw *timeoutWriter) Header() http.Header { return tw.writer.Header() }
-
-func (tw *timeoutWriter) WriteHeader(statusCode int) {
-	tw.lock.Lock()
-	defer tw.lock.Unlock()
-
-	if tw.timedOut {
-		if !tw.hasWritten {
-			tw.hasWritten = true
-			http.Error(tw.writer, "timeout", http.StatusServiceUnavailable)
-		}
-	} else {
-		tw.hasWritten = true
-		tw.writer.WriteHeader(statusCode)
-	}
-}
-
-func (tw *timeoutWriter) Write(p []byte) (int, error) {
-	// We must not hold the lock while writing to the
-	// underlying http.ResponseWriter (via Write([]byte))
-	// b/c e.g. a slow/malicious client would block the
-	// lock.Unlock.
-	// In this case we cannot accquire the lock when we
-	// want to mark the timeoutWriter as timed out (See: timeout()).
-	// So, the client would block the actual handler by slowly
-	// reading the response and the timeout handler since it
-	// would not be able to accquire the lock until the Write([]byte)
-	// finishes.
-	// Therefore, we must release the lock before writing
-	// the (eventually large) response body to the client.
-	tw.lock.Lock()
-	if tw.timedOut {
-		tw.lock.Unlock()
-		return 0, http.ErrHandlerTimeout
-	}
-	if !tw.hasWritten {
-		tw.hasWritten = true
-		tw.writer.WriteHeader(http.StatusOK)
-	}
-	tw.lock.Unlock()
-
-	return tw.writer.Write(p)
-}
-
-func (tw *timeoutWriter) Flush() {
-	if tw.flusher != nil {
-		tw.flusher.Flush()
-	}
-}
-
-func (tw *timeoutWriter) Push(target string, opts *http.PushOptions) error {
-	if tw.pusher != nil {
-		return tw.pusher.Push(target, opts)
-	}
-	return http.ErrNotSupported
 }
 
 // interfaceIP4Addrs returns a list of the system's unicast

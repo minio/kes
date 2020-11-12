@@ -6,6 +6,7 @@
 package mem
 
 import (
+	"context"
 	"sync"
 
 	"github.com/minio/kes"
@@ -59,3 +60,38 @@ func (s *Store) Get(key string) (string, error) {
 	}
 	return value, nil
 }
+
+// List returns a new Iterator over the names of
+// all stored keys.
+func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	keys := make([]string, 0, len(s.store))
+	for key := range s.store {
+		keys = append(keys, key)
+	}
+	return &iterator{
+		values: keys,
+	}, nil
+}
+
+type iterator struct {
+	values []string
+	last   string
+}
+
+var _ secret.Iterator = (*iterator)(nil)
+
+func (i *iterator) Next() bool {
+	if len(i.values) > 0 {
+		i.last = i.values[0]
+		i.values = i.values[1:]
+		return true
+	}
+	return false
+}
+
+func (i *iterator) Value() string { return i.last }
+
+func (*iterator) Err() error { return nil }

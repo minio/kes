@@ -11,7 +11,7 @@ import (
 )
 
 // MaxSize is the max. size of a secret.
-// A should be larger than 1 MiB.
+// A secret should not be larger than 1 MiB.
 //
 // Implementions of Remote should use this to limit
 // the amount of data they read from the key-value
@@ -49,6 +49,44 @@ type Remote interface {
 	// key. It returns kes.ErrKeyNotFound if no entry
 	// for the given key could be found.
 	Get(key string) (string, error)
+
+	// List returns a new Iterator over the names of
+	// all stored keys.
+	List(ctx context.Context) (Iterator, error)
+}
+
+// An Iterator iterates over a source of values.
+//   for iterator.Next() {
+//       _ = iterator.Value()
+//   }
+//   if err := iterator.Err(); err != nil {
+//   }
+//
+// An Iterator, in general, does not provide any
+// guarantees about the order of values or the
+// behavior when its underlying source is modified
+// concurrently.
+type Iterator interface {
+	// Next returns true if there is another item.
+	// This item can be retrieved via the Value
+	// method.
+	//
+	// It returns false if no more items are available
+	// or if the iterator encountered an error. The error,
+	// if any, can be retrieved via the Err method.
+	Next() bool
+
+	// Value returns the latest value encountered. It
+	// returns the same value until Next is called
+	// again.
+	//
+	// If Next returns false then the behavior of a
+	// subsequent Value call is implementation-dependent.
+	Value() string
+
+	// Err returns the first error encountered by the
+	// Iterator, if any.
+	Err() error
 }
 
 // Store is the local secret store connected
@@ -108,6 +146,14 @@ func (s *Store) Get(name string) (Secret, error) {
 		return Secret{}, err
 	}
 	return s.cache.SetOrGet(name, secret), nil
+}
+
+// List returns a new Iterator over all key names.
+//
+// The behavior of the Iterator is implementation-specific
+// and depends upon the Remote key store backend.
+func (s *Store) List(ctx context.Context) (Iterator, error) {
+	return s.Remote.List(ctx)
 }
 
 // StartGC starts the cache garbage collection background process.
