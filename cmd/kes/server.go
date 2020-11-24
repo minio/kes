@@ -254,13 +254,13 @@ func server(args []string) {
 	switch {
 	case config.Keys.Fs.Path != "":
 		f, err := os.Stat(config.Keys.Fs.Path)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			stdlog.Fatalf("Error: failed to open %q: %v", config.Keys.Fs.Path, err)
 		}
 		if err == nil && !f.IsDir() {
 			stdlog.Fatalf("Error: %q is not a directory", config.Keys.Fs.Path)
 		}
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			msg := fmt.Sprintf("Creating directory '%s' ... ", config.Keys.Fs.Path)
 			quiet.Print(msg)
 			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {

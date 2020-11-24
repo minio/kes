@@ -178,7 +178,7 @@ func newIdentityCmd(args []string) {
 	)
 	keyFile, err = os.OpenFile(keyPath, fileFlags, 0600)
 	if err != nil {
-		if os.IsExist(err) {
+		if errors.Is(err, os.ErrExist) {
 			stdlog.Fatalf("Error: private key %q already exists: Use --force to overwrite it", keyPath)
 		}
 		stdlog.Fatalf("Error: failed to create private key %q: %v", keyPath, err)
@@ -187,7 +187,7 @@ func newIdentityCmd(args []string) {
 
 	certFile, err = os.OpenFile(certPath, fileFlags, 0600)
 	if err != nil {
-		if os.IsExist(err) {
+		if errors.Is(err, os.ErrExist) {
 			stdlog.Fatalf("Error: certificate %q already exists: Use --force to overwrite it", certPath)
 		}
 		stdlog.Fatalf("Error: failed to create certificate %q: %v", certPath, err)

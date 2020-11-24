@@ -9,6 +9,7 @@ package fs
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -54,7 +55,7 @@ func (s *Store) Create(key, value string) error {
 	// file must not have existed before.
 	path := filepath.Join(s.Dir, key)
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil && os.IsExist(err) {
+	if errors.Is(err, os.ErrExist) {
 		return kes.ErrKeyExists
 	}
 	if err != nil {
@@ -87,7 +88,7 @@ func (s *Store) Create(key, value string) error {
 func (s *Store) Delete(key string) error {
 	path := filepath.Join(s.Dir, key)
 	err := os.Remove(path)
-	if err != nil && os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		err = nil // Ignore the error if the file does not exist
 	}
 	if err != nil {
@@ -104,7 +105,7 @@ func (s *Store) Delete(key string) error {
 func (s *Store) Get(key string) (string, error) {
 	path := filepath.Join(s.Dir, key)
 	file, err := os.Open(path)
-	if err != nil && os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return "", kes.ErrKeyNotFound
 	}
 	if err != nil {
