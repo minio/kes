@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -28,16 +27,9 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
-	"github.com/minio/kes/internal/aws"
-	"github.com/minio/kes/internal/fs"
-	"github.com/minio/kes/internal/gcp"
-	"github.com/minio/kes/internal/gemalto"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
-	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/metric"
-	"github.com/minio/kes/internal/secret"
-	"github.com/minio/kes/internal/vault"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -94,82 +86,52 @@ func server(args []string) {
 	cli.Usage = func() { fmt.Fprint(os.Stderr, serverCmdUsage) }
 
 	var (
-		addr         string
-		configPath   string
-		rootIdentity string
-		mlock        bool
-		tlsKeyPath   string
-		tlsCertPath  string
-		mtlsAuth     string
-		quiet        quiet
+		addrFlag     string
+		configFlag   string
+		rootFlag     string
+		mlockFlag    bool
+		tlsKeyFlag   string
+		tlsCertFlag  string
+		mtlsAuthFlag string
+		quietFlag    quiet
 	)
-	cli.StringVar(&addr, "addr", "127.0.0.1:7373", "The address of the server")
-	cli.StringVar(&configPath, "config", "", "Path to the server configuration file")
-	cli.StringVar(&rootIdentity, "root", "", "The identity of root - who can perform any operation")
-	cli.BoolVar(&mlock, "mlock", false, "Lock all allocated memory pages")
-	cli.StringVar(&tlsKeyPath, "key", "", "Path to the TLS private key")
-	cli.StringVar(&tlsCertPath, "cert", "", "Path to the TLS certificate")
-	cli.StringVar(&mtlsAuth, "auth", "on", "Controls how the server handles mTLS authentication")
-	cli.Var(&quiet, "q", "Do not print information on startup")
-	cli.Var(&quiet, "quiet", "Do not print information on startup")
+	cli.StringVar(&addrFlag, "addr", "127.0.0.1:7373", "The address of the server")
+	cli.StringVar(&configFlag, "config", "", "Path to the server configuration file")
+	cli.StringVar(&rootFlag, "root", "", "The identity of root - who can perform any operation")
+	cli.BoolVar(&mlockFlag, "mlock", false, "Lock all allocated memory pages")
+	cli.StringVar(&tlsKeyFlag, "key", "", "Path to the TLS private key")
+	cli.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
+	cli.StringVar(&mtlsAuthFlag, "auth", "on", "Controls how the server handles mTLS authentication")
+	cli.Var(&quietFlag, "q", "Do not print information on startup")
+	cli.Var(&quietFlag, "quiet", "Do not print information on startup")
 	cli.Parse(args[1:])
 
 	if cli.NArg() > 0 {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	config, err := loadServerConfig(configPath)
+	config, err := loadServerConfig(configFlag)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
 	config.SetDefaults()
-
-	if !isFlagPresent(cli, "addr") && config.Addr != "" {
-		addr = config.Addr
+	if config.Addr == "" {
+		config.Addr = addrFlag
 	}
-	if rootIdentity == "" {
-		if config.Root == "" {
-			stdlog.Fatal("Error: no root identity has been specified")
-		}
-		rootIdentity = config.Root.String()
+	if config.Root == "" {
+		config.Root = kes.Identity(rootFlag)
 	}
-	if tlsKeyPath == "" {
-		if config.TLS.KeyPath == "" {
-			stdlog.Fatal("Error: no private key file has been specified")
-		}
-		tlsKeyPath = config.TLS.KeyPath
+	if config.TLS.KeyPath == "" {
+		config.TLS.KeyPath = tlsKeyFlag
 	}
-	if tlsCertPath == "" {
-		if config.TLS.CertPath == "" {
-			stdlog.Fatal("Error: no certificate file has been specified")
-		}
-		tlsCertPath = config.TLS.CertPath
+	if config.TLS.CertPath == "" {
+		config.TLS.CertPath = tlsCertFlag
+	}
+	if err = config.Verify(); err != nil {
+		stdlog.Fatalf("Error: %v", err)
 	}
 
-	switch {
-	case config.Keys.Fs.Path != "" && config.Keys.Vault.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
-	case config.Keys.Fs.Path != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
-	case config.Keys.Fs.Path != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Keys.Fs.Path != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		stdlog.Fatal("Error: ambiguous configuration: FS and GCP secret manager are specified at the same time")
-	case config.Keys.Vault.Endpoint != "" && config.Keys.Aws.SecretsManager.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
-	case config.Keys.Vault.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Keys.Vault.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		stdlog.Fatal("Error: ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
-	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.Gemalto.KeySecure.Endpoint != "":
-		stdlog.Fatal("Error: ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Keys.Aws.SecretsManager.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		stdlog.Fatal("Error: ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
-	case config.Keys.Gemalto.KeySecure.Endpoint != "" && config.Keys.GCP.SecretManager.ProjectID != "":
-		stdlog.Fatal("Error: ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
-	}
-
-	if mlock {
+	if mlockFlag {
 		if runtime.GOOS != "linux" {
 			stdlog.Fatal("Error: cannot lock memory: syscall requires a linux system")
 		}
@@ -207,13 +169,10 @@ func server(args []string) {
 		proxy = &auth.TLSProxy{
 			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert),
 		}
-		if strings.ToLower(mtlsAuth) != "off" {
+		if strings.ToLower(mtlsAuthFlag) != "off" {
 			proxy.VerifyOptions = new(x509.VerifyOptions)
 		}
 		for _, identity := range config.TLS.Proxy.Identities {
-			if identity == kes.Identity(rootIdentity) {
-				stdlog.Fatalf("Error: cannot use root identity %q as TLS proxy", identity)
-			}
 			if !identity.IsUnknown() {
 				proxy.Add(identity)
 			}
@@ -221,7 +180,7 @@ func server(args []string) {
 	}
 
 	roles := &auth.Roles{
-		Root: kes.Identity(rootIdentity),
+		Root: config.Root,
 	}
 	for name, policy := range config.Policies {
 		p, err := kes.NewPolicy(policy.Paths...)
@@ -231,9 +190,6 @@ func server(args []string) {
 		roles.Set(name, p)
 
 		for _, identity := range policy.Identities {
-			if identity == kes.Identity(rootIdentity) {
-				stdlog.Fatalf("Error: cannot assign policy %q to root identity %q", name, identity)
-			}
 			if proxy != nil && proxy.Is(identity) {
 				stdlog.Fatalf("Error: cannot assign policy %q to TLS proxy %q", name, identity)
 			}
@@ -246,139 +202,9 @@ func server(args []string) {
 		}
 	}
 
-	var (
-		store            = &secret.Store{}
-		keyStore         string
-		keyStoreEndpoint string
-	)
-	switch {
-	case config.Keys.Fs.Path != "":
-		f, err := os.Stat(config.Keys.Fs.Path)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			stdlog.Fatalf("Error: failed to open %q: %v", config.Keys.Fs.Path, err)
-		}
-		if err == nil && !f.IsDir() {
-			stdlog.Fatalf("Error: %q is not a directory", config.Keys.Fs.Path)
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			msg := fmt.Sprintf("Creating directory '%s' ... ", config.Keys.Fs.Path)
-			quiet.Print(msg)
-			if err = os.MkdirAll(config.Keys.Fs.Path, 0700); err != nil {
-				stdlog.Fatalf("Error: failed to create directory %q: %v", config.Keys.Fs.Path, err)
-			}
-			quiet.ClearMessage(msg)
-		}
-		store.Remote = &fs.Store{
-			Dir:      config.Keys.Fs.Path,
-			ErrorLog: errorLog.Log(),
-		}
-
-		keyStore = "Filesystem"
-		if keyStoreEndpoint, err = filepath.Abs(config.Keys.Fs.Path); err != nil {
-			keyStoreEndpoint = config.Keys.Fs.Path
-		}
-	case config.Keys.Vault.Endpoint != "":
-		vaultStore := &vault.Store{
-			Addr:      config.Keys.Vault.Endpoint,
-			Engine:    config.Keys.Vault.EnginePath,
-			Location:  config.Keys.Vault.Prefix,
-			Namespace: config.Keys.Vault.Namespace,
-			AppRole: vault.AppRole{
-				Engine: config.Keys.Vault.AppRole.EnginePath,
-				ID:     config.Keys.Vault.AppRole.ID,
-				Secret: config.Keys.Vault.AppRole.Secret,
-				Retry:  config.Keys.Vault.AppRole.Retry,
-			},
-			StatusPingAfter: config.Keys.Vault.Status.Ping,
-			ErrorLog:        errorLog.Log(),
-			ClientKeyPath:   config.Keys.Vault.TLS.KeyPath,
-			ClientCertPath:  config.Keys.Vault.TLS.CertPath,
-			CAPath:          config.Keys.Vault.TLS.CAPath,
-		}
-
-		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", vaultStore.Addr)
-		quiet.Print(msg)
-		if err := vaultStore.Authenticate(context.Background()); err != nil {
-			stdlog.Fatalf("Error: failed to connect to Vault: %v", err)
-		}
-		quiet.ClearMessage(msg)
-		store.Remote = vaultStore
-
-		keyStore = "Hashicorp Vault"
-		keyStoreEndpoint = config.Keys.Vault.Endpoint
-	case config.Keys.Aws.SecretsManager.Endpoint != "":
-		awsStore := &aws.SecretsManager{
-			Addr:     config.Keys.Aws.SecretsManager.Endpoint,
-			Region:   config.Keys.Aws.SecretsManager.Region,
-			KMSKeyID: config.Keys.Aws.SecretsManager.KmsKey,
-			ErrorLog: errorLog.Log(),
-			Login: aws.Credentials{
-				AccessKey:    config.Keys.Aws.SecretsManager.Login.AccessKey,
-				SecretKey:    config.Keys.Aws.SecretsManager.Login.SecretKey,
-				SessionToken: config.Keys.Aws.SecretsManager.Login.SessionToken,
-			},
-		}
-
-		msg := fmt.Sprintf("Authenticating to AWS SecretsManager '%s' ... ", awsStore.Addr)
-		quiet.Print(msg)
-		if err := awsStore.Authenticate(); err != nil {
-			stdlog.Fatalf("Error: failed to connect to AWS Secrets Manager: %v", err)
-		}
-		quiet.ClearMessage(msg)
-		store.Remote = awsStore
-
-		keyStore = "AWS SecretsManager"
-		keyStoreEndpoint = config.Keys.Aws.SecretsManager.Endpoint
-	case config.Keys.Gemalto.KeySecure.Endpoint != "":
-		gemaltoStore := &gemalto.KeySecure{
-			Endpoint: config.Keys.Gemalto.KeySecure.Endpoint,
-			CAPath:   config.Keys.Gemalto.KeySecure.TLS.CAPath,
-			ErrorLog: errorLog.Log(),
-			Login: gemalto.Credentials{
-				Token:  config.Keys.Gemalto.KeySecure.Login.Token,
-				Domain: config.Keys.Gemalto.KeySecure.Login.Domain,
-				Retry:  config.Keys.Gemalto.KeySecure.Login.Retry,
-			},
-		}
-
-		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
-		quiet.Printf(msg)
-		if err := gemaltoStore.Authenticate(); err != nil {
-			stdlog.Fatalf("Error: failed to connect to Gemalto KeySecure: %v", err)
-		}
-		quiet.ClearMessage(msg)
-		store.Remote = gemaltoStore
-
-		keyStore = "Gemalto KeySecure"
-		keyStoreEndpoint = config.Keys.Gemalto.KeySecure.Endpoint
-	case config.Keys.GCP.SecretManager.ProjectID != "":
-		gcpStore := &gcp.SecretManager{
-			Endpoint:  config.Keys.GCP.SecretManager.Endpoint,
-			ProjectID: config.Keys.GCP.SecretManager.ProjectID,
-			ErrorLog:  errorLog.Log(),
-		}
-
-		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", gcpStore.ProjectID)
-		quiet.Printf(msg)
-		err := gcpStore.Authenticate(gcp.Credentials{
-			ClientID: config.Keys.GCP.SecretManager.Credentials.ClientID,
-			Client:   config.Keys.GCP.SecretManager.Credentials.Client,
-			KeyID:    config.Keys.GCP.SecretManager.Credentials.KeyID,
-			Key:      config.Keys.GCP.SecretManager.Credentials.Key,
-		})
-		if err != nil {
-			stdlog.Fatalf("Error: failed to connect to GCP SecretManager: %v", err)
-		}
-		quiet.ClearMessage(msg)
-		store.Remote = gcpStore
-
-		keyStore = "GCP SecretManager"
-		keyStoreEndpoint = config.Keys.GCP.SecretManager.Endpoint + " | Project: " + config.Keys.GCP.SecretManager.ProjectID
-	default:
-		store.Remote = &mem.Store{}
-
-		keyStore = "In-Memory"
-		keyStoreEndpoint = "non-persistent"
+	store, err := config.Keys.Connect(quietFlag, errorLog.Log())
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
 	}
 	store.StartGC(context.Background(), config.Cache.Expiry.Any, config.Cache.Expiry.Unused)
 
@@ -411,7 +237,7 @@ func server(args []string) {
 	mux.Handle("/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.EnforceHTTP2(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound)))))))
 
 	server := http.Server{
-		Addr:    addr,
+		Addr:    config.Addr,
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS13,
@@ -421,13 +247,13 @@ func server(args []string) {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 0 * time.Second, // explicitly set no write timeout - see timeout handler.
 	}
-	switch strings.ToLower(mtlsAuth) {
+	switch strings.ToLower(mtlsAuthFlag) {
 	case "on":
 		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	case "off":
 		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
 	default:
-		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuth)
+		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuthFlag)
 	}
 
 	sigCh := make(chan os.Signal)
@@ -471,42 +297,46 @@ func server(args []string) {
 		bold   = color.New(color.Bold)
 		italic = color.New(color.Italic)
 	)
-	ip, port := serverAddr(addr)
+	ip, port := serverAddr(config.Addr)
+	kmsKind, kmsEndpoint, err := config.Keys.Description()
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
 
 	const margin = 10 // len("Endpoint: ")
-	quiet.Print(blue.Sprint("Endpoint: "))
-	quiet.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
-	quiet.Println()
+	quietFlag.Print(blue.Sprint("Endpoint: "))
+	quietFlag.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
+	quietFlag.Println()
 
-	if r, err := hex.DecodeString(rootIdentity); err == nil && len(r) == sha256.Size {
-		quiet.Println(blue.Sprint("Root:    "), rootIdentity)
+	if r, err := hex.DecodeString(config.Root.String()); err == nil && len(r) == sha256.Size {
+		quietFlag.Println(blue.Sprint("Root:    "), config.Root)
 	} else {
-		quiet.Println(blue.Sprint("Root:    "), "_     [ disabled ]")
+		quietFlag.Println(blue.Sprint("Root:    "), "_     [ disabled ]")
 	}
-	if auth := strings.ToLower(mtlsAuth); auth == "on" {
-		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))
+	if auth := strings.ToLower(mtlsAuthFlag); auth == "on" {
+		quietFlag.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))
 	} else {
-		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgYellow).Sprint("off"), color.YellowString("  [ any client can connect but policies still apply ]"))
+		quietFlag.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgYellow).Sprint("off"), color.YellowString("  [ any client can connect but policies still apply ]"))
 	}
-	quiet.Println()
+	quietFlag.Println()
 
-	quiet.Println(blue.Sprint("Keys:    "), fmt.Sprintf("%s: %s", keyStore, keyStoreEndpoint))
-	quiet.Println()
+	quietFlag.Println(blue.Sprint("Keys:    "), fmt.Sprintf("%s: %s", kmsKind, kmsEndpoint))
+	quietFlag.Println()
 
 	if runtime.GOOS == "windows" {
-		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("set KES_SERVER=https://%v:%s", ip, port))
-		quiet.Println("         ", bold.Sprint("set KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+`   // e.g. root.key`)
-		quiet.Println("         ", bold.Sprint("set KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+`  // e.g. root.cert`)
-		quiet.Println("         ", bold.Sprint("kes --help"))
+		quietFlag.Println(blue.Sprint("CLI:     "), bold.Sprintf("set KES_SERVER=https://%v:%s", ip, port))
+		quietFlag.Println("         ", bold.Sprint("set KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+`   // e.g. root.key`)
+		quietFlag.Println("         ", bold.Sprint("set KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+`  // e.g. root.cert`)
+		quietFlag.Println("         ", bold.Sprint("kes --help"))
 	} else {
-		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("export KES_SERVER=https://%v:%s", ip, port))
-		quiet.Println("         ", bold.Sprint("export KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+"   // e.g. $HOME/root.key")
-		quiet.Println("         ", bold.Sprint("export KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+"  // e.g. $HOME/root.cert")
-		quiet.Println("         ", bold.Sprint("kes --help"))
+		quietFlag.Println(blue.Sprint("CLI:     "), bold.Sprintf("export KES_SERVER=https://%v:%s", ip, port))
+		quietFlag.Println("         ", bold.Sprint("export KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+"   // e.g. $HOME/root.key")
+		quietFlag.Println("         ", bold.Sprint("export KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+"  // e.g. $HOME/root.cert")
+		quietFlag.Println("         ", bold.Sprint("kes --help"))
 	}
 
 	// Start the HTTPS server
-	if err := server.ListenAndServeTLS(tlsCertPath, tlsKeyPath); err != http.ErrServerClosed {
+	if err := server.ListenAndServeTLS(config.TLS.CertPath, config.TLS.KeyPath); err != http.ErrServerClosed {
 		stdlog.Fatalf("Error: failed to start server: %v", err)
 	}
 }
@@ -575,6 +405,19 @@ func (q quiet) Printf(format string, a ...interface{}) {
 func (q quiet) Println(a ...interface{}) {
 	if !q {
 		fmt.Println(a...)
+	}
+}
+
+// ClearLine clears the last line written to STDOUT if
+// STDOUT is a terminal that supports terminal control
+// sequences.
+//
+// Otherwise, ClearLine just prints a empty newline.
+func (q quiet) ClearLine() {
+	if color.NoColor {
+		q.Println()
+	} else {
+		q.Print("\033[2K\r")
 	}
 }
 

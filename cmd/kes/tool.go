@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -21,9 +22,15 @@ import (
 	stdlog "log"
 	"math/big"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/secret"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -32,6 +39,7 @@ const toolCmdUsage = `Usage:
 
 Commands:
     identity               Identity management tools.
+    migrate                Migrate between KMS backends.
 
 Options:
    -h, --help              Show list of command-line options
@@ -50,6 +58,8 @@ func tool(args []string) {
 	switch args = cli.Args(); args[0] {
 	case "identity":
 		toolIdentity(args)
+	case "migrate":
+		migrate(args)
 	default:
 		stdlog.Fatalf("Error: %q is not a kes tool command. See 'kes tool --help'", args[0])
 	}
@@ -108,7 +118,7 @@ Examples:
 
 func newIdentityCmd(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprintf(os.Stderr, newIdentityCmdUsage) }
+	cli.Usage = func() { fmt.Fprint(os.Stderr, newIdentityCmdUsage) }
 
 	var (
 		keyPath  string
@@ -237,7 +247,7 @@ Examples:
 
 func identityOfCmd(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprintf(os.Stderr, identityOfCmdUsage) }
+	cli.Usage = func() { fmt.Fprint(os.Stderr, identityOfCmdUsage) }
 
 	var hashFunc string
 	cli.StringVar(&hashFunc, "hash", "SHA256", "")
@@ -283,6 +293,196 @@ func identityOfCmd(args []string) {
 	} else {
 		fmt.Print(hex.EncodeToString(sum))
 	}
+}
+
+const migrateCmdUsage = `Usage:
+    kes tool migrate [options] [<pattern>]
+
+Options:
+    --from <PATH>          Path to the configuration file of the server that
+                           should be migrated
+    --to   <PATH>          Path to the configuration file of the server that
+                           is the migration target
+
+    -f, --force            Migrate keys even if a key with the same name exists
+                           at the target. The existing keys will be deleted
+
+    --merge                Merge the source into the target by only migrating
+                           those keys that do not exist at the target
+
+    -q, --quiet            Don't print migration progress and statistics.
+    -h, --help             Show list of command-line options
+
+Migrate keys from one KMS to another KMS. The KMS access credentials are
+taken from the KES config files specified via the --from and --to flags.
+
+Both, the source and target KMS, must be reachable from the machine 
+performing the migration.
+
+Examples:
+    $ kes tool migrate --from kes-vault.yml --to kes-aws.yml
+`
+
+func migrate(args []string) {
+	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
+	cli.Usage = func() { fmt.Fprint(os.Stderr, migrateCmdUsage) }
+
+	var (
+		fromFlag  string
+		toFlag    string
+		forceFlag bool
+		mergeFlag bool
+		quietFlag quiet
+	)
+	cli.StringVar(&fromFlag, "from", "", "Path to the config file of the migration source")
+	cli.StringVar(&toFlag, "to", "", "Path to the config file of the migration target")
+	cli.BoolVar(&forceFlag, "f", false, "Overwrite existing keys at the migration target")
+	cli.BoolVar(&forceFlag, "force", false, "Overwrite existing keys at the migration target")
+	cli.BoolVar(&mergeFlag, "merge", false, "Only migrate keys that don't exist at the migration target")
+	cli.Var(&quietFlag, "q", "Don't print migration progress and statistics")
+	cli.Var(&quietFlag, "quiet", "Don't print migration progress and statistics")
+	cli.Parse(args[1:])
+
+	if cli.NArg() > 1 {
+		stdlog.Fatal("Error: too many arguments")
+	}
+	if fromFlag == "" {
+		stdlog.Fatal("Error: no migration source specified. Use '--from' to specify a config file")
+	}
+	if toFlag == "" {
+		stdlog.Fatal("Error: no migration target specified. Use '--to' to specify a config file")
+	}
+	if forceFlag && mergeFlag {
+		stdlog.Fatal("Error: -f or --force cannot be used together with --merge. They are mutually exclusive")
+	}
+
+	var pattern = cli.Arg(0)
+	if pattern == "" {
+		pattern = "*"
+	}
+
+	sourceConfig, err := loadServerConfig(fromFlag)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to read config file: %v", err)
+	}
+	sourceConfig.Keys.SetDefaults()
+	if err := sourceConfig.Keys.Verify(); err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+
+	targetConfig, err := loadServerConfig(toFlag)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to read config file: %v", err)
+	}
+	targetConfig.Keys.SetDefaults()
+	if err := targetConfig.Keys.Verify(); err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+
+	src, err := sourceConfig.Keys.Connect(quietFlag, nil)
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+	dst, err := targetConfig.Keys.Connect(quietFlag, nil)
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+
+	var (
+		n                   uint64
+		uiTicker            = time.NewTicker(100 * time.Millisecond)
+		listContext, cancel = context.WithCancel(context.Background())
+		uiContext, cancelUI = context.WithCancel(listContext)
+		signals             = make(chan os.Signal)
+	)
+	defer cancel()
+	defer cancelUI()
+	defer uiTicker.Stop()
+
+	// Watch for Ctrl-C and cancel the listing (and the UI).
+	signal.Notify(signals, os.Kill, os.Interrupt)
+	defer signal.Stop(signals)
+	go func() {
+		<-signals
+		cancel()
+	}()
+
+	// Now, we start listing the keys at the source.
+	iterator, err := src.List(listContext)
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+
+	// Then, we start the UI which prints how many keys have
+	// been migrated in fixed time intervals.
+	go func() {
+		for {
+			select {
+			case <-uiTicker.C:
+				msg := fmt.Sprintf("Migrated keys: %d", atomic.LoadUint64(&n))
+				quietFlag.ClearMessage(msg)
+				quietFlag.Print(msg)
+			case <-uiContext.Done():
+				return
+			}
+		}
+	}()
+
+	// Finally, we start the actual migration.
+	var (
+		red   = color.New(color.FgRed)
+		green = color.New(color.FgGreen)
+	)
+	for iterator.Next() {
+		name := iterator.Value()
+		if ok, _ := filepath.Match(pattern, name); !ok {
+			continue
+		}
+
+		key, err := src.Remote.Get(name)
+		if err != nil {
+			quietFlag.ClearLine()
+			stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
+			stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
+		}
+
+		// We are conservative and only migrate a key if it is well-formed.
+		if _, err = secret.ParseSecret(key); err != nil {
+			quietFlag.ClearLine()
+			stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
+			stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
+		}
+
+		err = dst.Remote.Create(name, key)
+		if err == kes.ErrKeyExists && mergeFlag {
+			continue // Do not increment the counter since we skip this key
+		}
+		if err == kes.ErrKeyExists && forceFlag { // Try to overwrite the key
+			if err = dst.Remote.Delete(name); err != nil {
+				quietFlag.ClearLine()
+				stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
+				stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
+			}
+			err = dst.Remote.Create(name, key)
+		}
+		if err != nil {
+			quietFlag.ClearLine()
+			stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
+			stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
+		}
+		atomic.AddUint64(&n, 1)
+	}
+	if err = iterator.Err(); err != nil {
+		quietFlag.ClearLine()
+		stdlog.Printf("Error: failed to list keys: %v\n", err)
+		stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
+	}
+	cancelUI()
+
+	// At the end we show how many keys we have migrated successfully.
+	msg := fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + green.Sprint("[ OK ]")
+	quietFlag.ClearMessage(msg)
+	quietFlag.Println(msg)
 }
 
 func parseCertificate(r io.Reader) (*x509.Certificate, error) {

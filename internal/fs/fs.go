@@ -93,8 +93,9 @@ func (s *Store) Delete(key string) error {
 	}
 	if err != nil {
 		s.logf("fs: failed to delete '%s': %v", path, err)
+		return errDeleteKey
 	}
-	return errDeleteKey
+	return nil
 }
 
 // Get returns the secret key associated with the given name.
