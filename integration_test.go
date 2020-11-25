@@ -75,6 +75,28 @@ func TestCreateKey(t *testing.T) {
 	}
 }
 
+func TestDeleteKey(t *testing.T) {
+	if !*IsIntegrationTest {
+		t.SkipNow()
+	}
+
+	client, err := newClient()
+	if err != nil {
+		t.Fatalf("Failed to create KES client: %v", err)
+	}
+
+	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	if err := client.CreateKey(key); err != nil {
+		t.Fatalf("Failed to create key '%s': %v", key, err)
+	}
+	if err := client.DeleteKey(key); err != nil {
+		t.Fatalf("Failed to delete key '%s': %v", key, err)
+	}
+	if err := client.DeleteKey(key); err != nil {
+		t.Fatalf("Failed to delete key '%s' a 2nd time: %v", key, err)
+	}
+}
+
 var importKeyTests = []struct {
 	Key []byte
 
