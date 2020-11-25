@@ -108,14 +108,4 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 	})
 }
 
-func isFlagPresent(set *flag.FlagSet, name string) bool {
-	found := false
-	set.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
-}
-
 func isTerm(f *os.File) bool { return terminal.IsTerminal(int(f.Fd())) }
