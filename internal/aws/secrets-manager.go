@@ -183,8 +183,13 @@ func (s *SecretsManager) List(ctx context.Context) (secret.Iterator, error) {
 			for _, secret := range page.SecretList {
 				values <- *secret.Name
 			}
-			return lastPage
+
+			// The pagination is stopped once we return false.
+			// If lastPage is true then we reached the end. Therefore,
+			// we return !lastPage which then is false.
+			return !lastPage
 		})
+
 		if err != nil {
 			s.logf("aws: failed to list keys: %v", err)
 			iterator.SetErr(errListKey)
