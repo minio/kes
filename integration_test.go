@@ -306,7 +306,8 @@ func TestListKeys(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
-	t.SkipNow() // TODO(aead): enable test once play.min.io:7373 has been updated and supports the /v1/key/list/ API
+	_ = listKeysTests // TODO(aead): make golang-ci happy. Remove once we enable the test on CI.
+	t.SkipNow()       // TODO(aead): enable test once play.min.io:7373 has been updated and supports the /v1/key/list/ API
 
 	client, err := newClient()
 	if err != nil {
