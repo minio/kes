@@ -7,6 +7,7 @@ package kes
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 )
@@ -242,6 +243,13 @@ type AuditEvent struct {
 	Response AuditEventResponse `json:"response"`
 }
 
+// String returns the AuditEvent's string representation
+// which is valid JSON.
+func (a *AuditEvent) String() string {
+	const format = `{"time":"%s","request":%s,"response":%s}`
+	return fmt.Sprintf(format, a.Time.Format(time.RFC3339), a.Request.String(), a.Response.String())
+}
+
 // AuditEventRequest contains the audit information
 // about a request sent by a client to a KES server.
 //
@@ -252,6 +260,13 @@ type AuditEventRequest struct {
 	Identity string `json:"identity"`
 }
 
+// String returns the AuditEventRequest's string representation
+// which is valid JSON.
+func (a *AuditEventRequest) String() string {
+	const format = `{"path":"%s","identity":"%s"}`
+	return fmt.Sprintf(format, a.Path, a.Identity)
+}
+
 // AuditEventResponse contains the audit information
 // about a response sent to a client by a KES server.
 //
@@ -260,4 +275,11 @@ type AuditEventRequest struct {
 type AuditEventResponse struct {
 	StatusCode int           `json:"code"`
 	Time       time.Duration `json:"time"`
+}
+
+// String returns the AuditEventResponse's string
+// representation which is valid JSON.
+func (a *AuditEventResponse) String() string {
+	const format = `{"code":%d,"time":%d}`
+	return fmt.Sprintf(format, a.StatusCode, a.Time)
 }

@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/minio/kes/internal/auth"
-	"github.com/minio/kes/internal/log"
 )
 
 // TLSProxy returns a handler function that checks if the
@@ -33,17 +32,17 @@ func TLSProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 		// For now, we can keep this until we've settled
 		// on a cleaner solution.
 
-		aw, ok := w.(*log.AuditResponseWriter)
 		if err := proxy.Verify(r); err != nil {
 			Error(w, err)
 			return
 		}
+		aw, ok := w.(*AuditResponseWriter)
 		if ok && aw != nil {
 			// Update the audit log identity such that
 			// the audit log shows the actual client and
 			// not the TLS proxy.
 			aw.Identity = auth.Identify(r, proxy.Identify)
 		}
-		f(w, r)
+		f(aw, r)
 	}
 }

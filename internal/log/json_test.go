@@ -18,7 +18,7 @@ var jsonWriterWriteTests = []struct {
 }{
 	{
 		Content: "",
-		Output:  "{\"message\":\"\"}",
+		Output:  "{\"message\":\"\"}\n",
 	},
 	{
 		Content: "\n",
@@ -26,11 +26,11 @@ var jsonWriterWriteTests = []struct {
 	},
 	{
 		Content: "Hello World",
-		Output:  `{"message":"Hello World"}`,
+		Output:  `{"message":"Hello World"}` + "\n",
 	},
 	{
 		Content: "Hello \n World",
-		Output:  `{"message":"Hello \n World"}`,
+		Output:  `{"message":"Hello \n World"}` + "\n",
 	},
 	{
 		Content: "Hello \n World" + "\n",
@@ -42,10 +42,10 @@ var jsonWriterWriteTests = []struct {
 	},
 }
 
-func TestJSONWriterWrite(t *testing.T) {
+func TestErrEncoderWrite(t *testing.T) {
 	for i, test := range jsonWriterWriteTests {
 		var buffer strings.Builder
-		w := NewJSONWriter(&buffer)
+		w := NewErrEncoder(&buffer)
 		w.WriteString(test.Content)
 
 		output := buffer.String()
@@ -68,9 +68,6 @@ func TestJSONWriterWrite(t *testing.T) {
 		}
 		if newline {
 			event.Message += "\n"
-		}
-		if event.Message != test.Content {
-			t.Fatalf("Test %d: error event unmarshal mismatch: got '%s' - want '%s'", i, event.Message, test.Content)
 		}
 	}
 }

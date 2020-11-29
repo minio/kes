@@ -140,29 +140,30 @@ func server(args []string) {
 		}
 	}
 
-	var errorLog *xlog.SystemLog
+	var errorLog *xlog.Target
 	switch strings.ToLower(config.Log.Error) {
 	case "on":
 		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
-			errorLog = xlog.NewLogger(os.Stderr, "", stdlog.LstdFlags)
+			errorLog = xlog.NewTarget(os.Stderr)
 		} else {
-			errorLog = xlog.NewLogger(xlog.NewJSONWriter(os.Stderr), "", stdlog.LstdFlags)
+			errorLog = xlog.NewTarget(xlog.NewErrEncoder(os.Stderr))
 		}
 	case "off":
-		errorLog = xlog.NewLogger(ioutil.Discard, "", stdlog.LstdFlags)
+		errorLog = xlog.NewTarget(ioutil.Discard)
 	default:
 		stdlog.Fatalf("Error: %q is an invalid error log configuration", config.Log.Error)
 	}
 
-	var auditLog *xlog.SystemLog
+	var auditLog *xlog.Target
 	switch strings.ToLower(config.Log.Audit) {
 	case "on":
-		auditLog = xlog.NewLogger(os.Stdout, "", 0)
+		auditLog = xlog.NewTarget(os.Stdout)
 	case "off":
-		auditLog = xlog.NewLogger(ioutil.Discard, "", 0)
+		auditLog = xlog.NewTarget(ioutil.Discard)
 	default:
 		stdlog.Fatalf("Error: %q is an invalid audit log configuration", config.Log.Audit)
 	}
+	auditLog.Log().SetFlags(0)
 
 	var proxy *auth.TLSProxy
 	if len(config.TLS.Proxy.Identities) != 0 {
