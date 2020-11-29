@@ -118,14 +118,13 @@ func EnforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 // back to the client.
 func AuditLog(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w = &xlog.AuditResponseWriter{
+		w = &AuditResponseWriter{
 			ResponseWriter: w,
-			URL:            *r.URL,
-			Identity:       auth.Identify(r, roles.Identify),
-			RequestHeader:  r.Header.Clone(),
-			Time:           time.Now(),
+			Logger:         logger,
 
-			Logger: logger,
+			URL:      *r.URL,
+			Identity: auth.Identify(r, roles.Identify),
+			Time:     time.Now(),
 		}
 		f(w, r)
 	}
@@ -591,18 +590,19 @@ func HandleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-// HandleTraceAuditLog returns a HTTP handler that
-// writes whatever log logs to the client.
+// HandleTraceAuditLog returns an HTTP handler that adds
+// the client as a log target. The client will then receive
+// all audit events.
 //
 // The returned handler is a long-running server task
 // that will wait for the client to close the connection
 // resp. until the request context is done.
 // Therefore, it will not work properly with (write) timeouts.
-func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
+func HandleTraceAuditLog(target *xlog.Target) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		out := xlog.NewFlushWriter(w)
-		log.AddOutput(out)
-		defer log.RemoveOutput(out)
+		out := NewFlushWriter(w)
+		target.Add(out)
+		defer target.Remove(out)
 
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.WriteHeader(http.StatusOK)
@@ -611,8 +611,9 @@ func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
 	}
 }
 
-// HandleTraceErrorLog returns an HTTP handler that writes
-// whatever log logs to the client.
+// HandleTraceErrorLog returns an HTTP handler that adds
+// the client as a log target. The client will then receive
+// all error events.
 //
 // The returned handler is a long-running server task
 // that will wait for the client to close the connection
@@ -625,13 +626,13 @@ func HandleTraceAuditLog(log *xlog.SystemLog) http.HandlerFunc {
 //  {
 //    "message":"<log-output>",
 //  }
-func HandleTraceErrorLog(log *xlog.SystemLog) http.HandlerFunc {
+func HandleTraceErrorLog(target *xlog.Target) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// We provide a JSON API. Therefore, our error log
 		// must also be converted to JSON / nd-JSON.
-		out := xlog.NewJSONWriter(w)
-		log.AddOutput(out)
-		defer log.RemoveOutput(out)
+		out := xlog.NewErrEncoder(NewFlushWriter(w))
+		target.Add(out)
+		defer target.Remove(out)
 
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.WriteHeader(http.StatusOK)
