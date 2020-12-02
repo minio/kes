@@ -159,6 +159,11 @@ keys:
       id: ""      # Your AppRole Role ID
       secret: ""  # Your AppRole Secret ID
       retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
+    kubernetes: # Kubernetes credentials. See: https://www.vaultproject.io/docs/auth/kubernetes
+      engine: ""  # The path of the Kubernetes engine e.g. authenticate. If empty, defaults to: kubernetes. (Vault default)
+      role: ""    # The Kubernetes JWT role
+      jwt:  ""    # Either the JWT provided by K8S or a path to a K8S secret containing the JWT.
+      retry: 15s  # Duration until the server tries to re-authenticate after connection loss.
     tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification
       key: ""     # Path to the TLS client private key for mTLS authentication to Vault
       cert: ""    # Path to the TLS client certificate for mTLS authentication to Vault

@@ -75,34 +75,73 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 // from the vault server by using the login AppRole credentials.
 //
 // To renew the auth. token see: client.RenewToken(...).
-func (c *client) Authenticate(login AppRole) (token string, ttl time.Duration, err error) {
-	location := path.Join("auth", login.Engine, "login") // /auth/<engine>/login
-	secret, err := c.Logical().Write(location, map[string]interface{}{
-		"role_id":   login.ID,
-		"secret_id": login.Secret,
-	})
-	if err != nil || secret == nil {
-		// The Vault SDK eventually returns no error but also no
-		// secret. In this case have to return a (not very helpful)
-		// error to signal that the authentication failed - for some
-		// (unknown) reason.
-		if err == nil {
-			err = errors.New("vault: authentication failed: SDK returned no error but also no token")
+func (c *client) AuthenticateWithAppRole(login AppRole) authFunc {
+	return func() (token string, ttl time.Duration, err error) {
+		location := path.Join("auth", login.Engine, "login") // /auth/<engine>/login
+		secret, err := c.Logical().Write(location, map[string]interface{}{
+			"role_id":   login.ID,
+			"secret_id": login.Secret,
+		})
+		if err != nil || secret == nil {
+			// The Vault SDK eventually returns no error but also no
+			// secret. In this case have to return a (not very helpful)
+			// error to signal that the authentication failed - for some
+			// (unknown) reason.
+			if err == nil {
+				err = errors.New("vault: authentication failed: SDK returned no error but also no token")
+			}
+			return token, ttl, err
 		}
-		return token, ttl, err
-	}
 
-	token, err = secret.TokenID()
-	if err != nil {
-		return token, ttl, err
-	}
+		token, err = secret.TokenID()
+		if err != nil {
+			return token, ttl, err
+		}
 
-	ttl, err = secret.TokenTTL()
-	if err != nil {
-		return token, ttl, err
+		ttl, err = secret.TokenTTL()
+		if err != nil {
+			return token, ttl, err
+		}
+		return token, ttl, nil
 	}
-	return token, ttl, err
 }
+
+func (c *client) AuthenticateWithK8S(login Kubernetes) authFunc {
+	return func() (token string, ttl time.Duration, err error) {
+		location := path.Join("auth", login.Engine, "login")
+		secret, err := c.Logical().Write(location, map[string]interface{}{
+			"role": login.Role,
+			"jwt":  login.JWT,
+		})
+		if err != nil || secret == nil {
+			// The Vault SDK eventually returns no error but also no
+			// secret. In this case have to return a (not very helpful)
+			// error to signal that the authentication failed - for some
+			// (unknown) reason.
+			if err == nil {
+				err = errors.New("vault: authentication failed: SDK returned no error but also no token")
+			}
+			return token, ttl, err
+		}
+		token, err = secret.TokenID()
+		if err != nil {
+			return token, ttl, err
+		}
+
+		ttl, err = secret.TokenTTL()
+		if err != nil {
+			return token, ttl, err
+		}
+		return token, ttl, nil
+	}
+}
+
+// authFunc implements a Vault authentication method.
+//
+// It returns a Vault authentication token and its
+// time-to-live (TTL) or an error explaining why
+// the authentication attempt failed.
+type authFunc func() (token string, ttl time.Duration, err error)
 
 // RenewToken tries to authenticate with the given AppRole
 // credentials if the given ttl is 0. Further, it keeps
@@ -127,9 +166,9 @@ func (c *client) Authenticate(login AppRole) (token string, ttl time.Duration, e
 // Since RenewToken starts a endless for-loop users should
 // usually invoke CheckStatus in a separate go routine:
 //   go client.RenewToken(ctx, login, ttl)
-func (c *client) RenewToken(ctx context.Context, login AppRole, ttl time.Duration) {
-	if login.Retry == 0 {
-		login.Retry = 5 * time.Second
+func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, retry time.Duration) {
+	if retry == 0 {
+		retry = 5 * time.Second
 	}
 	for {
 		// If Vault is sealed we have to wait
@@ -157,10 +196,10 @@ func (c *client) RenewToken(ctx context.Context, login AppRole, ttl time.Duratio
 				token string
 				err   error
 			)
-			token, ttl, err = c.Authenticate(login)
+			token, ttl, err = authenticate()
 			if err != nil {
 				ttl = 0 // On error, set the TTL again to 0 to re-auth. again.
-				timer := time.NewTimer(login.Retry)
+				timer := time.NewTimer(retry)
 				select {
 				case <-ctx.Done():
 					timer.Stop()
