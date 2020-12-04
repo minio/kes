@@ -80,27 +80,76 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		return config, err
 	}
 
-	// Replace identities that refer to env. variables with the
-	// corresponding env. variable values.
-	// An identity refers to an env. variable if it has the form:
-	//  ${<env-var-name>}
-	// We then replace the identity with the env. variable value.
-	// Currently only identities can be customized via env. variables.
-	if refersToEnvVar(config.Root.String()) {
-		config.Root = kes.Identity(os.ExpandEnv(config.Root.String()))
-	}
+	// Replace any configuration file fields that refer to env. variables
+	// with the corresponding env. variable value.
+	// A field refers to an env. variable if it has the form:
+	//   ${<env-var-name>}
+	//
+	// We have to replace fields that refer to env. variables before we
+	// do anything else (e.g. verify that the config file is well-formed)
+	// since we have to take values coming from the env. into account.
+	//
+	// We don't replace any durations - e.g. cache expiry - and policy paths.
+	// Especially replacing policy paths is quite dangerous since it would not
+	// be obvious which operations are allowed by a policy.
+	config.Addr = expandEnv(config.Addr)
+	config.Root = kes.Identity(expandEnv(config.Root.String()))
+
+	config.TLS.KeyPath = expandEnv(config.TLS.KeyPath)
+	config.TLS.CertPath = expandEnv(config.TLS.CertPath)
+	config.TLS.Proxy.Header.ClientCert = expandEnv(config.TLS.Proxy.Header.ClientCert)
 	for i, identity := range config.TLS.Proxy.Identities { // The TLS proxy identities section
-		if refersToEnvVar(identity.String()) {
-			config.TLS.Proxy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
-		}
+		config.TLS.Proxy.Identities[i] = kes.Identity(expandEnv(identity.String()))
 	}
+
+	config.Log.Audit = expandEnv(config.Log.Audit)
+	config.Log.Error = os.ExpandEnv(config.Log.Error)
+
 	for _, policy := range config.Policies { // The policy section
 		for i, identity := range policy.Identities {
-			if refersToEnvVar(identity.String()) {
-				policy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
-			}
+			policy.Identities[i] = kes.Identity(expandEnv(identity.String()))
 		}
 	}
+
+	// FS backend
+	config.Keys.Fs.Path = expandEnv(config.Keys.Fs.Path)
+
+	// Hashicorp Vault backend
+	config.Keys.Vault.Endpoint = expandEnv(config.Keys.Vault.Endpoint)
+	config.Keys.Vault.EnginePath = expandEnv(config.Keys.Vault.EnginePath)
+	config.Keys.Vault.Namespace = expandEnv(config.Keys.Vault.Namespace)
+	config.Keys.Vault.Prefix = expandEnv(config.Keys.Vault.Prefix)
+	config.Keys.Vault.AppRole.EnginePath = expandEnv(config.Keys.Vault.AppRole.EnginePath)
+	config.Keys.Vault.AppRole.ID = expandEnv(config.Keys.Vault.AppRole.ID)
+	config.Keys.Vault.AppRole.Secret = expandEnv(config.Keys.Vault.AppRole.Secret)
+	config.Keys.Vault.Kubernetes.EnginePath = expandEnv(config.Keys.Vault.Kubernetes.EnginePath)
+	config.Keys.Vault.Kubernetes.JWT = expandEnv(config.Keys.Vault.Kubernetes.JWT)
+	config.Keys.Vault.Kubernetes.Role = expandEnv(config.Keys.Vault.Kubernetes.Role)
+	config.Keys.Vault.TLS.KeyPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
+	config.Keys.Vault.TLS.CertPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
+	config.Keys.Vault.TLS.CAPath = expandEnv(config.Keys.Vault.TLS.CertPath)
+
+	// AWS SecretsManager backend
+	config.Keys.Aws.SecretsManager.Endpoint = expandEnv(config.Keys.Aws.SecretsManager.Endpoint)
+	config.Keys.Aws.SecretsManager.Region = expandEnv(config.Keys.Aws.SecretsManager.Region)
+	config.Keys.Aws.SecretsManager.KmsKey = expandEnv(config.Keys.Aws.SecretsManager.KmsKey)
+	config.Keys.Aws.SecretsManager.Login.AccessKey = expandEnv(config.Keys.Aws.SecretsManager.Login.AccessKey)
+	config.Keys.Aws.SecretsManager.Login.SecretKey = expandEnv(config.Keys.Aws.SecretsManager.Login.SecretKey)
+	config.Keys.Aws.SecretsManager.Login.SessionToken = expandEnv(config.Keys.Aws.SecretsManager.Login.SessionToken)
+
+	// Gemalto KeySecure backend
+	config.Keys.Gemalto.KeySecure.Endpoint = expandEnv(config.Keys.Gemalto.KeySecure.Endpoint)
+	config.Keys.Gemalto.KeySecure.TLS.CAPath = expandEnv(config.Keys.Gemalto.KeySecure.TLS.CAPath)
+	config.Keys.Gemalto.KeySecure.Login.Domain = expandEnv(config.Keys.Gemalto.KeySecure.Login.Domain)
+	config.Keys.Gemalto.KeySecure.Login.Token = expandEnv(config.Keys.Gemalto.KeySecure.Login.Token)
+
+	// GCP SecretManager backend
+	config.Keys.GCP.SecretManager.ProjectID = expandEnv(config.Keys.GCP.SecretManager.ProjectID)
+	config.Keys.GCP.SecretManager.Endpoint = expandEnv(config.Keys.GCP.SecretManager.Endpoint)
+	config.Keys.GCP.SecretManager.Credentials.Client = expandEnv(config.Keys.GCP.SecretManager.Credentials.Client)
+	config.Keys.GCP.SecretManager.Credentials.ClientID = expandEnv(config.Keys.GCP.SecretManager.Credentials.ClientID)
+	config.Keys.GCP.SecretManager.Credentials.Key = expandEnv(config.Keys.GCP.SecretManager.Credentials.Key)
+	config.Keys.GCP.SecretManager.Credentials.KeyID = expandEnv(config.Keys.GCP.SecretManager.Credentials.KeyID)
 
 	// We handle the Hashicorp Vault Kubernetes JWT specially
 	// since it can either be specified directly or be mounted
@@ -449,14 +498,19 @@ func (config *kmsServerConfig) Description() (kind, endpoint string, err error) 
 	return kind, endpoint, nil
 }
 
-// refersToEnvVar returns true if s has the following form:
-//  ${<env-var-name}
+// expandEnv replaces s with a value from the environment if
+// s refers to an environment variable. If the referenced
+// environment variable does not exist s gets replaced with
+// the empty string.
 //
-// In this case s should be replaced by the referenced
-// env. variable.
+// s refers to an environment variable if it has the following
+// form: ${<name>}.
 //
-// refersToEnvVar ignores any leading or trailing whitespaces.
-func refersToEnvVar(s string) bool {
-	s = strings.TrimSpace(s)
-	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}")
+// If s does not refer to an environment variable then s is
+// returned unmodified.
+func expandEnv(s string) string {
+	if t := strings.TrimSpace(s); strings.HasPrefix(t, "${") && strings.HasSuffix(t, "}") {
+		return os.ExpandEnv(t)
+	}
+	return s
 }
