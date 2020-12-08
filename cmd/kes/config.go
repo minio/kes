@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -75,6 +76,9 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		file.Close()
 		return config, err
 	}
+	if err = file.Close(); err != nil {
+		return config, err
+	}
 
 	// Replace identities that refer to env. variables with the
 	// corresponding env. variable values.
@@ -97,7 +101,26 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 			}
 		}
 	}
-	return config, file.Close()
+
+	// We handle the Hashicorp Vault Kubernetes JWT specially
+	// since it can either be specified directly or be mounted
+	// as a file (K8S secret).
+	// Therefore, we check whether the JWT field is a file, and if so,
+	// read the JWT from there.
+	if config.Keys.Vault.Kubernetes.JWT != "" {
+		f, err := os.Open(config.Keys.Vault.Kubernetes.JWT)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return config, fmt.Errorf("failed to open Vault Kubernetes JWT: %v", err)
+		}
+		if err == nil {
+			jwt, err := ioutil.ReadAll(f)
+			if err != nil {
+				return config, fmt.Errorf("failed to read Vault Kubernetes JWT: %v", err)
+			}
+			config.Keys.Vault.Kubernetes.JWT = string(jwt)
+		}
+	}
+	return config, nil
 }
 
 // SetDefaults set default values for fields that may be empty b/c not specified by user.
@@ -157,6 +180,13 @@ type kmsServerConfig struct {
 			Secret     string        `yaml:"secret"`
 			Retry      time.Duration `yaml:"retry"`
 		} `yaml:"approle"`
+
+		Kubernetes struct {
+			EnginePath string        `yaml:"engine"`
+			Role       string        `yaml:"role"`
+			JWT        string        `yaml:"jwt"` // Can be either a JWT or a path to a file containing a JWT
+			Retry      time.Duration `yaml:"retry"`
+		} `yaml:"kubernetes"`
 
 		TLS struct {
 			KeyPath  string `yaml:"key"`
@@ -219,7 +249,10 @@ func (config *kmsServerConfig) SetDefaults() {
 		config.Vault.EnginePath = "kv" // If not set, use the Vault default engine path.
 	}
 	if config.Vault.AppRole.EnginePath == "" {
-		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path.
+		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path for AppRole.
+	}
+	if config.Vault.Kubernetes.EnginePath == "" {
+		config.Vault.Kubernetes.EnginePath = "kubernetes" // If not set, use the Vault default auth path for Kubernetes.
 	}
 	if config.GCP.SecretManager.ProjectID != "" && config.GCP.SecretManager.Endpoint == "" {
 		config.GCP.SecretManager.Endpoint = "secretmanager.googleapis.com:443"
@@ -250,9 +283,15 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
 	case config.Gemalto.KeySecure.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
-	default:
-		return nil
 	}
+
+	if config.Vault.Endpoint != "" {
+		approle, k8s := config.Vault.AppRole, config.Vault.Kubernetes
+		if (approle.ID != "" || approle.Secret != "") && (k8s.Role != "" || k8s.JWT != "") {
+			return errors.New("invalid configuration: Vault AppRole and Kubernetes credentials are specified at the same time")
+		}
+	}
+	return nil
 }
 
 // Connect tries to establish a connection to the KMS specified in the kmsServerConfig.
@@ -294,6 +333,12 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 				ID:     config.Vault.AppRole.ID,
 				Secret: config.Vault.AppRole.Secret,
 				Retry:  config.Vault.AppRole.Retry,
+			},
+			K8S: vault.Kubernetes{
+				Engine: config.Vault.Kubernetes.EnginePath,
+				Role:   config.Vault.Kubernetes.Role,
+				JWT:    config.Vault.Kubernetes.JWT,
+				Retry:  config.Vault.Kubernetes.Retry,
 			},
 			StatusPingAfter: config.Vault.Status.Ping,
 			ErrorLog:        errorLog,
