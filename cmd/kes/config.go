@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -75,29 +76,100 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		file.Close()
 		return config, err
 	}
+	if err = file.Close(); err != nil {
+		return config, err
+	}
 
-	// Replace identities that refer to env. variables with the
-	// corresponding env. variable values.
-	// An identity refers to an env. variable if it has the form:
-	//  ${<env-var-name>}
-	// We then replace the identity with the env. variable value.
-	// Currently only identities can be customized via env. variables.
-	if refersToEnvVar(config.Root.String()) {
-		config.Root = kes.Identity(os.ExpandEnv(config.Root.String()))
-	}
+	// Replace any configuration file fields that refer to env. variables
+	// with the corresponding env. variable value.
+	// A field refers to an env. variable if it has the form:
+	//   ${<env-var-name>}
+	//
+	// We have to replace fields that refer to env. variables before we
+	// do anything else (e.g. verify that the config file is well-formed)
+	// since we have to take values coming from the env. into account.
+	//
+	// We don't replace any durations - e.g. cache expiry - and policy paths.
+	// Especially replacing policy paths is quite dangerous since it would not
+	// be obvious which operations are allowed by a policy.
+	config.Addr = expandEnv(config.Addr)
+	config.Root = kes.Identity(expandEnv(config.Root.String()))
+
+	config.TLS.KeyPath = expandEnv(config.TLS.KeyPath)
+	config.TLS.CertPath = expandEnv(config.TLS.CertPath)
+	config.TLS.Proxy.Header.ClientCert = expandEnv(config.TLS.Proxy.Header.ClientCert)
 	for i, identity := range config.TLS.Proxy.Identities { // The TLS proxy identities section
-		if refersToEnvVar(identity.String()) {
-			config.TLS.Proxy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
-		}
+		config.TLS.Proxy.Identities[i] = kes.Identity(expandEnv(identity.String()))
 	}
+
+	config.Log.Audit = expandEnv(config.Log.Audit)
+	config.Log.Error = os.ExpandEnv(config.Log.Error)
+
 	for _, policy := range config.Policies { // The policy section
 		for i, identity := range policy.Identities {
-			if refersToEnvVar(identity.String()) {
-				policy.Identities[i] = kes.Identity(os.ExpandEnv(identity.String()))
-			}
+			policy.Identities[i] = kes.Identity(expandEnv(identity.String()))
 		}
 	}
-	return config, file.Close()
+
+	// FS backend
+	config.Keys.Fs.Path = expandEnv(config.Keys.Fs.Path)
+
+	// Hashicorp Vault backend
+	config.Keys.Vault.Endpoint = expandEnv(config.Keys.Vault.Endpoint)
+	config.Keys.Vault.EnginePath = expandEnv(config.Keys.Vault.EnginePath)
+	config.Keys.Vault.Namespace = expandEnv(config.Keys.Vault.Namespace)
+	config.Keys.Vault.Prefix = expandEnv(config.Keys.Vault.Prefix)
+	config.Keys.Vault.AppRole.EnginePath = expandEnv(config.Keys.Vault.AppRole.EnginePath)
+	config.Keys.Vault.AppRole.ID = expandEnv(config.Keys.Vault.AppRole.ID)
+	config.Keys.Vault.AppRole.Secret = expandEnv(config.Keys.Vault.AppRole.Secret)
+	config.Keys.Vault.Kubernetes.EnginePath = expandEnv(config.Keys.Vault.Kubernetes.EnginePath)
+	config.Keys.Vault.Kubernetes.JWT = expandEnv(config.Keys.Vault.Kubernetes.JWT)
+	config.Keys.Vault.Kubernetes.Role = expandEnv(config.Keys.Vault.Kubernetes.Role)
+	config.Keys.Vault.TLS.KeyPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
+	config.Keys.Vault.TLS.CertPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
+	config.Keys.Vault.TLS.CAPath = expandEnv(config.Keys.Vault.TLS.CertPath)
+
+	// AWS SecretsManager backend
+	config.Keys.Aws.SecretsManager.Endpoint = expandEnv(config.Keys.Aws.SecretsManager.Endpoint)
+	config.Keys.Aws.SecretsManager.Region = expandEnv(config.Keys.Aws.SecretsManager.Region)
+	config.Keys.Aws.SecretsManager.KmsKey = expandEnv(config.Keys.Aws.SecretsManager.KmsKey)
+	config.Keys.Aws.SecretsManager.Login.AccessKey = expandEnv(config.Keys.Aws.SecretsManager.Login.AccessKey)
+	config.Keys.Aws.SecretsManager.Login.SecretKey = expandEnv(config.Keys.Aws.SecretsManager.Login.SecretKey)
+	config.Keys.Aws.SecretsManager.Login.SessionToken = expandEnv(config.Keys.Aws.SecretsManager.Login.SessionToken)
+
+	// Gemalto KeySecure backend
+	config.Keys.Gemalto.KeySecure.Endpoint = expandEnv(config.Keys.Gemalto.KeySecure.Endpoint)
+	config.Keys.Gemalto.KeySecure.TLS.CAPath = expandEnv(config.Keys.Gemalto.KeySecure.TLS.CAPath)
+	config.Keys.Gemalto.KeySecure.Login.Domain = expandEnv(config.Keys.Gemalto.KeySecure.Login.Domain)
+	config.Keys.Gemalto.KeySecure.Login.Token = expandEnv(config.Keys.Gemalto.KeySecure.Login.Token)
+
+	// GCP SecretManager backend
+	config.Keys.GCP.SecretManager.ProjectID = expandEnv(config.Keys.GCP.SecretManager.ProjectID)
+	config.Keys.GCP.SecretManager.Endpoint = expandEnv(config.Keys.GCP.SecretManager.Endpoint)
+	config.Keys.GCP.SecretManager.Credentials.Client = expandEnv(config.Keys.GCP.SecretManager.Credentials.Client)
+	config.Keys.GCP.SecretManager.Credentials.ClientID = expandEnv(config.Keys.GCP.SecretManager.Credentials.ClientID)
+	config.Keys.GCP.SecretManager.Credentials.Key = expandEnv(config.Keys.GCP.SecretManager.Credentials.Key)
+	config.Keys.GCP.SecretManager.Credentials.KeyID = expandEnv(config.Keys.GCP.SecretManager.Credentials.KeyID)
+
+	// We handle the Hashicorp Vault Kubernetes JWT specially
+	// since it can either be specified directly or be mounted
+	// as a file (K8S secret).
+	// Therefore, we check whether the JWT field is a file, and if so,
+	// read the JWT from there.
+	if config.Keys.Vault.Kubernetes.JWT != "" {
+		f, err := os.Open(config.Keys.Vault.Kubernetes.JWT)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return config, fmt.Errorf("failed to open Vault Kubernetes JWT: %v", err)
+		}
+		if err == nil {
+			jwt, err := ioutil.ReadAll(f)
+			if err != nil {
+				return config, fmt.Errorf("failed to read Vault Kubernetes JWT: %v", err)
+			}
+			config.Keys.Vault.Kubernetes.JWT = string(jwt)
+		}
+	}
+	return config, nil
 }
 
 // SetDefaults set default values for fields that may be empty b/c not specified by user.
@@ -157,6 +229,13 @@ type kmsServerConfig struct {
 			Secret     string        `yaml:"secret"`
 			Retry      time.Duration `yaml:"retry"`
 		} `yaml:"approle"`
+
+		Kubernetes struct {
+			EnginePath string        `yaml:"engine"`
+			Role       string        `yaml:"role"`
+			JWT        string        `yaml:"jwt"` // Can be either a JWT or a path to a file containing a JWT
+			Retry      time.Duration `yaml:"retry"`
+		} `yaml:"kubernetes"`
 
 		TLS struct {
 			KeyPath  string `yaml:"key"`
@@ -219,7 +298,10 @@ func (config *kmsServerConfig) SetDefaults() {
 		config.Vault.EnginePath = "kv" // If not set, use the Vault default engine path.
 	}
 	if config.Vault.AppRole.EnginePath == "" {
-		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path.
+		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path for AppRole.
+	}
+	if config.Vault.Kubernetes.EnginePath == "" {
+		config.Vault.Kubernetes.EnginePath = "kubernetes" // If not set, use the Vault default auth path for Kubernetes.
 	}
 	if config.GCP.SecretManager.ProjectID != "" && config.GCP.SecretManager.Endpoint == "" {
 		config.GCP.SecretManager.Endpoint = "secretmanager.googleapis.com:443"
@@ -250,9 +332,15 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
 	case config.Gemalto.KeySecure.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
-	default:
-		return nil
 	}
+
+	if config.Vault.Endpoint != "" {
+		approle, k8s := config.Vault.AppRole, config.Vault.Kubernetes
+		if (approle.ID != "" || approle.Secret != "") && (k8s.Role != "" || k8s.JWT != "") {
+			return errors.New("invalid configuration: Vault AppRole and Kubernetes credentials are specified at the same time")
+		}
+	}
+	return nil
 }
 
 // Connect tries to establish a connection to the KMS specified in the kmsServerConfig.
@@ -294,6 +382,12 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 				ID:     config.Vault.AppRole.ID,
 				Secret: config.Vault.AppRole.Secret,
 				Retry:  config.Vault.AppRole.Retry,
+			},
+			K8S: vault.Kubernetes{
+				Engine: config.Vault.Kubernetes.EnginePath,
+				Role:   config.Vault.Kubernetes.Role,
+				JWT:    config.Vault.Kubernetes.JWT,
+				Retry:  config.Vault.Kubernetes.Retry,
 			},
 			StatusPingAfter: config.Vault.Status.Ping,
 			ErrorLog:        errorLog,
@@ -404,14 +498,19 @@ func (config *kmsServerConfig) Description() (kind, endpoint string, err error) 
 	return kind, endpoint, nil
 }
 
-// refersToEnvVar returns true if s has the following form:
-//  ${<env-var-name}
+// expandEnv replaces s with a value from the environment if
+// s refers to an environment variable. If the referenced
+// environment variable does not exist s gets replaced with
+// the empty string.
 //
-// In this case s should be replaced by the referenced
-// env. variable.
+// s refers to an environment variable if it has the following
+// form: ${<name>}.
 //
-// refersToEnvVar ignores any leading or trailing whitespaces.
-func refersToEnvVar(s string) bool {
-	s = strings.TrimSpace(s)
-	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}")
+// If s does not refer to an environment variable then s is
+// returned unmodified.
+func expandEnv(s string) string {
+	if t := strings.TrimSpace(s); strings.HasPrefix(t, "${") && strings.HasSuffix(t, "}") {
+		return os.ExpandEnv(t)
+	}
+	return s
 }

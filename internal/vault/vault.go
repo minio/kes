@@ -14,6 +14,7 @@ package vault
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -35,8 +36,15 @@ import (
 // whenever it fails.
 type AppRole struct {
 	Engine string // The AppRole engine path
-	ID     string // The AppRole  ID
+	ID     string // The AppRole ID
 	Secret string // The Approle secret ID
+	Retry  time.Duration
+}
+
+type Kubernetes struct {
+	Engine string // The Kubernetes auth engine path
+	Role   string // The Kubernetes JWT role
+	JWT    string // The Kubernetes JWT
 	Retry  time.Duration
 }
 
@@ -65,6 +73,10 @@ type Store struct {
 	// AppRole contains the Vault AppRole authentication
 	// credentials.
 	AppRole AppRole
+
+	// K8S contains the Vault Kubernetes authentication
+	// credentials.
+	K8S Kubernetes
 
 	// StatusPingAfter is the duration after which
 	// the KeyStore will check the status of the Vault
@@ -143,14 +155,34 @@ func (s *Store) Authenticate(context context.Context) error {
 		// which is not what we want.
 		s.client.SetNamespace(s.Namespace)
 	}
-	go s.client.CheckStatus(context, s.StatusPingAfter)
 
-	token, ttl, err := s.client.Authenticate(s.AppRole)
+	var (
+		authenticate authFunc
+		retry        time.Duration
+	)
+	switch {
+	case s.AppRole.ID != "" || s.AppRole.Secret != "":
+		if s.K8S.Role != "" || s.K8S.JWT != "" {
+			return errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
+		}
+		authenticate = s.client.AuthenticateWithAppRole(s.AppRole)
+	case s.K8S.Role != "" || s.K8S.JWT != "":
+		if s.AppRole.ID != "" || s.AppRole.Secret != "" {
+			return errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
+		}
+		authenticate = s.client.AuthenticateWithK8S(s.K8S)
+	default:
+		return errors.New("vault: no or empty authentication credentials specified")
+	}
+
+	token, ttl, err := authenticate()
 	if err != nil {
 		return err
 	}
 	s.client.SetToken(token)
-	go s.client.RenewToken(context, s.AppRole, ttl)
+
+	go s.client.CheckStatus(context, s.StatusPingAfter)
+	go s.client.RenewToken(context, authenticate, ttl, retry)
 	return nil
 }
 
