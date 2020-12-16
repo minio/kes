@@ -6,3 +6,4 @@
 kes
 !kes/
 *.test
+dist/
