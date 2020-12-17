@@ -287,7 +287,7 @@ var listKeysTests = []struct {
 }{
 	{
 		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
-		Pattern: "",
+		Pattern: "*",
 		Listing: []kes.KeyDescription{
 			{Name: "my-key"},
 			{Name: "my-key1"},
@@ -328,8 +328,6 @@ func TestListKeys(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
-	_ = listKeysTests // TODO(aead): make golang-ci happy. Remove once we enable the test on CI.
-	t.SkipNow()       // TODO(aead): enable test once play.min.io:7373 has been updated and supports the /v1/key/list/ API
 
 	client, err := newClient()
 	if err != nil {
@@ -367,7 +365,19 @@ func TestListKeys(t *testing.T) {
 			}
 		}
 	}
+
+	// The random prefix is added to the pattern and the key names
+	// to ensure that the test does not fail on a KES server with
+	// existing keys.
+	prefix := fmt.Sprintf("%x-", sioutil.MustRandom(12))
 	for i, test := range listKeysTests {
+		test.Pattern = prefix + test.Pattern
+		for j := range test.Keys {
+			test.Keys[j] = prefix + test.Keys[j]
+		}
+		for j := range test.Listing {
+			test.Listing[j].Name = prefix + test.Listing[j].Name
+		}
 		f(t, i, test.Keys, test.Pattern, test.Listing...)
 	}
 }

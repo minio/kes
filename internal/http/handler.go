@@ -455,6 +455,7 @@ func HandleListKeys(store *secret.Store) http.HandlerFunc {
 		}
 		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
 		w.Header().Set("Error", "")
+		w.WriteHeader(http.StatusOK) // Ensure to write HTTP header/trailer even when no keys are listed
 	}
 }
 
