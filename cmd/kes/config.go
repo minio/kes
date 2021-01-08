@@ -48,8 +48,8 @@ type serverConfig struct {
 
 	Cache struct {
 		Expiry struct {
-			Any    time.Duration `yaml:"any"`
-			Unused time.Duration `yaml:"unused"`
+			Any    duration `yaml:"any"`    // Use custom type for env. var support
+			Unused duration `yaml:"unused"` // Use custom type for env. var support
 		} `yaml:"expiry"`
 	} `yaml:"cache"`
 
@@ -224,17 +224,17 @@ type kmsServerConfig struct {
 		Prefix string `yaml:"prefix"`
 
 		AppRole struct {
-			EnginePath string        `yaml:"engine"`
-			ID         string        `yaml:"id"`
-			Secret     string        `yaml:"secret"`
-			Retry      time.Duration `yaml:"retry"`
+			EnginePath string   `yaml:"engine"`
+			ID         string   `yaml:"id"`
+			Secret     string   `yaml:"secret"`
+			Retry      duration `yaml:"retry"` // Use custom type for env. var support
 		} `yaml:"approle"`
 
 		Kubernetes struct {
-			EnginePath string        `yaml:"engine"`
-			Role       string        `yaml:"role"`
-			JWT        string        `yaml:"jwt"` // Can be either a JWT or a path to a file containing a JWT
-			Retry      time.Duration `yaml:"retry"`
+			EnginePath string   `yaml:"engine"`
+			Role       string   `yaml:"role"`
+			JWT        string   `yaml:"jwt"`   // Can be either a JWT or a path to a file containing a JWT
+			Retry      duration `yaml:"retry"` // Use custom type for env. var support
 		} `yaml:"kubernetes"`
 
 		TLS struct {
@@ -244,7 +244,7 @@ type kmsServerConfig struct {
 		} `yaml:"tls"`
 
 		Status struct {
-			Ping time.Duration `yaml:"ping"`
+			Ping duration `yaml:"ping"` // Use custom type for env. var support
 		} `yaml:"status"`
 	} `yaml:"vault"`
 
@@ -267,9 +267,9 @@ type kmsServerConfig struct {
 			Endpoint string `yaml:"endpoint"`
 
 			Login struct {
-				Token  string        `yaml:"token"`
-				Domain string        `yaml:"domain"`
-				Retry  time.Duration `yaml:"retry"`
+				Token  string   `yaml:"token"`
+				Domain string   `yaml:"domain"`
+				Retry  duration `yaml:"retry"` // Use custom type for env. var support
 			} `yaml:"credentials"`
 
 			TLS struct {
@@ -381,15 +381,15 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 				Engine: config.Vault.AppRole.EnginePath,
 				ID:     config.Vault.AppRole.ID,
 				Secret: config.Vault.AppRole.Secret,
-				Retry:  config.Vault.AppRole.Retry,
+				Retry:  time.Duration(config.Vault.AppRole.Retry),
 			},
 			K8S: vault.Kubernetes{
 				Engine: config.Vault.Kubernetes.EnginePath,
 				Role:   config.Vault.Kubernetes.Role,
 				JWT:    config.Vault.Kubernetes.JWT,
-				Retry:  config.Vault.Kubernetes.Retry,
+				Retry:  time.Duration(config.Vault.Kubernetes.Retry),
 			},
-			StatusPingAfter: config.Vault.Status.Ping,
+			StatusPingAfter: time.Duration(config.Vault.Status.Ping),
 			ErrorLog:        errorLog,
 			ClientKeyPath:   config.Vault.TLS.KeyPath,
 			ClientCertPath:  config.Vault.TLS.CertPath,
@@ -431,7 +431,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			Login: gemalto.Credentials{
 				Token:  config.Gemalto.KeySecure.Login.Token,
 				Domain: config.Gemalto.KeySecure.Login.Domain,
-				Retry:  config.Gemalto.KeySecure.Login.Retry,
+				Retry:  time.Duration(config.Gemalto.KeySecure.Login.Retry),
 			},
 		}
 
@@ -513,4 +513,31 @@ func expandEnv(s string) string {
 		return os.ExpandEnv(t)
 	}
 	return s
+}
+
+// duration is an alias for time.Duration that
+// implements YAML unmarshaling by first replacing
+// any reference to an environment variable ${...}
+// with the referenced value.
+type duration time.Duration
+
+var (
+	_ yaml.Marshaler   = duration(0)
+	_ yaml.Unmarshaler = (*duration)(nil)
+)
+
+func (d duration) MarshalYAML() (interface{}, error) { return time.Duration(d).String(), nil }
+
+func (d *duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+
+	v, err := time.ParseDuration(expandEnv(s))
+	if err != nil {
+		return err
+	}
+	*d = duration(v)
+	return nil
 }

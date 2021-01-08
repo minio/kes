@@ -207,7 +207,7 @@ func server(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	store.StartGC(context.Background(), config.Cache.Expiry.Any, config.Cache.Expiry.Unused)
+	store.StartGC(context.Background(), time.Duration(config.Cache.Expiry.Any), time.Duration(config.Cache.Expiry.Unused))
 
 	const MaxBody = 1 << 20 // 1 MiB
 	metrics := metric.New()
