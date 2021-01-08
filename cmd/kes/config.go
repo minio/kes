@@ -126,8 +126,8 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	config.Keys.Vault.Kubernetes.JWT = expandEnv(config.Keys.Vault.Kubernetes.JWT)
 	config.Keys.Vault.Kubernetes.Role = expandEnv(config.Keys.Vault.Kubernetes.Role)
 	config.Keys.Vault.TLS.KeyPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
-	config.Keys.Vault.TLS.CertPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
-	config.Keys.Vault.TLS.CAPath = expandEnv(config.Keys.Vault.TLS.CertPath)
+	config.Keys.Vault.TLS.CertPath = expandEnv(config.Keys.Vault.TLS.CertPath)
+	config.Keys.Vault.TLS.CAPath = expandEnv(config.Keys.Vault.TLS.CAPath)
 
 	// AWS SecretsManager backend
 	config.Keys.Aws.SecretsManager.Endpoint = expandEnv(config.Keys.Aws.SecretsManager.Endpoint)
