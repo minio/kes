@@ -31,7 +31,8 @@ Commands:
     identity                 Assign policies to identities.
     tool                     Run specific key and identity management tools.
 
-    -v, --version            Print version information
+    -v, --version            Print version information.
+    -u, --update             Update kes to latest release.
     -h, --help               Show this list of command line options.
 `
 
@@ -43,14 +44,25 @@ func main() {
 	cli.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 
 	var showVersion bool
-	cli.BoolVar(&showVersion, "v", false, "Print version information")
-	cli.BoolVar(&showVersion, "version", false, "Print version information")
+	var update bool
+	cli.BoolVar(&showVersion, "v", false, "Print version information.")
+	cli.BoolVar(&showVersion, "version", false, "Print version information.")
+	cli.BoolVar(&update, "u", false, "Update kes to latest release.")
+	cli.BoolVar(&update, "update", false, "Update kes to latest release.")
 	cli.Parse(os.Args[1:])
 
 	if showVersion {
 		fmt.Println("kes version", version)
 		return
 	}
+
+	if update {
+		if err := updateInplace(); err != nil {
+			stdlog.Fatalf("Error: %v\n", err)
+		}
+		return
+	}
+
 	if cli.NArg() == 0 {
 		cli.Usage()
 		os.Exit(1)
