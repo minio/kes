@@ -418,9 +418,14 @@ func (q quiet) ClearLine() {
 	if color.NoColor {
 		q.Println()
 	} else {
-		q.Print("\033[2K\r")
+		q.Print(eraseLine)
 	}
 }
+
+const (
+	eraseLine = "\033[2K\r"
+	moveUp    = "\033[1A"
+)
 
 // ClearMessage tries to erase the given message from STDOUT
 // if STDOUT is a terminal that supports terminal control sequences.
@@ -432,10 +437,6 @@ func (q quiet) ClearMessage(msg string) {
 		return
 	}
 
-	const (
-		eraseLine = "\033[2K\r"
-		moveUp    = "\033[1A"
-	)
 	width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
 	if err != nil { // If we cannot get the width, just erasure one line
 		q.Print(eraseLine)
