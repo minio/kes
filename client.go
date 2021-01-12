@@ -11,6 +11,7 @@ import (
 	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -18,6 +19,9 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 )
 
 // Client is a KES client. Usually, a new client is
@@ -714,6 +718,69 @@ func (c *Client) ErrorLog() (*ErrorStream, error) {
 		return nil, parseErrorResponse(resp)
 	}
 	return NewErrorStream(resp.Body), nil
+}
+
+// Metrics returns a KES server metric snapshot.
+//
+// It returns ErrNotAllowed if the client does not
+// have sufficient permissions to fetch server metrics.
+func (c *Client) Metrics() (Metric, error) {
+	client := retry(c.HTTPClient)
+	resp, err := client.Get(endpoint(c.Endpoint, "/v1/metrics"))
+	if err != nil {
+		return Metric{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return Metric{}, parseErrorResponse(resp)
+	}
+	defer resp.Body.Close()
+
+	const (
+		MetricRequestOK    = "kes_http_request_success"
+		MetricRequestErr   = "kes_http_request_error"
+		MetricRequestFail  = "kes_http_request_failure"
+		MetricResponseTime = "kes_http_response_time"
+	)
+
+	var (
+		metric       Metric
+		metricFamily dto.MetricFamily
+	)
+	decoder := expfmt.NewDecoder(resp.Body, expfmt.ResponseFormat(resp.Header))
+	for {
+		err := decoder.Decode(&metricFamily)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return Metric{}, err
+		}
+
+		if len(metricFamily.Metric) != 1 {
+			return Metric{}, errors.New("kes: server response contains more than one metric")
+		}
+		var (
+			name      = metricFamily.GetName()
+			kind      = metricFamily.GetType()
+			rawMetric = metricFamily.GetMetric()[0] // Safe since we checked length before
+		)
+		switch {
+		case kind == dto.MetricType_COUNTER && name == MetricRequestOK:
+			metric.RequestOK = uint64(rawMetric.GetCounter().GetValue())
+		case kind == dto.MetricType_COUNTER && name == MetricRequestErr:
+			metric.RequestErr = uint64(rawMetric.GetCounter().GetValue())
+		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
+			metric.RequestFail = uint64(rawMetric.GetCounter().GetValue())
+		case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
+			metric.LatencyHistogram = map[time.Duration]uint64{}
+			for _, bucket := range rawMetric.GetHistogram().GetBucket() {
+				duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
+				metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
+			}
+			delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
+		}
+	}
+	return metric, nil
 }
 
 // endpoint returns an endpoint URL starting with the

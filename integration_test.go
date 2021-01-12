@@ -463,6 +463,25 @@ func TestForgetIdentity(t *testing.T) {
 	}
 }
 
+func TestMetrics(t *testing.T) {
+	if !*IsIntegrationTest {
+		t.SkipNow()
+	}
+
+	client, err := newClient()
+	if err != nil {
+		t.Fatalf("Failed to create KES client: %v", err)
+	}
+	metric, err := client.Metrics()
+	if err != nil {
+		t.Fatalf("Failed to fetch KES metrics: %v", err)
+	}
+	N := metric.RequestOK + metric.RequestErr + metric.RequestFail
+	if n := metric.RequestN(); n != N {
+		t.Fatalf("Invalid server metrics: incorrect request count: got %d - want %d", n, N)
+	}
+}
+
 func newClient() (*kes.Client, error) {
 	certificate, err := tls.LoadX509KeyPair(*ClientCert, *ClientKey)
 	if err != nil {
