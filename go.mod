@@ -11,6 +11,7 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/minio/selfupdate v0.3.1
 	github.com/prometheus/client_golang v1.7.1
+	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.13.0
 	github.com/secure-io/sio-go v0.3.0
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899

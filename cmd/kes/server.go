@@ -232,7 +232,9 @@ func server(args []string) {
 	mux.Handle("/v1/log/audit/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/audit/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceAuditLog(auditLog)))))))))))
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/error/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceErrorLog(errorLog)))))))))))
 
-	mux.Handle("/v1/metrics", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics))))))))))))
+	// Scrapping /v1/metrics should not change the metrics itself.
+	// Doing so may cause misleading statistics.
+	mux.Handle("/v1/metrics", xhttp.Timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics))))))))))
 
 	mux.Handle("/version", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.EnforceHTTP2(xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.HandleVersion(version))))))))))) // /version is accessible to any identity
 	mux.Handle("/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.EnforceHTTP2(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound)))))))
