@@ -85,7 +85,7 @@ the ciphertext key version.
 
 For more sophisticated tasks, like managing policies or audit log tracing, you
 may want to use the KES CLI. Therefore, point your CLI to our KES instance:
-```
+```sh
 export KES_SERVER=https://play.min.io:7373
 export KES_CLIENT_KEY=root.key
 export KES_CLIENT_CERT=root.cert
@@ -93,7 +93,7 @@ export KES_CLIENT_CERT=root.cert
 
 Then run a KES CLI command. For example:
 ```
-kes policy list
+kes key list
 ```
 
 ***
