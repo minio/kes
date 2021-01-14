@@ -80,6 +80,11 @@ func updateInplace() error {
 		return err
 	}
 
+	if rel == version {
+		fmt.Printf("You are already running the most recent version of 'kes'.\n")
+		return nil
+	}
+
 	kesBin := fmt.Sprintf("https://github.com/minio/kes/releases/download/%s/kes-%s-%s", rel, runtime.GOOS, runtime.GOARCH)
 	reader, length, err := getUpdateReaderFromURL(kesBin, transport)
 	if err != nil {
