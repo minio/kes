@@ -81,7 +81,7 @@ func updateInplace() error {
 	}
 
 	if rel == version {
-		fmt.Printf("You are already running the most recent version of 'kes'.\n")
+		fmt.Printf("You are already running the latest version %q.\n", version)
 		return nil
 	}
 
