@@ -3,8 +3,8 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:8.3
 LABEL name="MinIO" \
       vendor="MinIO Inc <dev@min.io>" \
       maintainer="MinIO Inc <dev@min.io>" \
-      version="v0.12.1" \
-      release="v0.12.1" \
+      version="v0.13.3" \
+      release="v0.13.3" \
       summary="KES is a stateless and distributed key-management system for high-performance applications." \
       description="KES as the bridge between modern applications - running as containers on Kubernetes - and centralized KMS solutions. Therefore, KES has been designed to be simple, scalable and secure by default. It has just a few knobs to tweak instead of a complex configuration and does not require a deep understanding of secure key-management or cryptography."
 
