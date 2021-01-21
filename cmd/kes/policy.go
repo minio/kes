@@ -5,7 +5,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
@@ -104,8 +106,14 @@ func addPolicy(args []string) {
 		stdlog.Fatalf("Error: failed to read policy file from %q: %v", input.Name(), err)
 	}
 
-	client := newClient(insecureSkipVerify)
-	if err := client.SetPolicy(name, &policy); err != nil {
+	var (
+		client = newClient(insecureSkipVerify)
+		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+	)
+	if err := client.SetPolicy(ctx, name, &policy); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to add policy %q: %v", name, err)
 	}
 }
@@ -139,10 +147,16 @@ func showPolicy(args []string) {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	var name = cli.Arg(0)
-	client := newClient(insecureSkipVerify)
-	policy, err := client.GetPolicy(name)
+	var (
+		name   = cli.Arg(0)
+		client = newClient(insecureSkipVerify)
+		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+	)
+	policy, err := client.GetPolicy(ctx, name)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to fetch policy %q: %v", name, err)
 	}
 	if isTerm(os.Stdout) {
@@ -185,8 +199,11 @@ func listPolicies(args []string) {
 		pattern = cli.Arg(0)
 	}
 
-	policies, err := newClient(insecureSkipVerify).ListPolicies(pattern)
+	policies, err := newClient(insecureSkipVerify).ListPolicies(cancelOnSignal(os.Interrupt, os.Kill), pattern)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to list policies matching %q: %v", pattern, err)
 	}
 	sort.Strings(policies)
@@ -231,7 +248,10 @@ func deletePolicy(args []string) {
 	}
 
 	var name = cli.Arg(0)
-	if err := newClient(insecureSkipVerify).DeletePolicy(name); err != nil {
+	if err := newClient(insecureSkipVerify).DeletePolicy(cancelOnSignal(os.Interrupt, os.Kill), name); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to delete policy %q: %v", name, err)
 	}
 }

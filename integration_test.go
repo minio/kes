@@ -54,6 +54,20 @@ var (
 	InsecureSkipVerify = flag.Bool("k", false, "Disable X.509 certificate verification")
 )
 
+func TestVersion(t *testing.T) {
+	if !*IsIntegrationTest {
+		t.SkipNow()
+	}
+
+	client, err := newClient()
+	if err != nil {
+		t.Fatalf("Failed to create KES client: %v", err)
+	}
+	if _, err := client.Version(context.Background()); err != nil {
+		t.Fatalf("Failed to fetch KES server version: %v", err)
+	}
+}
+
 func TestCreateKey(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
@@ -65,12 +79,12 @@ func TestCreateKey(t *testing.T) {
 	}
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.CreateKey(key); err != nil {
+	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
-	defer client.DeleteKey(key) // Cleanup
+	defer client.DeleteKey(context.Background(), key) // Cleanup
 
-	if err := client.CreateKey(key); err != kes.ErrKeyExists {
+	if err := client.CreateKey(context.Background(), key); err != kes.ErrKeyExists {
 		t.Fatalf("Creating the key '%s' twice should have failed: got %v - want %v", key, err, kes.ErrKeyExists)
 	}
 }
@@ -86,13 +100,13 @@ func TestDeleteKey(t *testing.T) {
 	}
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.CreateKey(key); err != nil {
+	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
-	if err := client.DeleteKey(key); err != nil {
+	if err := client.DeleteKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to delete key '%s': %v", key, err)
 	}
-	if err := client.DeleteKey(key); err != nil {
+	if err := client.DeleteKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to delete key '%s' a 2nd time: %v", key, err)
 	}
 }
@@ -136,20 +150,20 @@ func TestImportKey(t *testing.T) {
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
 	for i, test := range importKeyTests {
-		if err := client.ImportKey(key, test.Key); err != nil {
+		if err := client.ImportKey(context.Background(), key, test.Key); err != nil {
 			t.Fatalf("Failed to import key '%s': %v", key, err)
 		}
 
-		plaintext, err := client.Decrypt(key, test.Ciphertext, test.Context)
+		plaintext, err := client.Decrypt(context.Background(), key, test.Ciphertext, test.Context)
 		if err != nil {
-			client.DeleteKey(key) // Cleanup
+			client.DeleteKey(context.Background(), key) // Cleanup
 			t.Fatalf("Test %d: Failed to decrypt ciphertext: %v", i, err)
 		}
 		if !bytes.Equal(plaintext, test.Plaintext) {
-			client.DeleteKey(key) // Cleanup
+			client.DeleteKey(context.Background(), key) // Cleanup
 			t.Fatalf("Test %d: Plaintext mismatch: got '%s' - want '%s'", i, plaintext, test.Plaintext)
 		}
-		client.DeleteKey(key) // Cleanup
+		client.DeleteKey(context.Background(), key) // Cleanup
 	}
 }
 
@@ -174,13 +188,13 @@ func TestGenerateKey(t *testing.T) {
 	}
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.CreateKey(key); err != nil {
+	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
-	defer client.DeleteKey(key) // Cleanup
+	defer client.DeleteKey(context.Background(), key) // Cleanup
 
 	for i, test := range generateKeyTests {
-		dek, err := client.GenerateKey(key, test.Context)
+		dek, err := client.GenerateKey(context.Background(), key, test.Context)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: Test should have failed but succeeded", i)
 		}
@@ -188,7 +202,7 @@ func TestGenerateKey(t *testing.T) {
 			t.Fatalf("Test %d: Failed to generate DEK: %v", i, err)
 		}
 		if !test.ShouldFail {
-			plaintext, err := client.Decrypt(key, dek.Ciphertext, test.Context)
+			plaintext, err := client.Decrypt(context.Background(), key, dek.Ciphertext, test.Context)
 			if err != nil {
 				t.Fatalf("Test %d: Failed to decrypt ciphertext: %v", i, err)
 			}
@@ -223,13 +237,13 @@ func TestEncryptKey(t *testing.T) {
 	}
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.CreateKey(key); err != nil {
+	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
-	defer client.DeleteKey(key) // Cleanup
+	defer client.DeleteKey(context.Background(), key) // Cleanup
 
 	for i, test := range encryptKeyTests {
-		_, err = client.Encrypt(key, test.Plaintext, test.Context)
+		_, err = client.Encrypt(context.Background(), key, test.Plaintext, test.Context)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: Test should have failed but succeeded", i)
 		}
@@ -260,17 +274,17 @@ func TestDecryptKey(t *testing.T) {
 	}
 
 	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.CreateKey(key); err != nil {
+	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
-	defer client.DeleteKey(key) // Cleanup
+	defer client.DeleteKey(context.Background(), key) // Cleanup
 
 	for i, test := range decryptKeyTests {
-		ciphertext, err := client.Encrypt(key, test.Plaintext, test.Context)
+		ciphertext, err := client.Encrypt(context.Background(), key, test.Plaintext, test.Context)
 		if err != nil {
 			t.Fatalf("Test %d: Failed to encrypt plaintext: %v", i, err)
 		}
-		plaintext, err := client.Decrypt(key, ciphertext, test.Context)
+		plaintext, err := client.Decrypt(context.Background(), key, ciphertext, test.Context)
 		if err != nil {
 			t.Fatalf("Test %d: Failed to decrypt ciphertext: %v", i, err)
 		}
@@ -336,10 +350,10 @@ func TestListKeys(t *testing.T) {
 
 	f := func(t *testing.T, i int, names []string, pattern string, listing ...kes.KeyDescription) {
 		for _, name := range names {
-			if err := client.CreateKey(name); err != nil && err != kes.ErrKeyExists {
+			if err := client.CreateKey(context.Background(), name); err != nil && err != kes.ErrKeyExists {
 				t.Fatalf("Test %d: Failed to create key %q: %v", i, name, err)
 			}
-			defer client.DeleteKey(name)
+			defer client.DeleteKey(context.Background(), name)
 		}
 		keys, err := client.ListKeys(context.Background(), pattern)
 		if err != nil {
@@ -405,14 +419,14 @@ func TestReadWritePolicy(t *testing.T) {
 
 	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
 	for i, test := range readWritePolicyTests {
-		if err := client.SetPolicy(name, test.Policy); err != nil {
+		if err := client.SetPolicy(context.Background(), name, test.Policy); err != nil {
 			t.Fatalf("Test %d: Failed to create policy '%s': %v", i, name, err)
 		}
-		if _, err = client.GetPolicy(name); err != nil {
-			client.DeletePolicy(name) // cleanup
+		if _, err = client.GetPolicy(context.Background(), name); err != nil {
+			client.DeletePolicy(context.Background(), name) // cleanup
 			t.Fatalf("Test %d: Failed to read policy '%s': %v", i, name, err)
 		}
-		client.DeletePolicy(name) // cleanup
+		client.DeletePolicy(context.Background(), name) // cleanup
 	}
 }
 
@@ -427,13 +441,13 @@ func TestAssignIdentity(t *testing.T) {
 	}
 
 	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.SetPolicy(name, newPolicy("/version")); err != nil {
+	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
 		t.Fatalf("Failed to create policy '%s': %v", name, err)
 	}
-	defer client.DeletePolicy(name)
+	defer client.DeletePolicy(context.Background(), name)
 
 	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
-	if err := client.AssignIdentity(name, identity); err != nil {
+	if err := client.AssignIdentity(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
 }
@@ -449,16 +463,16 @@ func TestForgetIdentity(t *testing.T) {
 	}
 
 	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
-	if err := client.SetPolicy(name, newPolicy("/version")); err != nil {
+	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
 		t.Fatalf("Failed to create policy '%s': %v", name, err)
 	}
-	defer client.DeletePolicy(name)
+	defer client.DeletePolicy(context.Background(), name)
 
 	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
-	if err := client.AssignIdentity(name, identity); err != nil {
+	if err := client.AssignIdentity(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
-	if err := client.ForgetIdentity(identity); err != nil {
+	if err := client.ForgetIdentity(context.Background(), identity); err != nil {
 		t.Fatalf("Failed to forget identity '%s': %v", identity, err)
 	}
 }
@@ -472,7 +486,7 @@ func TestMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
-	metric, err := client.Metrics()
+	metric, err := client.Metrics(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to fetch KES metrics: %v", err)
 	}

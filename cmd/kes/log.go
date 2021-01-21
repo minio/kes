@@ -5,13 +5,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	stdlog "log"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"time"
 
@@ -91,17 +91,22 @@ func logTrace(args []string) {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	client := newClient(insecureSkipVerify)
+	var (
+		client = newClient(insecureSkipVerify)
+		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+	)
 	switch strings.ToLower(typeFlag) {
 	case "audit":
-		stream, err := client.AuditLog()
+		stream, err := client.AuditLog(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1) // When the operation is canceled, don't print an error message
+			}
 			stdlog.Fatalf("Error: failed to connect to audit log: %v", err)
 		}
 		defer stream.Close()
 
 		if !isTerm(os.Stdout) || jsonOutput {
-			closeOn(stream, os.Interrupt, os.Kill)
 			for stream.Next() {
 				fmt.Println(string(stream.Bytes()))
 			}
@@ -110,14 +115,16 @@ func logTrace(args []string) {
 		}
 		traceAuditLogWithUI(stream)
 	case "error":
-		stream, err := client.ErrorLog()
+		stream, err := client.ErrorLog(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1) // When the operation is canceled, don't print an error message
+			}
 			stdlog.Fatalf("Error: failed to connect to error log: %v", err)
 		}
 		defer stream.Close()
 
 		if !isTerm(os.Stdout) || jsonOutput {
-			closeOn(stream, os.Interrupt, os.Kill)
 			for stream.Next() {
 				fmt.Println(string(stream.Bytes()))
 			}
@@ -277,19 +284,4 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) {
 	if err := stream.Err(); err != nil {
 		stdlog.Fatalf("Error: error log stream closed with: %v", err)
 	}
-}
-
-// closeOn closes c if one of the given system signals
-// occurs. If c.Close() returns an error this error is
-// written to STDERR.
-func closeOn(c io.Closer, signals ...os.Signal) {
-	sigCh := make(chan os.Signal)
-	signal.Notify(sigCh, signals...)
-
-	go func() {
-		<-sigCh
-		if err := c.Close(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-	}()
 }
