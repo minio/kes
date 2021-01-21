@@ -5,6 +5,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
@@ -87,8 +89,12 @@ func assignIdentity(args []string) {
 		client   = newClient(insecureSkipVerify)
 		identity = kes.Identity(cli.Arg(0))
 		policy   = cli.Arg(1)
+		ctx      = cancelOnSignal(os.Interrupt, os.Kill)
 	)
-	if err := client.AssignIdentity(policy, identity); err != nil {
+	if err := client.AssignIdentity(ctx, policy, identity); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to assign identity %q to policy %q: %v", identity, policy, err)
 	}
 }
@@ -126,8 +132,11 @@ func listIdentity(args []string) {
 		pattern = cli.Arg(0)
 	}
 
-	identityRoles, err := newClient(insecureSkipVerify).ListIdentities(pattern)
+	identityRoles, err := newClient(insecureSkipVerify).ListIdentities(cancelOnSignal(os.Interrupt, os.Kill), pattern)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 	}
 	identities := make([]string, 0, len(identityRoles))
@@ -190,8 +199,12 @@ func forgetIdentity(args []string) {
 	var (
 		client   = newClient(insecureSkipVerify)
 		identity = kes.Identity(cli.Arg(0))
+		ctx      = cancelOnSignal(os.Interrupt, os.Kill)
 	)
-	if err := client.ForgetIdentity(identity); err != nil {
+	if err := client.ForgetIdentity(ctx, identity); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to forget identity %q: %v", identity, err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
@@ -98,13 +99,22 @@ func createKey(args []string) {
 		bytes = b
 	}
 
-	client := newClient(insecureSkipVerify)
+	var (
+		client = newClient(insecureSkipVerify)
+		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+	)
 	if len(bytes) > 0 {
-		if err := client.ImportKey(name, bytes); err != nil {
+		if err := client.ImportKey(ctx, name, bytes); err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1) // When the operation is canceled, don't print an error message
+			}
 			stdlog.Fatalf("Error: failed to import key %q: %v", name, err)
 		}
 	} else {
-		if err := client.CreateKey(name); err != nil {
+		if err := client.CreateKey(ctx, name); err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1) // When the operation is canceled, don't print an error message
+			}
 			stdlog.Fatalf("Failed to create key %q: %v", name, err)
 		}
 	}
@@ -149,7 +159,7 @@ func decryptKey(args []string) {
 	var (
 		name       string = cli.Arg(0)
 		ciphertext []byte
-		context    []byte
+		cryptoCtx  []byte
 		err        error
 	)
 	ciphertext, err = base64.StdEncoding.DecodeString(cli.Arg(1))
@@ -157,14 +167,17 @@ func decryptKey(args []string) {
 		stdlog.Fatalf("Error: invalid ciphertext: %v", err)
 	}
 	if len(args) == 3 {
-		context, err = base64.StdEncoding.DecodeString(cli.Arg(2))
+		cryptoCtx, err = base64.StdEncoding.DecodeString(cli.Arg(2))
 		if err != nil {
 			stdlog.Fatalf("Error: invalid context: %v", err)
 		}
 	}
 
-	plaintext, err := newClient(insecureSkipVerify).Decrypt(name, ciphertext, context)
+	plaintext, err := newClient(insecureSkipVerify).Decrypt(cancelOnSignal(os.Interrupt, os.Kill), name, ciphertext, cryptoCtx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to decrypt ciphertext: %v", err)
 	}
 	if isTerm(os.Stdout) {
@@ -210,19 +223,22 @@ func deriveKey(args []string) {
 	}
 
 	var (
-		name    string = cli.Arg(0)
-		context []byte
+		name      string = cli.Arg(0)
+		cryptoCtx []byte
 	)
 	if cli.NArg() == 2 {
 		b, err := base64.StdEncoding.DecodeString(cli.Arg(1))
 		if err != nil {
 			stdlog.Fatalf("Error: invalid context: %v", err)
 		}
-		context = b
+		cryptoCtx = b
 	}
 
-	key, err := newClient(insecureSkipVerify).GenerateKey(name, context)
+	key, err := newClient(insecureSkipVerify).GenerateKey(cancelOnSignal(os.Interrupt, os.Kill), name, cryptoCtx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to derive key: %v", err)
 	}
 
@@ -274,8 +290,11 @@ func listKeys(args []string) {
 	if cli.NArg() == 1 {
 		pattern = cli.Arg(0)
 	}
-	iterator, err := newClient(insecureSkipVerify).ListKeys(context.Background(), pattern)
+	iterator, err := newClient(insecureSkipVerify).ListKeys(cancelOnSignal(os.Interrupt, os.Kill), pattern)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to list keys matching %q: %v", pattern, err)
 	}
 
@@ -329,7 +348,10 @@ func deleteKey(args []string) {
 	}
 
 	var name = cli.Arg(0)
-	if err := newClient(insecureSkipVerify).DeleteKey(name); err != nil {
+	if err := newClient(insecureSkipVerify).DeleteKey(cancelOnSignal(os.Interrupt, os.Kill), name); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1) // When the operation is canceled, don't print an error message
+		}
 		stdlog.Fatalf("Error: failed to delete key %q: %v", name, err)
 	}
 }
