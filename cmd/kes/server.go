@@ -37,7 +37,7 @@ const serverCmdUsage = `Usage:
     kes server [options]
 
 Options:
-    --addr <IP:PORT>       The address of the server (default: 127.0.0.1:7373)
+    --addr <IP:PORT>       The address of the server (default: 0.0.0.0:7373)
     --config <PATH>        Path to the server configuration file
     --root  <IDENTITY>     The identity of root - who can perform any operation.
                            A root identity must be specified - either via this
@@ -95,7 +95,7 @@ func server(args []string) {
 		mtlsAuthFlag string
 		quietFlag    quiet
 	)
-	cli.StringVar(&addrFlag, "addr", "127.0.0.1:7373", "The address of the server")
+	cli.StringVar(&addrFlag, "addr", "0.0.0.0:7373", "The address of the server")
 	cli.StringVar(&configFlag, "config", "", "Path to the server configuration file")
 	cli.StringVar(&rootFlag, "root", "", "The identity of root - who can perform any operation")
 	cli.BoolVar(&mlockFlag, "mlock", false, "Lock all allocated memory pages")
