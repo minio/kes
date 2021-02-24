@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/minio/selfupdate"
 )
@@ -80,7 +82,17 @@ func updateInplace() error {
 		return err
 	}
 
-	if rel == version {
+	latest, err := semver.Make(strings.TrimPrefix(rel, "v"))
+	if err != nil {
+		return err
+	}
+
+	current, err := semver.Make(version)
+	if err != nil {
+		return err
+	}
+
+	if current.GTE(latest) {
 		fmt.Printf("You are already running the latest version %q.\n", version)
 		return nil
 	}
