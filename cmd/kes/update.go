@@ -93,7 +93,7 @@ func updateInplace() error {
 	}
 
 	if current.GTE(latest) {
-		fmt.Printf("You are already running the latest version %q.\n", version)
+		fmt.Printf("You are already running the latest version v%q.\n", version)
 		return nil
 	}
 
