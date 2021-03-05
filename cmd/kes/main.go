@@ -141,3 +141,14 @@ func cancelOnSignal(signals ...os.Signal) context.Context {
 	}()
 	return ctx
 }
+
+type multiFlag []string
+
+var _ flag.Value = (*multiFlag)(nil) // compiler check
+
+func (f *multiFlag) String() string { return fmt.Sprint(*f) }
+
+func (f *multiFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
