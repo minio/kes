@@ -395,8 +395,8 @@ func migrate(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
-	sourceConfig.Keys.SetDefaults()
-	if err := sourceConfig.Keys.Verify(); err != nil {
+	sourceConfig.KeyStore.SetDefaults()
+	if err := sourceConfig.KeyStore.Verify(); err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
 
@@ -404,16 +404,16 @@ func migrate(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
-	targetConfig.Keys.SetDefaults()
-	if err := targetConfig.Keys.Verify(); err != nil {
+	targetConfig.KeyStore.SetDefaults()
+	if err := targetConfig.KeyStore.Verify(); err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
 
-	src, err := sourceConfig.Keys.Connect(quietFlag, nil)
+	src, err := sourceConfig.KeyStore.Connect(quietFlag, nil)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	dst, err := targetConfig.Keys.Connect(quietFlag, nil)
+	dst, err := targetConfig.KeyStore.Connect(quietFlag, nil)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}

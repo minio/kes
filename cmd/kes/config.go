@@ -58,7 +58,11 @@ type serverConfig struct {
 		Audit string `yaml:"audit"`
 	} `yaml:"log"`
 
-	Keys kmsServerConfig `yaml:"keys"`
+	Keys []struct {
+		Name string `yaml:"name"`
+	} `yaml:"keys"`
+
+	KeyStore kmsServerConfig `yaml:"keystore"`
 }
 
 func loadServerConfig(path string) (config serverConfig, err error) {
@@ -66,18 +70,20 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		return config, nil
 	}
 
-	file, err := os.Open(path)
+	b, err := ioutil.ReadFile(path)
 	if err != nil {
 		return config, err
 	}
-	decoder := yaml.NewDecoder(file)
-	decoder.SetStrict(true) // Reject unknown fields in the config file
-	if err = decoder.Decode(&config); err != nil {
-		file.Close()
-		return config, err
-	}
-	if err = file.Close(); err != nil {
-		return config, err
+	if err = yaml.UnmarshalStrict(b, &config); err != nil {
+		if _, ok := err.(*yaml.TypeError); !ok {
+			return config, err
+		}
+
+		var configV0135 serverConfigV0135
+		if yaml.Unmarshal(b, &configV0135) != nil {
+			return config, err // return the actual unmarshal error on purpose
+		}
+		config = configV0135.Migrate()
 	}
 
 	// Replace any configuration file fields that refer to env. variables
@@ -111,53 +117,57 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 		}
 	}
 
+	for i, key := range config.Keys {
+		config.Keys[i].Name = expandEnv(key.Name)
+	}
+
 	// FS backend
-	config.Keys.Fs.Path = expandEnv(config.Keys.Fs.Path)
+	config.KeyStore.Fs.Path = expandEnv(config.KeyStore.Fs.Path)
 
 	// Hashicorp Vault backend
-	config.Keys.Vault.Endpoint = expandEnv(config.Keys.Vault.Endpoint)
-	config.Keys.Vault.EnginePath = expandEnv(config.Keys.Vault.EnginePath)
-	config.Keys.Vault.Namespace = expandEnv(config.Keys.Vault.Namespace)
-	config.Keys.Vault.Prefix = expandEnv(config.Keys.Vault.Prefix)
-	config.Keys.Vault.AppRole.EnginePath = expandEnv(config.Keys.Vault.AppRole.EnginePath)
-	config.Keys.Vault.AppRole.ID = expandEnv(config.Keys.Vault.AppRole.ID)
-	config.Keys.Vault.AppRole.Secret = expandEnv(config.Keys.Vault.AppRole.Secret)
-	config.Keys.Vault.Kubernetes.EnginePath = expandEnv(config.Keys.Vault.Kubernetes.EnginePath)
-	config.Keys.Vault.Kubernetes.JWT = expandEnv(config.Keys.Vault.Kubernetes.JWT)
-	config.Keys.Vault.Kubernetes.Role = expandEnv(config.Keys.Vault.Kubernetes.Role)
-	config.Keys.Vault.TLS.KeyPath = expandEnv(config.Keys.Vault.TLS.KeyPath)
-	config.Keys.Vault.TLS.CertPath = expandEnv(config.Keys.Vault.TLS.CertPath)
-	config.Keys.Vault.TLS.CAPath = expandEnv(config.Keys.Vault.TLS.CAPath)
+	config.KeyStore.Vault.Endpoint = expandEnv(config.KeyStore.Vault.Endpoint)
+	config.KeyStore.Vault.EnginePath = expandEnv(config.KeyStore.Vault.EnginePath)
+	config.KeyStore.Vault.Namespace = expandEnv(config.KeyStore.Vault.Namespace)
+	config.KeyStore.Vault.Prefix = expandEnv(config.KeyStore.Vault.Prefix)
+	config.KeyStore.Vault.AppRole.EnginePath = expandEnv(config.KeyStore.Vault.AppRole.EnginePath)
+	config.KeyStore.Vault.AppRole.ID = expandEnv(config.KeyStore.Vault.AppRole.ID)
+	config.KeyStore.Vault.AppRole.Secret = expandEnv(config.KeyStore.Vault.AppRole.Secret)
+	config.KeyStore.Vault.Kubernetes.EnginePath = expandEnv(config.KeyStore.Vault.Kubernetes.EnginePath)
+	config.KeyStore.Vault.Kubernetes.JWT = expandEnv(config.KeyStore.Vault.Kubernetes.JWT)
+	config.KeyStore.Vault.Kubernetes.Role = expandEnv(config.KeyStore.Vault.Kubernetes.Role)
+	config.KeyStore.Vault.TLS.KeyPath = expandEnv(config.KeyStore.Vault.TLS.KeyPath)
+	config.KeyStore.Vault.TLS.CertPath = expandEnv(config.KeyStore.Vault.TLS.CertPath)
+	config.KeyStore.Vault.TLS.CAPath = expandEnv(config.KeyStore.Vault.TLS.CAPath)
 
 	// AWS SecretsManager backend
-	config.Keys.Aws.SecretsManager.Endpoint = expandEnv(config.Keys.Aws.SecretsManager.Endpoint)
-	config.Keys.Aws.SecretsManager.Region = expandEnv(config.Keys.Aws.SecretsManager.Region)
-	config.Keys.Aws.SecretsManager.KmsKey = expandEnv(config.Keys.Aws.SecretsManager.KmsKey)
-	config.Keys.Aws.SecretsManager.Login.AccessKey = expandEnv(config.Keys.Aws.SecretsManager.Login.AccessKey)
-	config.Keys.Aws.SecretsManager.Login.SecretKey = expandEnv(config.Keys.Aws.SecretsManager.Login.SecretKey)
-	config.Keys.Aws.SecretsManager.Login.SessionToken = expandEnv(config.Keys.Aws.SecretsManager.Login.SessionToken)
+	config.KeyStore.Aws.SecretsManager.Endpoint = expandEnv(config.KeyStore.Aws.SecretsManager.Endpoint)
+	config.KeyStore.Aws.SecretsManager.Region = expandEnv(config.KeyStore.Aws.SecretsManager.Region)
+	config.KeyStore.Aws.SecretsManager.KmsKey = expandEnv(config.KeyStore.Aws.SecretsManager.KmsKey)
+	config.KeyStore.Aws.SecretsManager.Login.AccessKey = expandEnv(config.KeyStore.Aws.SecretsManager.Login.AccessKey)
+	config.KeyStore.Aws.SecretsManager.Login.SecretKey = expandEnv(config.KeyStore.Aws.SecretsManager.Login.SecretKey)
+	config.KeyStore.Aws.SecretsManager.Login.SessionToken = expandEnv(config.KeyStore.Aws.SecretsManager.Login.SessionToken)
 
 	// Gemalto KeySecure backend
-	config.Keys.Gemalto.KeySecure.Endpoint = expandEnv(config.Keys.Gemalto.KeySecure.Endpoint)
-	config.Keys.Gemalto.KeySecure.TLS.CAPath = expandEnv(config.Keys.Gemalto.KeySecure.TLS.CAPath)
-	config.Keys.Gemalto.KeySecure.Login.Domain = expandEnv(config.Keys.Gemalto.KeySecure.Login.Domain)
-	config.Keys.Gemalto.KeySecure.Login.Token = expandEnv(config.Keys.Gemalto.KeySecure.Login.Token)
+	config.KeyStore.Gemalto.KeySecure.Endpoint = expandEnv(config.KeyStore.Gemalto.KeySecure.Endpoint)
+	config.KeyStore.Gemalto.KeySecure.TLS.CAPath = expandEnv(config.KeyStore.Gemalto.KeySecure.TLS.CAPath)
+	config.KeyStore.Gemalto.KeySecure.Login.Domain = expandEnv(config.KeyStore.Gemalto.KeySecure.Login.Domain)
+	config.KeyStore.Gemalto.KeySecure.Login.Token = expandEnv(config.KeyStore.Gemalto.KeySecure.Login.Token)
 
 	// GCP SecretManager backend
-	config.Keys.GCP.SecretManager.ProjectID = expandEnv(config.Keys.GCP.SecretManager.ProjectID)
-	config.Keys.GCP.SecretManager.Endpoint = expandEnv(config.Keys.GCP.SecretManager.Endpoint)
-	config.Keys.GCP.SecretManager.Credentials.Client = expandEnv(config.Keys.GCP.SecretManager.Credentials.Client)
-	config.Keys.GCP.SecretManager.Credentials.ClientID = expandEnv(config.Keys.GCP.SecretManager.Credentials.ClientID)
-	config.Keys.GCP.SecretManager.Credentials.Key = expandEnv(config.Keys.GCP.SecretManager.Credentials.Key)
-	config.Keys.GCP.SecretManager.Credentials.KeyID = expandEnv(config.Keys.GCP.SecretManager.Credentials.KeyID)
+	config.KeyStore.GCP.SecretManager.ProjectID = expandEnv(config.KeyStore.GCP.SecretManager.ProjectID)
+	config.KeyStore.GCP.SecretManager.Endpoint = expandEnv(config.KeyStore.GCP.SecretManager.Endpoint)
+	config.KeyStore.GCP.SecretManager.Credentials.Client = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.Client)
+	config.KeyStore.GCP.SecretManager.Credentials.ClientID = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.ClientID)
+	config.KeyStore.GCP.SecretManager.Credentials.Key = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.Key)
+	config.KeyStore.GCP.SecretManager.Credentials.KeyID = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.KeyID)
 
 	// We handle the Hashicorp Vault Kubernetes JWT specially
 	// since it can either be specified directly or be mounted
 	// as a file (K8S secret).
 	// Therefore, we check whether the JWT field is a file, and if so,
 	// read the JWT from there.
-	if config.Keys.Vault.Kubernetes.JWT != "" {
-		f, err := os.Open(config.Keys.Vault.Kubernetes.JWT)
+	if config.KeyStore.Vault.Kubernetes.JWT != "" {
+		f, err := os.Open(config.KeyStore.Vault.Kubernetes.JWT)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return config, fmt.Errorf("failed to open Vault Kubernetes JWT: %v", err)
 		}
@@ -166,7 +176,7 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 			if err != nil {
 				return config, fmt.Errorf("failed to read Vault Kubernetes JWT: %v", err)
 			}
-			config.Keys.Vault.Kubernetes.JWT = string(jwt)
+			config.KeyStore.Vault.Kubernetes.JWT = string(jwt)
 		}
 	}
 	return config, nil
@@ -180,7 +190,7 @@ func (config *serverConfig) SetDefaults() {
 	if config.Log.Error == "" {
 		config.Log.Error = "on" // If not set, default is on.
 	}
-	config.Keys.SetDefaults()
+	config.KeyStore.SetDefaults()
 }
 
 // Verify checks whether the serverConfig contains invalid entries, and if so,
@@ -208,7 +218,7 @@ func (config *serverConfig) Verify() error {
 	if v := strings.ToLower(config.Log.Error); v != "on" && v != "off" {
 		return fmt.Errorf("%q is an invalid error log configuration", v)
 	}
-	return config.Keys.Verify()
+	return config.KeyStore.Verify()
 }
 
 type kmsServerConfig struct {
