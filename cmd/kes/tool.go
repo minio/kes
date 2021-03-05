@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	stdlog "log"
 	"math/big"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -104,6 +105,10 @@ Options:
     --key <PATH>           Path to the private key (default: ./private.key)
     --cert <PATH>          Path to the certificate (default: ./public.crt)
 
+    --server               Create a certificate for TLS server instead of a TLS client.
+    --ip <IP>              Add <IP> as subject alternative name (SAN). Can be specified more than once. 
+    --dns <DOMAIN>         Add <DOMAIN> as subject alternative name (SAN). Can be specified more than once.
+
     -t, --time <DATE>      Duration until the certificate will expire (default: 720h)
     -f, --force            Overwrite the private key and/or certificate, if it exists
     -h, --help             Show list of command-line options
@@ -114,6 +119,7 @@ certificate common name subject will be set to <subject>.
 
 Examples:
     $ kes tool identity new --key=my-app.key --cert=my-app.crt --time 2160h
+    $ kes tool identity new --server --ip=127.0.0.1 --dns=localhost --dns=example.com
 `
 
 func newIdentityCmd(args []string) {
@@ -121,17 +127,23 @@ func newIdentityCmd(args []string) {
 	cli.Usage = func() { fmt.Fprint(os.Stderr, newIdentityCmdUsage) }
 
 	var (
-		keyPath  string
-		certPath string
-		validFor time.Duration
-		force    bool
+		keyPath    string
+		certPath   string
+		validFor   time.Duration
+		dnsFlag    multiFlag
+		ipFlag     multiFlag
+		forceFlag  bool
+		serverFlag bool
 	)
 	cli.StringVar(&keyPath, "key", "./private.key", "Path to the private key (default: ./private.key)")
-	cli.StringVar(&certPath, "cert", "./public.cert", "Path to the certificate (default: ./public.cert)")
+	cli.StringVar(&certPath, "cert", "./public.crt", "Path to the certificate (default: ./public.crt)")
 	cli.DurationVar(&validFor, "t", 720*time.Hour, "Duration until the certificate will expire (default: 720h)")
 	cli.DurationVar(&validFor, "time", 720*time.Hour, "Duration until the certificate will expire (default: 720h)")
-	cli.BoolVar(&force, "f", false, "Overwrite the private key and/or certificate, if it exists")
-	cli.BoolVar(&force, "force", false, "Overwrite the private key and/or certificate, if it exists")
+	cli.BoolVar(&forceFlag, "f", false, "Overwrite the private key and/or certificate, if it exists")
+	cli.BoolVar(&forceFlag, "force", false, "Overwrite the private key and/or certificate, if it exists")
+	cli.BoolVar(&serverFlag, "server", false, "Create a certificate for a TLS server, not a TLS client")
+	cli.Var(&dnsFlag, "dns", "Add a domain name as SAN. Can be specified more than once")
+	cli.Var(&ipFlag, "ip", "Add an IP as SAN. Can be specified more than once")
 	cli.Parse(args[1:])
 
 	if cli.NArg() > 1 {
@@ -153,6 +165,22 @@ func newIdentityCmd(args []string) {
 		stdlog.Fatalf("Error: failed to create certificate serial number: %v", err)
 	}
 
+	var extKeyUsage []x509.ExtKeyUsage
+	if serverFlag {
+		extKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	} else {
+		extKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	}
+
+	var ipAddrs = make([]net.IP, 0, len(ipFlag))
+	for _, ipAddr := range ipFlag {
+		ip := net.ParseIP(ipAddr)
+		if ip == nil {
+			stdlog.Fatalf("Error: %q is not a valid IP address", ipAddr)
+		}
+		ipAddrs = append(ipAddrs, ip)
+	}
+
 	now := time.Now()
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
@@ -162,7 +190,9 @@ func newIdentityCmd(args []string) {
 		NotBefore:             now,
 		NotAfter:              now.Add(validFor),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		ExtKeyUsage:           extKeyUsage,
+		DNSNames:              dnsFlag,
+		IPAddresses:           ipAddrs,
 		BasicConstraintsValid: true,
 	}
 
@@ -176,7 +206,7 @@ func newIdentityCmd(args []string) {
 	}
 
 	fileFlags := os.O_CREATE | os.O_WRONLY
-	if force {
+	if forceFlag {
 		fileFlags |= os.O_TRUNC
 	} else {
 		fileFlags |= os.O_EXCL
