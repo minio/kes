@@ -30,6 +30,8 @@ import (
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/secret"
+	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -203,11 +205,24 @@ func server(args []string) {
 		}
 	}
 
-	store, err := config.Keys.Connect(quietFlag, errorLog.Log())
+	store, err := config.KeyStore.Connect(quietFlag, errorLog.Log())
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
 	store.StartGC(context.Background(), time.Duration(config.Cache.Expiry.Any), time.Duration(config.Cache.Expiry.Unused))
+
+	for _, key := range config.Keys {
+		var secret secret.Secret
+		bytes, err := sioutil.Random(len(secret))
+		if err != nil {
+			stdlog.Fatalf("Error: failed to create key %q: %v", key.Name, err)
+		}
+		copy(secret[:], bytes)
+
+		if err = store.Remote.Create(key.Name, secret.String()); err != nil && err != kes.ErrKeyExists {
+			stdlog.Fatalf("Error: failed to create key %q: %v", key.Name, err)
+		}
+	}
 
 	const MaxBody = 1 << 20 // 1 MiB
 	metrics := metric.New()
@@ -301,7 +316,7 @@ func server(args []string) {
 		italic = color.New(color.Italic)
 	)
 	ip, port := serverAddr(config.Addr)
-	kmsKind, kmsEndpoint, err := config.Keys.Description()
+	kmsKind, kmsEndpoint, err := config.KeyStore.Description()
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
