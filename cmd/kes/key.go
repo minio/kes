@@ -166,7 +166,7 @@ func decryptKey(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: invalid ciphertext: %v", err)
 	}
-	if len(args) == 3 {
+	if cli.NArg() == 3 {
 		cryptoCtx, err = base64.StdEncoding.DecodeString(cli.Arg(2))
 		if err != nil {
 			stdlog.Fatalf("Error: invalid context: %v", err)
