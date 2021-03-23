@@ -157,7 +157,7 @@ func (d DEK) MarshalText() ([]byte, error) {
 // It returns an error if text is not base64-encoded.
 //
 // UnmarshalText sets DEK's plaintext to nil.
-func (d *DEK) UnmarshalText(text []byte) error {
+func (d *DEK) UnmarshalText(text []byte) (err error) {
 	n := base64.StdEncoding.DecodedLen(len(text))
 	if len(d.Ciphertext) < n {
 		if cap(d.Ciphertext) >= n {
@@ -168,7 +168,8 @@ func (d *DEK) UnmarshalText(text []byte) error {
 	}
 
 	d.Plaintext = nil // Forget any previous plaintext
-	_, err := base64.StdEncoding.Decode(d.Ciphertext, text)
+	n, err = base64.StdEncoding.Decode(d.Ciphertext, text)
+	d.Ciphertext = d.Ciphertext[:n]
 	return err
 }
 
