@@ -802,10 +802,12 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 	defer resp.Body.Close()
 
 	const (
-		MetricRequestOK    = "kes_http_request_success"
-		MetricRequestErr   = "kes_http_request_error"
-		MetricRequestFail  = "kes_http_request_failure"
-		MetricResponseTime = "kes_http_response_time"
+		MetricRequestOK     = "kes_http_request_success"
+		MetricRequestErr    = "kes_http_request_error"
+		MetricRequestFail   = "kes_http_request_failure"
+		MetricRequestActive = "kes_http_request_active"
+		MetricResponseTime  = "kes_http_response_time"
+		MetricSystemUpTme   = "kes_system_up_time"
 	)
 
 	var (
@@ -837,6 +839,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			metric.RequestErr = uint64(rawMetric.GetCounter().GetValue())
 		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
 			metric.RequestFail = uint64(rawMetric.GetCounter().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
+			metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
 		case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
 			metric.LatencyHistogram = map[time.Duration]uint64{}
 			for _, bucket := range rawMetric.GetHistogram().GetBucket() {
@@ -844,6 +848,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 				metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
 			}
 			delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
+		case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
+			metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
 		}
 	}
 	return metric, nil

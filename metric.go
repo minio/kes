@@ -8,9 +8,10 @@ import "time"
 
 // Metric is a KES server metric snapshot.
 type Metric struct {
-	RequestOK   uint64 // Requests that succeeded
-	RequestErr  uint64 // Requests that failed with a well-defined error
-	RequestFail uint64 // Requests that failed unexpectedly due to an internal error
+	RequestOK     uint64 // Requests that succeeded
+	RequestErr    uint64 // Requests that failed with a well-defined error
+	RequestFail   uint64 // Requests that failed unexpectedly due to an internal error
+	RequestActive uint64 // Requests that are currently active and haven't completed yet
 
 	// Histogram of the KES server response latency.
 	// It shows how fast the server can handle requests.
@@ -35,6 +36,8 @@ type Metric struct {
 	//   >10ms and <=50ms.
 	//
 	LatencyHistogram map[time.Duration]uint64
+
+	UpTime time.Duration // The time the KES server has been up and running
 }
 
 // RequestN returns the total number of received requests.

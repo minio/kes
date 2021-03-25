@@ -36,6 +36,12 @@ func New() *Metrics {
 			Name:      "request_failure",
 			Help:      "Number of request that failed due to some internal failure. (HTTP 5xx status code)",
 		}),
+		requestActive: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "http",
+			Name:      "request_active",
+			Help:      "Number of active requests that are not finished, yet.",
+		}),
 		requestLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Namespace: "kes",
 			Subsystem: "http",
@@ -43,12 +49,22 @@ func New() *Metrics {
 			Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 3.0, 5.0, 10.0}, // from 10ms to 10s
 			Help:      "Histogram of request response times spawning from 10ms to 10s.",
 		}),
+
+		startTime: time.Now(),
+		upTimeInSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "up_time",
+			Help:      "The time the server has been up and running in seconds.",
+		}),
 	}
 
 	metrics.registry.MustRegister(metrics.requestSucceeded)
 	metrics.registry.MustRegister(metrics.requestErrored)
 	metrics.registry.MustRegister(metrics.requestFailed)
+	metrics.registry.MustRegister(metrics.requestActive)
 	metrics.registry.MustRegister(metrics.requestLatency)
+	metrics.registry.MustRegister(metrics.upTimeInSeconds)
 	return metrics
 }
 
@@ -60,12 +76,18 @@ type Metrics struct {
 	requestSucceeded prometheus.Counter
 	requestFailed    prometheus.Counter
 	requestErrored   prometheus.Counter
+	requestActive    prometheus.Gauge
 	requestLatency   prometheus.Histogram
+
+	startTime       time.Time // Used to compute the up time as upTime = now - startTime
+	upTimeInSeconds prometheus.Gauge
 }
 
 // EncodeTo collects all outstanding metrics information
 // about the application and writes it to encoder.
 func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
+	m.upTimeInSeconds.Set(time.Since(m.startTime).Truncate(10 * time.Millisecond).Seconds())
+
 	metrics, err := m.registry.Gather()
 	if err != nil {
 		return err
@@ -87,6 +109,9 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 // to some internal error (HTTP 5xx).
 func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		m.requestActive.Inc()
+		defer m.requestActive.Dec()
+
 		h(&countResponseWriter{
 			ResponseWriter: w,
 			flusher:        w.(http.Flusher),
