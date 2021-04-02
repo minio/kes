@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -844,6 +845,10 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
 			metric.LatencyHistogram = map[time.Duration]uint64{}
 			for _, bucket := range rawMetric.GetHistogram().GetBucket() {
+				if math.IsInf(bucket.GetUpperBound(), 0) { // Ignore the +Inf bucket
+					continue
+				}
+
 				duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
 				metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
 			}
