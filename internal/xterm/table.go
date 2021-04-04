@@ -91,15 +91,24 @@ func (t *Table) Header() []*HCell { return t.header }
 
 // AddRow adds a new row to the table. If the capacity
 // of the table is reached older rows get dropped.
-func (t *Table) AddRow(cells ...*Cell) {
+func (t *Table) AddRow(cells ...*Cell) { t.SetRow(-1, cells...) }
+
+// SetRow replaces a row at the given index. If the index
+// is negative or exceeds the size of the table the given
+// row is appended at the end.
+func (t *Table) SetRow(at int, cells ...*Cell) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	if len(t.rows) <= t.rowLimit {
-		t.rows = append(t.rows, cells)
+	if at < 0 || len(t.rows) <= at {
+		if len(t.rows) <= t.rowLimit {
+			t.rows = append(t.rows, cells)
+		} else {
+			t.rows = t.rows[len(t.rows)-1-t.rowLimit:]
+			t.rows = append(t.rows, cells)
+		}
 	} else {
-		t.rows = t.rows[len(t.rows)-1-t.rowLimit:]
-		t.rows = append(t.rows, cells)
+		t.rows[at] = cells
 	}
 }
 

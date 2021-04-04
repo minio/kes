@@ -6,12 +6,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,19 +57,21 @@ const traceLogCmdUsage = `Usage:
     kes log trace [options]
 
 Options:
-    --type {audit|error}   Specify the log event type.
-                           Valid options are:
-                             --type=audit (default)
-                             --type=error
+    --type {audit|error|metric}   Specify the log event type.
+                                  Valid options are:
+                                    --type=audit (default)
+                                    --type=error
+                                    --type=metric
 
-    --json                 Print log events as JSON.
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake.
-    -h, --help             Show list of command-line options.
+    --rate <duration>            Scrap rate when tracing metrics (default: 3s)
+    --json                       Print log events as JSON.
+    -k, --insecure               Skip X.509 certificate validation during TLS handshake.
+    -h, --help                   Show list of command-line options.
 
-Subscribes to the KES server {audit | error} log. If standard output is
-a terminal it displays a table-view terminal UI that shows the stream of
-log events. Otherwise, or when --json is specified, the log events are
-written to standard output in JSON format.
+Subscribes to the KES server {audit | error | metric} log. If standard
+output is a terminal it displays a table-view terminal UI that shows the
+stream of log events. Otherwise, or when --json is specified, the log
+events are written to standard output in JSON format.
 
 Examples:
     $ kes log trace
@@ -78,10 +83,12 @@ func logTrace(args []string) {
 
 	var (
 		typeFlag           string
+		rateFlag           time.Duration
 		jsonOutput         bool
 		insecureSkipVerify bool
 	)
-	cli.StringVar(&typeFlag, "type", "audit", "Log event type [ audit | error ]")
+	cli.StringVar(&typeFlag, "type", "audit", "Log event type [ audit | error | metric ]")
+	cli.DurationVar(&rateFlag, "rate", 3*time.Second, "Scrap rate when tracing metrics")
 	cli.BoolVar(&jsonOutput, "json", false, "Print log events as JSON")
 	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
@@ -131,8 +138,144 @@ func logTrace(args []string) {
 			stdlog.Fatalf("Error: error log closed with: %v", stream.Err())
 		}
 		traceErrorLogWithUI(stream)
+	case "metric":
+		if !jsonOutput && isTerm(os.Stdout) {
+			traceMetricsWithUI(ctx, client, rateFlag)
+			return
+		}
+
+		ticker := time.NewTicker(rateFlag)
+		defer ticker.Stop()
+
+		encoder := json.NewEncoder(os.Stdout)
+		for {
+			metrics, err := client.Metrics(ctx)
+			if err != nil {
+				stdlog.Fatalf("Error: %v", err)
+			}
+			encoder.Encode(metrics)
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return
+			}
+		}
 	default:
 		stdlog.Fatalf("Error: invalid log type --type: %q", typeFlag)
+	}
+}
+
+// traceMetricsWithUI iterates scraps the KES metrics
+// and prints a table-like UI to STDOUT.
+func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Duration) {
+	draw := func(t *xterm.Table, m *kes.Metric) {
+		N := m.RequestN()
+
+		t.Draw()
+		fmt.Printf(" Active : %d\n", m.RequestActive)
+		fmt.Printf(" Success: %s%% | %s\n", color.GreenString(fmt.Sprintf("%05.2f", (100*float64(m.RequestOK)/float64(N)))), color.GreenString(strconv.FormatUint(m.RequestOK, 10)))
+		fmt.Printf(" Error  : %s%% | %s\n", color.RedString(fmt.Sprintf("%05.2f", (100*float64(m.RequestErr)/float64(N)))), color.RedString(strconv.FormatUint(m.RequestErr, 10)))
+		fmt.Printf(" Failure: %s%% | %s\n\n", color.MagentaString(fmt.Sprintf("%05.2f", (100*float64(m.RequestFail)/float64(N)))), color.MagentaString(strconv.FormatUint(m.RequestFail, 10)))
+		fmt.Printf(" UpTime : %v\n", m.UpTime)
+	}
+
+	var metric kes.Metric
+	var table = xterm.NewTable("0-10ms", "10-50ms", "50-100ms", "100-250ms", "250-500ms", "500ms-1s", "1-1.5s", "1.5-3s", "3-5s", "5-10s")
+	table.Header()[0].Width = 0.095
+	table.Header()[1].Width = 0.095
+	table.Header()[2].Width = 0.095
+	table.Header()[3].Width = 0.095
+	table.Header()[4].Width = 0.095
+	table.Header()[5].Width = 0.095
+	table.Header()[6].Width = 0.095
+	table.Header()[7].Width = 0.095
+	table.Header()[8].Width = 0.095
+	table.Header()[9].Width = 0.095
+
+	table.Header()[0].Alignment = xterm.AlignCenter
+	table.Header()[1].Alignment = xterm.AlignCenter
+	table.Header()[2].Alignment = xterm.AlignCenter
+	table.Header()[3].Alignment = xterm.AlignCenter
+	table.Header()[4].Alignment = xterm.AlignCenter
+	table.Header()[5].Alignment = xterm.AlignCenter
+	table.Header()[6].Alignment = xterm.AlignCenter
+	table.Header()[7].Alignment = xterm.AlignCenter
+	table.Header()[8].Alignment = xterm.AlignCenter
+	table.Header()[9].Alignment = xterm.AlignCenter
+
+	// Initialize the terminal UI and listen on resize
+	// events and Ctrl-C / Escape key events.
+	if err := ui.Init(); err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+	defer draw(table, &metric) // Draw the table AFTER closing the UI one more time.
+	defer ui.Close()           // Closing the UI cleans the screen.
+
+	ticker := time.NewTicker(rate)
+	go func() {
+		for {
+			var err error
+			metric, err = client.Metrics(ctx)
+			if err != nil {
+				continue
+			}
+
+			var (
+				latency = map[time.Duration]uint64{
+					10 * time.Millisecond:    metric.LatencyHistogram[10*time.Millisecond],
+					50 * time.Millisecond:    metric.LatencyHistogram[50*time.Millisecond],
+					100 * time.Millisecond:   metric.LatencyHistogram[100*time.Millisecond],
+					250 * time.Millisecond:   metric.LatencyHistogram[250*time.Millisecond],
+					500 * time.Millisecond:   metric.LatencyHistogram[500*time.Millisecond],
+					1000 * time.Millisecond:  metric.LatencyHistogram[1000*time.Millisecond],
+					1500 * time.Millisecond:  metric.LatencyHistogram[1500*time.Millisecond],
+					3000 * time.Millisecond:  metric.LatencyHistogram[3000*time.Millisecond],
+					5000 * time.Millisecond:  metric.LatencyHistogram[5000*time.Millisecond],
+					10000 * time.Millisecond: metric.LatencyHistogram[10000*time.Millisecond],
+				}
+				keys   = make([]time.Duration, 0, len(latency))
+				values = make([]uint64, 0, len(latency))
+			)
+			for k := range latency {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+			for i, k := range keys {
+				if i == 0 {
+					values = append(values, latency[k])
+				} else {
+					values = append(values, latency[k]-latency[keys[i-1]])
+				}
+			}
+
+			var cells = make([]*xterm.Cell, 0, len(values))
+			for _, value := range values {
+				cells = append(cells, xterm.NewCell(strconv.FormatUint(value, 10)))
+			}
+			table.SetRow(0, cells...)
+			draw(table, &metric)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	var events = ui.PollEvents()
+	for {
+		select {
+		case event := <-events:
+			switch {
+			case event.Type == ui.ResizeEvent:
+				draw(table, &metric)
+			case event.ID == "<C-c>" || event.ID == "<Escape>":
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
