@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/minio/kes"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // Use e.g.: go build -ldflags "-X main.version=v1.0.0"
@@ -122,7 +122,7 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 	})
 }
 
-func isTerm(f *os.File) bool { return terminal.IsTerminal(int(f.Fd())) }
+func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
 
 // cancelOnSignal returns a new Context that gets canceled when
 // one of the signals is received. It is allowed to call the
