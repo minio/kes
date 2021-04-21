@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/fips"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -67,7 +68,7 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 	}
 
 	var algorithm string
-	if sioutil.NativeAES() {
+	if fips.Enabled || sioutil.NativeAES() {
 		algorithm = "AES-256-GCM-HMAC-SHA-256"
 	} else {
 		algorithm = "ChaCha20Poly1305"
@@ -148,8 +149,8 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	}
 
 	var aead cipher.AEAD
-	switch sealedSecret.Algorithm {
-	case "AES-256-GCM-HMAC-SHA-256":
+	switch {
+	case sealedSecret.Algorithm == "AES-256-GCM-HMAC-SHA-256":
 		mac := hmac.New(sha256.New, s[:])
 		mac.Write(sealedSecret.IV)
 		sealingKey := mac.Sum(nil)
@@ -162,7 +163,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 		if err != nil {
 			return nil, err
 		}
-	case "ChaCha20Poly1305":
+	case !fips.Enabled && sealedSecret.Algorithm == "ChaCha20Poly1305":
 		sealingKey, err := chacha20.HChaCha20(s[:], sealedSecret.IV)
 		if err != nil {
 			return nil, err
@@ -172,7 +173,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 			return nil, err
 		}
 	default:
-		return nil, kes.NewError(http.StatusBadRequest, "invalid algorithm: "+sealedSecret.Algorithm)
+		return nil, kes.NewError(http.StatusUnprocessableEntity, "unsupported cryptographic algorithm")
 	}
 
 	if n := len(sealedSecret.Nonce); n != aead.NonceSize() {

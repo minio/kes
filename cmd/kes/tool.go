@@ -7,7 +7,9 @@ package main
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -31,6 +33,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/secret"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -154,9 +157,22 @@ func newIdentityCmd(args []string) {
 		commonName = cli.Arg(0)
 	}
 
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		stdlog.Fatalf("Error: failed to generate private key: %v", err)
+	var (
+		publicKey  crypto.PublicKey
+		privateKey crypto.PrivateKey
+	)
+	if fips.Enabled {
+		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			stdlog.Fatalf("Error: failed to generate private key: %v", err)
+		}
+		publicKey, privateKey = private.Public(), private
+	} else {
+		public, private, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			stdlog.Fatalf("Error: failed to generate private key: %v", err)
+		}
+		publicKey, privateKey = public, private
 	}
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -196,11 +212,11 @@ func newIdentityCmd(args []string) {
 		BasicConstraintsValid: true,
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, public, private)
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, privateKey)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to create certificate: %v", err)
 	}
-	privBytes, err := x509.MarshalPKCS8PrivateKey(private)
+	privBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to create private key: %v", err)
 	}

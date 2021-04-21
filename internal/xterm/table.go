@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // HCell represents a single header cell of a table.
@@ -119,7 +119,7 @@ func (t *Table) Draw() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	width, height, _ := terminal.GetSize(int(os.Stdout.Fd()))
+	width, height, _ := term.GetSize(int(os.Stdout.Fd()))
 
 	fmt.Print("\033[3J\033[0;0H", "\r") // ASCII sequence to clean scroll + move to position (0,0)
 	fmt.Printf("\033[%dM", height+1)    // ASCII sequence to delete height+1 rows
