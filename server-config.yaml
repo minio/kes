@@ -150,6 +150,16 @@ keystore:
   fs:
     path: "" # Path to directory. Keys will be stored as files.
 
+  # Configuration for storing keys via a KES KeyStore plugin or at
+  # a KeyStore that exposes an API compatible to the KES KeyStore
+  # plugin specification: https://github.com/minio/kes/blob/master/internal/generic/spec-v1.md
+  generic:
+    endpoint: "" # The plugin endpoint - e.g. https://127.0.0.1:7001
+    tls:         # The KES client TLS configuration for mTLS authentication and certificate verification.
+      key: ""    # Path to the TLS client private key for mTLS authentication
+      cert: ""   # Path to the TLS client certificate for mTLS authentication
+      ca: ""     # Path to one or multiple PEM root CA certificates
+
   # Hashicorp Vault configuration. The KES server will store/fetch
   # secret keys at/from Vault's key-value backend.
   #
