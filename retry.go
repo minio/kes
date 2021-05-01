@@ -5,6 +5,7 @@
 package kes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +47,17 @@ func retryBody(body io.ReadSeeker) io.ReadCloser {
 	}
 }
 
+// requestOption is and optional parameter of an HTTP request.
+type requestOption func(*http.Request)
+
+// withHeader returns a requestOption that sets the given
+// key-value pair as HTTP header.
+func withHeader(key, value string) requestOption {
+	return func(req *http.Request) {
+		req.Header.Set(key, value)
+	}
+}
+
 // retry is an http.Client that implements
 // a retry mechanism for requests that fail
 // due to a temporary network error.
@@ -55,6 +67,47 @@ func retryBody(body io.ReadSeeker) io.ReadCloser {
 // Otherwise, it cannot guarantee that the entire request
 // body gets sent when retrying a request.
 type retry http.Client
+
+// Send creates a new HTTP request with the given method, context
+// request body and request options, if any. It randomly iterates
+// over the given endpoints until it receives a HTTP response.
+//
+// If sending a request to one endpoint fails due to e.g. a network
+// or DNS error, Send tries the next endpoint. It aborts once the
+// context is canceled or its deadline exceeded.
+func (r *retry) Send(ctx context.Context, method string, endpoints []string, path string, body io.ReadSeeker, options ...requestOption) (*http.Response, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.New("kes: no server endpoint")
+	}
+	var (
+		request  *http.Request
+		response *http.Response
+		err      error
+		R        = rand.Intn(len(endpoints)) // randomize endpoints => avoid hitting the same endpoint all the time.
+	)
+	for i := range endpoints {
+		nextEndpoint := endpoints[(i+R)%len(endpoints)]
+		request, err = http.NewRequestWithContext(ctx, method, endpoint(nextEndpoint, path), retryBody(body))
+		if err != nil {
+			return nil, err
+		}
+		for _, opt := range options {
+			opt(request)
+		}
+
+		response, err = r.Do(request)
+		if err == nil {
+			return response, nil
+		}
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+	}
+	return response, err
+}
 
 // Get issues a GET to the specified URL.
 // It is a wrapper around retry.Do.
