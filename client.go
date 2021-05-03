@@ -37,7 +37,7 @@ import (
 // connection pooling, etc. can be specified via
 // a custom http.RoundTripper. For example:
 //   client := &Client{
-//       Endpoint:   "https:127.0.0.1:7373",
+//       Endpoints:  []string{"https:127.0.0.1:7373"},
 //       HTTPClient: http.Client{
 //           Transport: &http.Transport{
 //              // specify custom behavior...
@@ -53,9 +53,18 @@ import (
 // custom implemention of the http.RoundTripper
 // interface.
 type Client struct {
-	// Endpoint is the KES server HTTPS endpoint.
-	// For example: https://127.0.0.1:7373
-	Endpoint string
+	// Endpoints contains one or multiple KES server
+	// endpoints. For example: https://127.0.0.1:7373
+	//
+	// Each endpoint must be a HTTPS endpoint and
+	// should point to different KES server replicas
+	// with a common configuration.
+	//
+	// Multiple endpoints should only be specified
+	// when multiple KES servers should be used, e.g.
+	// for high availability, but no round-robin DNS
+	// is used.
+	Endpoints []string
 
 	// HTTPClient is the HTTP client.
 	//
@@ -91,7 +100,7 @@ func NewClient(endpoint string, cert tls.Certificate) *Client {
 // defaults.
 func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 	return &Client{
-		Endpoint: endpoint,
+		Endpoints: []string{endpoint},
 		HTTPClient: http.Client{
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
@@ -276,11 +285,7 @@ func (i *KeyIterator) Close() error {
 // KES server.
 func (c *Client) Version(ctx context.Context) (string, error) {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/version"), nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/version", nil)
 	if err != nil {
 		return "", err
 	}
@@ -307,11 +312,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 // any point in time.
 func (c *Client) CreateKey(ctx context.Context, name string) error {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/key/create", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/create", url.PathEscape(name)), nil)
 	if err != nil {
 		return err
 	}
@@ -338,13 +339,8 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/key/import", url.PathEscape(name)), retryBody(bytes.NewReader(body)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/import", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -359,11 +355,7 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 // anymore.
 func (c *Client) DeleteKey(ctx context.Context, name string) error {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint(c.Endpoint, "/v1/key/delete", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/key/delete", url.PathEscape(name)), nil)
 	if err != nil {
 		return err
 	}
@@ -407,13 +399,7 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/key/generate", url.PathEscape(name)), retryBody(bytes.NewReader(body)))
-	if err != nil {
-		return DEK{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/generate", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return DEK{}, err
 	}
@@ -456,13 +442,7 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/key/encrypt", url.PathEscape(name)), retryBody(bytes.NewReader(body)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/encrypt", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -502,13 +482,7 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/key/decrypt", url.PathEscape(name)), retryBody(bytes.NewReader(body)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/decrypt", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -542,11 +516,7 @@ func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, er
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/key/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/key/list", url.PathEscape(pattern)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -577,13 +547,7 @@ func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) err
 	}
 
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/policy/write", url.PathEscape(name)), retryBody(bytes.NewReader(content)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/policy/write", url.PathEscape(name)), bytes.NewReader(content), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -597,12 +561,7 @@ func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) err
 // policy exists then GetPolicy returns ErrPolicyNotFound.
 func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	client := retry(c.HTTPClient)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/policy/read", url.PathEscape(name)), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/policy/read", url.PathEscape(name)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -633,11 +592,7 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, er
 		pattern = "*" // => default to: list "all" policies
 	}
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/policy/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/policy/list", url.PathEscape(pattern)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -667,11 +622,7 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, er
 // assigned to it.
 func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint(c.Endpoint, "/v1/policy/delete", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/policy/delete", url.PathEscape(name)), nil)
 	if err != nil {
 		return err
 	}
@@ -683,13 +634,7 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 
 func (c *Client) AssignIdentity(ctx context.Context, policy string, id Identity) error {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Endpoint, "/v1/identity/assign", url.PathEscape(policy), url.PathEscape(id.String())), nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/identity/assign", url.PathEscape(policy), url.PathEscape(id.String())), nil)
 	if err != nil {
 		return err
 	}
@@ -701,11 +646,7 @@ func (c *Client) AssignIdentity(ctx context.Context, policy string, id Identity)
 
 func (c *Client) ListIdentities(ctx context.Context, pattern string) (map[Identity]string, error) {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/identity/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/identity/list", url.PathEscape(pattern)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -723,11 +664,7 @@ func (c *Client) ListIdentities(ctx context.Context, pattern string) (map[Identi
 
 func (c *Client) ForgetIdentity(ctx context.Context, id Identity) error {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint(c.Endpoint, "/v1/identity/forget", url.PathEscape(id.String())), nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/identity/forget", url.PathEscape(id.String())), nil)
 	if err != nil {
 		return err
 	}
@@ -746,11 +683,7 @@ func (c *Client) ForgetIdentity(ctx context.Context, id Identity) error {
 // audit log.
 func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/log/audit/trace"), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/audit/trace", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -769,11 +702,7 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 // error log.
 func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/log/error/trace"), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/error/trace", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -789,11 +718,7 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 // have sufficient permissions to fetch server metrics.
 func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 	client := retry(c.HTTPClient)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint(c.Endpoint, "/v1/metrics"), nil)
-	if err != nil {
-		return Metric{}, err
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/metrics", nil)
 	if err != nil {
 		return Metric{}, err
 	}
