@@ -20,6 +20,7 @@ import (
 	"github.com/minio/kes/internal/fs"
 	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
+	"github.com/minio/kes/internal/generic"
 	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/secret"
 	"github.com/minio/kes/internal/vault"
@@ -226,6 +227,15 @@ type kmsServerConfig struct {
 		Path string `yaml:"path"`
 	} `yaml:"fs"`
 
+	Generic struct {
+		Endpoint string `yaml:"endpoint"`
+		TLS      struct {
+			KeyPath  string `yaml:"key"`
+			CertPath string `yaml:"cert"`
+			CAPath   string `yaml:"ca"`
+		} `yaml:"tls"`
+	} `yaml:"generic"`
+
 	Vault struct {
 		Endpoint   string `yaml:"endpoint"`
 		EnginePath string `yaml:"engine"`
@@ -322,6 +332,8 @@ func (config *kmsServerConfig) SetDefaults() {
 // returns an error.
 func (config *kmsServerConfig) Verify() error {
 	switch {
+	case config.Fs.Path != "" && config.Generic.Endpoint != "":
+		return errors.New("ambiguous configuration: FS and Generic endpoint specified at the same time")
 	case config.Fs.Path != "" && config.Vault.Endpoint != "":
 		return errors.New("ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
 	case config.Fs.Path != "" && config.Aws.SecretsManager.Endpoint != "":
@@ -330,6 +342,14 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Fs.Path != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: FS and GCP secret manager are specified at the same time")
+	case config.Generic.Endpoint != "" && config.Vault.Endpoint != "":
+		return errors.New("ambiguous configuration: Generic and Hashicorp Vault endpoint are specified at the same time")
+	case config.Generic.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
+		return errors.New("ambiguous configuration: Generic and AWS SecretsManager endpoint are specified at the same time")
+	case config.Generic.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
+		return errors.New("ambiguous configuration: Generic and Gemalto KeySecure endpoint are specified at the same time")
+	case config.Generic.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
+		return errors.New("ambiguous configuration: Generic and GCP SecretManager endpoint are specified at the same time")
 	case config.Vault.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
 	case config.Vault.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
@@ -381,6 +401,21 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			Dir:      config.Fs.Path,
 			ErrorLog: errorLog,
 		}
+	case config.Generic.Endpoint != "":
+		genericStore := &generic.Store{
+			Endpoint: config.Generic.Endpoint,
+			KeyPath:  config.Generic.TLS.KeyPath,
+			CertPath: config.Generic.TLS.CertPath,
+			CAPath:   config.Generic.TLS.CAPath,
+			ErrorLog: errorLog,
+		}
+		msg := fmt.Sprintf("Authenticating to generic KeyStore '%s' ... ", config.Generic.Endpoint)
+		quiet.Print(msg)
+		if err := genericStore.Authenticate(); err != nil {
+			return nil, fmt.Errorf("failed to connect to generic KeyStore: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = genericStore
 	case config.Vault.Endpoint != "":
 		vaultStore := &vault.Store{
 			Addr:      config.Vault.Endpoint,
@@ -446,7 +481,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 		}
 
 		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
-		quiet.Printf(msg)
+		quiet.Print(msg)
 		if err := gemaltoStore.Authenticate(); err != nil {
 			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
 		}
@@ -489,6 +524,9 @@ func (config *kmsServerConfig) Description() (kind, endpoint string, err error) 
 		if endpoint, err = filepath.Abs(config.Fs.Path); err != nil {
 			endpoint = config.Fs.Path
 		}
+	case config.Generic.Endpoint != "":
+		kind = "Generic"
+		endpoint = config.Generic.Endpoint
 	case config.Vault.Endpoint != "":
 		kind = "Hashicorp Vault"
 		endpoint = config.Vault.Endpoint

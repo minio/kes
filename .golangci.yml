@@ -19,7 +19,6 @@ linters:
     - unused
     - structcheck
     - prealloc
-    - maligned
     - unconvert
 
 issues:

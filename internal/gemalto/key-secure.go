@@ -218,7 +218,7 @@ func (s *KeySecure) Get(key string) (string, error) {
 }
 
 // Delete removes a the value associated with the given key
-// from Vault, if it exists.
+// from Gemalto, if it exists.
 func (s *KeySecure) Delete(key string) error {
 	url := fmt.Sprintf("%s/api/v1/vault/secrets/%s?type=name", s.Endpoint, key)
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
@@ -295,7 +295,7 @@ func (s *KeySecure) List(ctx context.Context) (secret.Iterator, error) {
 			url := fmt.Sprintf("%s/api/v1/vault/secrets?limit=%d&skip=%d", s.Endpoint, limit, skip)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
-				logf(s.ErrorLog, "gemalto: failed to list keys: %q", err)
+				logf(s.ErrorLog, "gemalto: failed to list keys: %v", err)
 				iterator.SetErr(errListKey)
 				break
 			}
