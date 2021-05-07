@@ -5,6 +5,7 @@
 package metric
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -50,6 +51,19 @@ func New() *Metrics {
 			Help:      "Histogram of request response times spawning from 10ms to 10s.",
 		}),
 
+		errorLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "kes",
+			Subsystem: "log",
+			Name:      "error_events",
+			Help:      "Number of error log events written to the error log targets.",
+		}),
+		auditLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "kes",
+			Subsystem: "log",
+			Name:      "audit_events",
+			Help:      "Number of audit log events written to the audit log targets.",
+		}),
+
 		startTime: time.Now(),
 		upTimeInSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
@@ -64,6 +78,8 @@ func New() *Metrics {
 	metrics.registry.MustRegister(metrics.requestFailed)
 	metrics.registry.MustRegister(metrics.requestActive)
 	metrics.registry.MustRegister(metrics.requestLatency)
+	metrics.registry.MustRegister(metrics.errorLogEvents)
+	metrics.registry.MustRegister(metrics.auditLogEvents)
 	metrics.registry.MustRegister(metrics.upTimeInSeconds)
 	return metrics
 }
@@ -78,6 +94,9 @@ type Metrics struct {
 	requestErrored   prometheus.Counter
 	requestActive    prometheus.Gauge
 	requestLatency   prometheus.Histogram
+
+	errorLogEvents prometheus.Counter
+	auditLogEvents prometheus.Counter
 
 	startTime       time.Time // Used to compute the up time as upTime = now - startTime
 	upTimeInSeconds prometheus.Gauge
@@ -138,6 +157,31 @@ func (m *Metrics) Latency(h http.HandlerFunc) http.HandlerFunc {
 			histogram:      m.requestLatency,
 		}, r)
 	}
+}
+
+// ErrorEventCounter returns an io.Writer that increments
+// the error event log counter on each write call.
+//
+// The returned io.Writer never returns an error on writes.
+func (m *Metrics) ErrorEventCounter() io.Writer {
+	return eventCounter{metric: m.errorLogEvents}
+}
+
+// AuditEventCounter returns an io.Writer that increments
+// the audit event log counter on each write call.
+//
+// The returned io.Writer never returns an error on writes.
+func (m *Metrics) AuditEventCounter() io.Writer {
+	return eventCounter{metric: m.auditLogEvents}
+}
+
+type eventCounter struct {
+	metric prometheus.Counter
+}
+
+func (w eventCounter) Write(p []byte) (int, error) {
+	w.metric.Inc()
+	return len(p), nil
 }
 
 // latencyResponseWriter is an http.ResponseWriter that

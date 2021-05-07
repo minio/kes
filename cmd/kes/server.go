@@ -224,8 +224,11 @@ func server(args []string) {
 		}
 	}
 
-	const MaxBody = 1 << 20 // 1 MiB
 	metrics := metric.New()
+	errorLog.Add(metrics.ErrorEventCounter())
+	auditLog.Add(metrics.AuditEventCounter())
+
+	const MaxBody = 1 << 20 // 1 MiB
 	mux := http.NewServeMux()
 	mux.Handle("/v1/key/create/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store)))))))))))
 	mux.Handle("/v1/key/import/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store)))))))))))
@@ -248,8 +251,13 @@ func server(args []string) {
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/error/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceErrorLog(errorLog))))))))))
 
 	// Scrapping /v1/metrics should not change the metrics itself.
-	// Doing so may cause misleading statistics.
-	mux.Handle("/v1/metrics", xhttp.Timeout(10*time.Second, xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics)))))))))
+	// Further, scrapping /v1/metrics should, by default, not produce
+	// an audit event. Monitoring systems will scrape the metrics endpoint
+	// every few seconds - depending on their configuration - such that
+	// the audit log will contain a lot of events simply pointing to the
+	// monitoring system. Logging an audit event may be something that
+	// can be enabled optionally.
+	mux.Handle("/v1/metrics", xhttp.Timeout(10*time.Second, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/metrics", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleMetrics(metrics))))))))
 
 	mux.Handle("/version", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/version", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.HandleVersion(version)))))))))) // /version is accessible to any identity
 	mux.Handle("/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound))))))

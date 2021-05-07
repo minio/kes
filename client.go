@@ -732,6 +732,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		MetricRequestErr    = "kes_http_request_error"
 		MetricRequestFail   = "kes_http_request_failure"
 		MetricRequestActive = "kes_http_request_active"
+		MetricAuditEvents   = "kes_log_audit_events"
+		MetricErrorEvents   = "kes_log_error_events"
 		MetricResponseTime  = "kes_http_response_time"
 		MetricSystemUpTme   = "kes_system_up_time"
 	)
@@ -767,6 +769,10 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			metric.RequestFail = uint64(rawMetric.GetCounter().GetValue())
 		case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
 			metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_COUNTER && name == MetricAuditEvents:
+			metric.AuditEvents = uint64(rawMetric.GetCounter().GetValue())
+		case kind == dto.MetricType_COUNTER && name == MetricErrorEvents:
+			metric.ErrorEvents = uint64(rawMetric.GetCounter().GetValue())
 		case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
 			metric.LatencyHistogram = map[time.Duration]uint64{}
 			for _, bucket := range rawMetric.GetHistogram().GetBucket() {
