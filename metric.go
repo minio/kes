@@ -13,6 +13,9 @@ type Metric struct {
 	RequestFail   uint64 `json:"kes_http_request_failure"` // Requests that failed unexpectedly due to an internal error
 	RequestActive uint64 `json:"kes_http_request_active"`  // Requests that are currently active and haven't completed yet
 
+	AuditEvents uint64 `json:"kes_log_audit_events"` // Number of generated audit events
+	ErrorEvents uint64 `json:"kes_log_error_events"` // Number of generated error events
+
 	// Histogram of the KES server response latency.
 	// It shows how fast the server can handle requests.
 	//
