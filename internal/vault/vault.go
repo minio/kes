@@ -260,13 +260,20 @@ func (s *Store) Create(key, value string) error {
 	//    the secret contains no data (and no "warnings" or "errors")
 	//
 	// Therefore, we check whether the client returns a nil error
-	// and a non-nil "secret". In this case, the secret key already
-	// exists.
+	// and a non-nil "secret". In this case, the secret key either
+	// already exists or the K/V backend does not understand the
+	// request (K/V v1 vs. K/V v2) and returns a "secret" without
+	// a key entry but an API warning.
+	//
 	// But when the client returns an error it does not mean that
 	// the entry does not exist but that some other error (e.g.
 	// network error) occurred.
 	switch secret, err := s.client.Logical().Read(location); {
 	case err == nil && secret != nil:
+		if _, ok := secret.Data[key]; !ok {
+			s.logf("vault: entry exist but failed to read '%s': invalid K/V format", location)
+			return errCreateKey
+		}
 		return kes.ErrKeyExists
 	case err != nil:
 		s.logf("vault: failed to create '%s': %v", location, err)
