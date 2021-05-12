@@ -592,7 +592,7 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, er
 		pattern = "*" // => default to: list "all" policies
 	}
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/policy/list", url.PathEscape(pattern)), nil)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/policy/list", url.PathEscape(pattern)), nil)
 	if err != nil {
 		return nil, err
 	}
