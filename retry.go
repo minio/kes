@@ -161,6 +161,19 @@ func (r *retry) Do(req *http.Request) (*http.Response, error) {
 			// error since the caller has specified a wrong type.
 			panic("kes: request cannot be retried")
 		}
+
+		// If there is a request body, additionally set the
+		// GetBody callback - if not set already. The underlying
+		// HTTP stack will use the GetBody callback to obtain a new
+		// copy of the request body - e.g. in case of a redirect.
+		if req.GetBody == nil {
+			req.GetBody = func() (io.ReadCloser, error) {
+				if _, err := body.Seek(0, io.SeekStart); err != nil {
+					return nil, err
+				}
+				return body, nil
+			}
+		}
 	}
 
 	const (
