@@ -42,10 +42,7 @@ type serverConfig struct {
 		} `yaml:"proxy"`
 	} `yaml:"tls"`
 
-	Policies map[string]struct {
-		Paths      []string       `yaml:"paths"`
-		Identities []kes.Identity `yaml:"identities"`
-	} `yaml:"policy"`
+	Policies map[string]policyConfig `yaml:"policy"`
 
 	Cache struct {
 		Expiry struct {
@@ -80,11 +77,20 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 			return config, err
 		}
 
-		var configV0135 serverConfigV0135
-		if yaml.Unmarshal(b, &configV0135) != nil {
-			return config, err // return the actual unmarshal error on purpose
+		var configV0140 serverConfigV0140
+		if errV0140 := yaml.Unmarshal(b, &configV0140); errV0140 == nil {
+			config = configV0140.Migrate()
+		} else {
+			if _, ok := errV0140.(*yaml.TypeError); !ok {
+				return config, err // return the actual unmarshal error on purpose
+			}
+
+			var configV0135 serverConfigV0135
+			if yaml.Unmarshal(b, &configV0135) != nil {
+				return config, err // return the actual unmarshal error on purpose
+			}
+			config = configV0135.Migrate()
 		}
-		config = configV0135.Migrate()
 	}
 
 	// Replace any configuration file fields that refer to env. variables
@@ -220,6 +226,12 @@ func (config *serverConfig) Verify() error {
 		return fmt.Errorf("%q is an invalid error log configuration", v)
 	}
 	return config.KeyStore.Verify()
+}
+
+type policyConfig struct {
+	Allow      []string       `yaml:"allow"`
+	Deny       []string       `yaml:"deny"`
+	Identities []kes.Identity `yaml:"identities"`
 }
 
 type kmsServerConfig struct {

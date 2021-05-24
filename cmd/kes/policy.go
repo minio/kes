@@ -159,14 +159,14 @@ func showPolicy(args []string) {
 		}
 		stdlog.Fatalf("Error: failed to fetch policy %q: %v", name, err)
 	}
+
+	output, err := json.MarshalIndent(policy, "", "  ")
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+	}
+	os.Stdout.Write(output)
 	if isTerm(os.Stdout) {
-		fmt.Println(policy.String())
-	} else {
-		output, err := policy.MarshalJSON()
-		if err != nil {
-			stdlog.Fatalf("Error: %v", err)
-		}
-		os.Stdout.Write(output)
+		os.Stdout.WriteString("\n")
 	}
 }
 

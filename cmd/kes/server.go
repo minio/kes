@@ -186,9 +186,12 @@ func server(args []string) {
 		Root: config.Root,
 	}
 	for name, policy := range config.Policies {
-		p, err := kes.NewPolicy(policy.Paths...)
+		p, err := kes.NewPolicy(policy.Allow...)
 		if err != nil {
-			stdlog.Fatalf("Error: policy %q contains invalid glob patterns: %v", name, err)
+			stdlog.Fatalf("Error: policy %q contains invalid allow pattern: %v", name, err)
+		}
+		if err = p.Deny(policy.Deny...); err != nil {
+			stdlog.Fatalf("Error: policy %q contains invalid deny pattern: %v", name, err)
 		}
 		roles.Set(name, p)
 
