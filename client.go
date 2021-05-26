@@ -210,6 +210,8 @@ func (d *DEK) UnmarshalBinary(data []byte) error {
 //   }
 //   if err := iterator.Err(); err != nil {
 //   }
+//   if err := iterator.Close(); err != nil {
+//   }
 //
 // Once done with iterating over the list of KeyDescription
 // objects, an iterator should be closed using the Close
@@ -218,15 +220,16 @@ func (d *DEK) UnmarshalBinary(data []byte) error {
 // In general, a KeyIterator does not provide any guarantees
 // about ordering or the when its underlying source is modified
 // concurrently.
-// Particularly, if a key is created or deleted at the KES a
-// KeyIterator may or may not be affected by this change.
+// Particularly, if a key is created or deleted at the KES server
+// the KeyIterator may or may not be affected by this change.
 type KeyIterator struct {
 	response *http.Response
 	decoder  *json.Decoder
 
-	last   KeyDescription
-	err    error
-	closed bool
+	last     KeyDescription
+	nextErr  error // error encountered in Next()
+	closeErr error // error encountered in Close()
+	closed   bool
 }
 
 // KeyDescription describes a cryptographic key at a KES server.
@@ -242,14 +245,14 @@ type KeyDescription struct {
 // or if the KeyIterator encountered an error. The error,
 // if any, can be retrieved via the Err method.
 func (i *KeyIterator) Next() bool {
-	if i.closed || i.err != nil {
+	if i.closed || i.nextErr != nil {
 		return false
 	}
 	if err := i.decoder.Decode(&i.last); err != nil {
 		if err == io.EOF {
-			i.err = i.Close()
+			i.nextErr = i.Close()
 		} else {
-			i.err = err
+			i.nextErr = err
 		}
 		return false
 	}
@@ -266,19 +269,21 @@ func (i *KeyIterator) Value() KeyDescription { return i.last }
 
 // Err returns the first error encountered by the KeyIterator,
 // if any.
-func (i *KeyIterator) Err() error { return i.err }
+func (i *KeyIterator) Err() error { return i.nextErr }
 
 // Close closes the underlying connection to the KES server
-// and returns any encountered error, if any.
+// and returns any encountered error.
 func (i *KeyIterator) Close() error {
-	i.closed = true
-	if err := i.response.Body.Close(); err != nil {
-		return err
+	if !i.closed {
+		i.closed = true
+		if err := i.response.Body.Close(); err != nil {
+			i.closeErr = err
+		}
+		if err := parseErrorTrailer(i.response.Trailer); err != nil && i.closeErr == nil {
+			i.closeErr = err
+		}
 	}
-	if err := parseErrorTrailer(i.response.Trailer); err != nil {
-		return err
-	}
-	return nil
+	return i.closeErr
 }
 
 // Version tries to fetch the version information from the
@@ -644,7 +649,7 @@ func (c *Client) AssignIdentity(ctx context.Context, policy string, id Identity)
 	return nil
 }
 
-func (c *Client) ListIdentities(ctx context.Context, pattern string) (map[Identity]string, error) {
+func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityIterator, error) {
 	client := retry(c.HTTPClient)
 	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/identity/list", url.PathEscape(pattern)), nil)
 	if err != nil {
@@ -653,13 +658,10 @@ func (c *Client) ListIdentities(ctx context.Context, pattern string) (map[Identi
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-
-	const limit = 64 * 1024 * 1024 // There might be many identities
-	response := map[Identity]string{}
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
-		return nil, err
-	}
-	return response, nil
+	return &IdentityIterator{
+		response: resp,
+		decoder:  json.NewDecoder(resp.Body),
+	}, nil
 }
 
 func (c *Client) ForgetIdentity(ctx context.Context, id Identity) error {

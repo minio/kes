@@ -387,7 +387,7 @@ func HandleListKeys(store *secret.Store) http.HandlerFunc {
 		Name string
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Trailer", "Status, Error")
+		w.Header().Set("Trailer", "Status,Error")
 
 		iterator, err := store.List(r.Context())
 		if err != nil {
@@ -433,9 +433,12 @@ func HandleListKeys(store *secret.Store) http.HandlerFunc {
 			}
 			return
 		}
+
+		if !hasWritten {
+			w.WriteHeader(http.StatusOK)
+		}
 		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
 		w.Header().Set("Error", "")
-		w.WriteHeader(http.StatusOK) // Ensure to write HTTP header/trailer even when no keys are listed
 	}
 }
 
@@ -540,14 +543,49 @@ func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 
 func HandleListIdentities(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pattern := pathBase(r.URL.Path)
-		identities := map[kes.Identity]string{}
-		for id, policy := range roles.Identities() {
-			if ok, err := path.Match(pattern, id.String()); ok && err == nil {
-				identities[id] = policy
+		type Response struct {
+			Identity kes.Identity `json:"identity"`
+			Policy   string       `json:"policy"`
+		}
+		w.Header().Set("Trailer", "Status,Error")
+
+		var (
+			pattern    = pathBase(r.URL.Path)
+			encoder    = json.NewEncoder(w)
+			hasWritten bool
+		)
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		for identity, policy := range roles.Identities() {
+			if ok, err := path.Match(pattern, identity.String()); ok && err == nil {
+				hasWritten = true
+				err = encoder.Encode(Response{
+					Identity: identity,
+					Policy:   policy,
+				})
+
+				// Once we encounter ErrHandlerTimeout the client connection
+				// has time'd out and we can stop sending responses.
+				if err == http.ErrHandlerTimeout {
+					break
+				}
+
+				// If there is another error we be conservative and try to
+				// inform the client that something went wrong. However,
+				// if we fail to write to the underlying connection there is
+				// not really something we can do except stop iterating and
+				// not waste server resources.
+				if err != nil {
+					ErrorTrailer(w, err)
+					return
+				}
 			}
 		}
-		json.NewEncoder(w).Encode(identities)
+
+		if !hasWritten {
+			w.WriteHeader(http.StatusOK)
+		}
+		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
+		w.Header().Set("Error", "")
 	}
 }
 

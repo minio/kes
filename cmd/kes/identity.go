@@ -6,12 +6,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/minio/kes"
 )
@@ -132,35 +134,43 @@ func listIdentity(args []string) {
 		pattern = cli.Arg(0)
 	}
 
-	identityRoles, err := newClient(insecureSkipVerify).ListIdentities(cancelOnSignal(os.Interrupt, os.Kill), pattern)
+	identities, err := newClient(insecureSkipVerify).ListIdentities(cancelOnSignal(os.Interrupt, os.Kill), pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
 		}
 		stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 	}
-	identities := make([]string, 0, len(identityRoles))
-	for id := range identityRoles {
-		identities = append(identities, id.String())
-	}
-	sort.Strings(identities)
 
 	if isTerm(os.Stdout) {
-		fmt.Println("{")
-		for _, id := range identities {
-			fmt.Printf("  %s => %s\n", id, identityRoles[kes.Identity(id)])
+		sortedIdentities := make([]kes.IdentityDescription, 0, 100)
+		for identities.Next() {
+			sortedIdentities = append(sortedIdentities, identities.Value())
 		}
-		fmt.Println("}")
+		if err = identities.Err(); err != nil {
+			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+		}
+		if err = identities.Close(); err != nil {
+			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+		}
+		sort.Slice(sortedIdentities, func(i, j int) bool {
+			return strings.Compare(sortedIdentities[i].Identity.String(), sortedIdentities[j].Identity.String()) < 0
+		})
+
+		for _, id := range sortedIdentities {
+			fmt.Printf("%s => %s\n", id.Identity, id.Policy)
+		}
 	} else {
-		fmt.Print("{")
-		for i, id := range identities {
-			if i < len(identities)-1 {
-				fmt.Printf(`"%s":"%s",`, id, identityRoles[kes.Identity(id)])
-			} else {
-				fmt.Printf(`"%s":"%s"`, id, identityRoles[kes.Identity(id)])
-			}
+		encoder := json.NewEncoder(os.Stdout)
+		for identities.Next() {
+			encoder.Encode(identities.Value())
 		}
-		fmt.Print("}")
+		if err = identities.Err(); err != nil {
+			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+		}
+		if err = identities.Close(); err != nil {
+			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+		}
 	}
 }
 
