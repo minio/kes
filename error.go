@@ -6,6 +6,7 @@ package kes
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -119,6 +120,9 @@ func parseErrorResponse(resp *http.Response) error {
 }
 
 func parseErrorTrailer(trailer http.Header) error {
+	if _, ok := trailer["Status"]; !ok {
+		return errors.New("kes: unexpected EOF: no HTTP status trailer")
+	}
 	status, err := strconv.Atoi(trailer.Get("Status"))
 	if err != nil {
 		return fmt.Errorf("kes: invalid HTTP trailer - Status: %q", trailer.Get("Status"))
