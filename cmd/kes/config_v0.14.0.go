@@ -6,12 +6,13 @@ package main
 
 import "github.com/minio/kes"
 
-// serverConfigV0135 represents a KES server configuration up to
-// v0.13.5. It provides backward-compatible unmarshaling of exiting
+// serverConfigV0140 represents a KES server configuration between v0.13.5
+// and v0.14.0. It provides backward-compatible unmarshaling of exiting
 // configuration files.
 //
-// It will be removed at some time in the future.
-type serverConfigV0135 struct {
+// It will be removed at some time in the future - once serverConfigV0135
+// got removed.
+type serverConfigV0140 struct {
 	Addr string       `yaml:"address"`
 	Root kes.Identity `yaml:"root"`
 
@@ -43,17 +44,22 @@ type serverConfigV0135 struct {
 		Audit string `yaml:"audit"`
 	} `yaml:"log"`
 
-	Keys kmsServerConfig `yaml:"keys"`
+	Keys []struct {
+		Name string `yaml:"name"`
+	} `yaml:"keys"`
+
+	KeyStore kmsServerConfig `yaml:"keystore"`
 }
 
-func (c *serverConfigV0135) Migrate() serverConfig {
+func (c *serverConfigV0140) Migrate() serverConfig {
 	config := serverConfig{
 		Addr:     c.Addr,
 		Root:     c.Root,
 		TLS:      c.TLS,
 		Cache:    c.Cache,
 		Log:      c.Log,
-		KeyStore: c.Keys,
+		Keys:     c.Keys,
+		KeyStore: c.KeyStore,
 	}
 	config.Policies = make(map[string]policyConfig, len(c.Policies))
 	for name, policy := range c.Policies {

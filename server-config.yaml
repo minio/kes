@@ -45,8 +45,8 @@ tls:
 #   <API-version>/<API>/<operation>/[<argument-0>/<argument-1>/...]>
 #
 # Each KES server API has an unique path - e.g. /v1/key/create/<key-name>.
-# A client request is allowed if and only if the request URL path matches
-# one of the policy path patterns.
+# A client request is allowed if and only if no deny pattern AND at least one
+# allow pattern matches the request URL path.
 #
 # A policy has zero (by default) or more assigned identities. However,
 # an identity can never be assigned to more than one policy at the same
@@ -62,16 +62,19 @@ tls:
 # Please remove/adjust to your needs.
 policy:
   my-app:
-    paths:
+    allow:
     - /v1/key/create/my-app*
     - /v1/key/generate/my-app*
     - /v1/key/decrypt/my-app*
+    deny:
+    - /v1/key/generate/my-app-internal*
+    - /v1/key/decrypt/my-app-internal*
     identities:
     - df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258
     - c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731
 
   my-app-ops:
-    paths:
+    allow:
     - /v1/key/delete/my-app*
     - /v1/policy/show/my-app
     - /v1/identity/assign/my-app/*

@@ -397,20 +397,26 @@ func TestListKeys(t *testing.T) {
 }
 
 var readWritePolicyTests = []struct {
-	Policy *kes.Policy
+	Allow []string
+	Deny  []string
 }{
-	{Policy: newPolicy()},
-	{Policy: newPolicy("/version")},
-	{Policy: newPolicy("/v1/key/create/*", "/v1/key/delete/*")},
-	{Policy: newPolicy("/v1/key/create/*", "/v1/key/delete/*", "/v1/key/generate/my-minio-key")},
-	{Policy: newPolicy("/v1/policy/delete/my-policy", "/v1/policy/create/my-*")},
-	{Policy: newPolicy("/v1/key/*/*", "/v1/identity/*/*")},
+	{Allow: []string{}, Deny: []string{}},
+	{Allow: []string{"/version"}},
+	{Allow: []string{"/v1/key/create/*", "/v1/key/delete/*"}},
+	{Allow: []string{"/v1/key/create/*", "/v1/key/delete/*", "/v1/key/generate/my-minio-key"}},
+	{Allow: []string{"/v1/policy/delete/my-policy", "/v1/policy/create/my-*"}},
+	{Allow: []string{"/v1/key/*/*", "/v1/identity/*/*"}},
+	{Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"}, Deny: []string{"/v1/key/decrypt/*"}},
+	{Allow: []string{"/v1/key/list/*"}, Deny: []string{"/v1/key/list/my-*", "/v1/key/list/some-*"}},
 }
 
 func TestReadWritePolicy(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
+
+	_ = readWritePolicyTests // TODO: remove once we enable the tests again
+	t.Skip("TODO: enable once there is a release newer than v0.14.0")
 
 	client, err := newClient()
 	if err != nil {
@@ -419,7 +425,18 @@ func TestReadWritePolicy(t *testing.T) {
 
 	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
 	for i, test := range readWritePolicyTests {
-		if err := client.SetPolicy(context.Background(), name, test.Policy); err != nil {
+		policy, err := kes.NewPolicy()
+		if err != nil {
+			t.Fatalf("Test %d: Failed to create new policy: %v", i, err)
+		}
+		if err = policy.Allow(test.Allow...); err != nil {
+			t.Fatalf("Test %d: Failed to add allow rules: %v", i, err)
+		}
+		if err = policy.Deny(test.Deny...); err != nil {
+			t.Fatalf("Test %d: Failed to add deny rules: %v", i, err)
+		}
+
+		if err := client.SetPolicy(context.Background(), name, policy); err != nil {
 			t.Fatalf("Test %d: Failed to create policy '%s': %v", i, name, err)
 		}
 		if _, err = client.GetPolicy(context.Background(), name); err != nil {
@@ -434,6 +451,9 @@ func TestAssignIdentity(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
+
+	_ = newPolicy() // TODO: remove once we enable the tests again
+	t.Skip("TODO: enable once there is a release newer than v0.14.0")
 
 	client, err := newClient()
 	if err != nil {
@@ -456,6 +476,7 @@ func TestForgetIdentity(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
+	t.Skip("TODO: enable once there is a release newer than v0.14.0")
 
 	client, err := newClient()
 	if err != nil {
