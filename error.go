@@ -31,6 +31,11 @@ var (
 	// ErrPolicyNotFound represents a KES server response returned when a client
 	// tries to access a policy which does not exist.
 	ErrPolicyNotFound Error = NewError(http.StatusNotFound, "policy does not exist")
+
+	// ErrDecrypt represents a KES server response returned when the server fails
+	// to decrypt an encrypted ciphertext. It may occur when a client uses the
+	// the wrong key or the ciphertext has been (maliciously) modified.
+	ErrDecrypt Error = NewError(http.StatusBadRequest, "decryption failed: ciphertext is not authentic")
 )
 
 // Error is the type of client-server API errors.

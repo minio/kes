@@ -8,8 +8,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"testing"
 
+	"github.com/minio/kes"
 	"github.com/secure-io/sio-go/sioutil"
 )
 
@@ -99,6 +101,7 @@ var secretUnwrapTests = []struct {
 	Ciphertext     string
 	AssociatedData []byte
 	ShouldFail     bool
+	Err            error
 }{
 	{ // 0
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
@@ -112,36 +115,43 @@ var secretUnwrapTests = []struct {
 		Ciphertext:     `{"aead":"AES-256-GCM","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // Invalid algorithm
+		Err:            kes.NewError(http.StatusUnprocessableEntity, "unsupported cryptographic algorithm"),
 	},
 	{ // 3
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"EjOY4JKqjIrPmQ5z1KSR8zlhggY=","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid IV length
+		Err:            kes.NewError(http.StatusBadRequest, "invalid iv size"),
 	},
 	{ // 4
 		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"SXAbms731/c=","bytes":"cw22HjLq/4cx8507SW4hhSrYbDiMuRao4b5+GE+XfbE="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
+		Err:            kes.NewError(http.StatusBadRequest, "invalid nonce size"),
 	},
 	{ // 5
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"efY+4kYF9n8=","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
+		Err:            kes.NewError(http.StatusBadRequest, "invalid nonce size"),
 	},
 	{ // 6
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"QTza1g5oX3f9cGJMbY1xJwWPj1F7R2VnNl6XpFKYQy0="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
+		Err:            kes.ErrDecrypt,
 	},
 	{ // 7
 		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"8/kHMnCMs3h9NZ2a","bytes":"TTi8pkO+Jh1JWAHvPxZeUk/iVoBPUCE4ZSVGBy3fW2s="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
+		Err:            kes.ErrDecrypt,
 	},
 	{ // 8
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256" "iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid JSON
+		Err:            kes.NewError(http.StatusBadRequest, "invalid ciphertext"),
 	},
 }
 
@@ -155,6 +165,9 @@ func TestSecrectUnwrap(t *testing.T) {
 		}
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: Expected to fail but succeeded", i)
+		}
+		if test.ShouldFail && err != test.Err {
+			t.Fatalf("Test %d: Invalid error response: got %v - want %v", i, err, test.Err)
 		}
 		if !test.ShouldFail && !bytes.Equal(plaintext, Plaintext) {
 			t.Fatalf("Test %d: Plaintext mismatch: got %x - want %x", i, plaintext, Plaintext)
