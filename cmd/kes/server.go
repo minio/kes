@@ -27,6 +27,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes/internal/fips"
 	xhttp "github.com/minio/kes/internal/http"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
@@ -269,12 +270,38 @@ func server(args []string) {
 		Addr:    config.Addr,
 		Handler: mux,
 		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS13,
+			MinVersion: tls.VersionTLS12,
 		},
 		ErrorLog: errorLog.Log(),
 
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 0 * time.Second, // explicitly set no write timeout - see timeout handler.
+	}
+
+	// Limit the supported cipher suites to the secure TLS 1.2/1.3 subset - i.e. only ECDHE key exchange and only AEAD ciphers.
+	if fips.Enabled {
+		server.TLSConfig.CipherSuites = []uint16{
+			tls.TLS_AES_128_GCM_SHA256, // TLS 1.3
+			tls.TLS_AES_256_GCM_SHA384,
+
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS 1.2
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		}
+	} else {
+		server.TLSConfig.CipherSuites = []uint16{
+			tls.TLS_AES_128_GCM_SHA256, // TLS 1.3
+			tls.TLS_AES_256_GCM_SHA384,
+			tls.TLS_CHACHA20_POLY1305_SHA256,
+
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS 1.2
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+		}
 	}
 	switch strings.ToLower(mtlsAuthFlag) {
 	case "on":
