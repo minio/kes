@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/minio/kes"
@@ -142,10 +141,10 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	}
 	var sealedSecret SealedSecret
 	if err := json.Unmarshal(ciphertext, &sealedSecret); err != nil {
-		return nil, err
+		return nil, kes.NewError(http.StatusBadRequest, "invalid ciphertext")
 	}
 	if n := len(sealedSecret.IV); n != 16 {
-		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size "+strconv.Itoa(n))
+		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size")
 	}
 
 	var aead cipher.AEAD
@@ -177,11 +176,11 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	}
 
 	if n := len(sealedSecret.Nonce); n != aead.NonceSize() {
-		return nil, kes.NewError(http.StatusBadRequest, "invalid nonce size "+strconv.Itoa(n))
+		return nil, kes.NewError(http.StatusBadRequest, "invalid nonce size")
 	}
 	plaintext, err := aead.Open(nil, sealedSecret.Nonce, sealedSecret.Bytes, associatedData)
 	if err != nil {
-		return nil, kes.NewError(http.StatusBadRequest, "ciphertext is not authentic")
+		return nil, kes.ErrDecrypt
 	}
 	return plaintext, nil
 }
