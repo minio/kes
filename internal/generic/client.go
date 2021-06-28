@@ -269,10 +269,7 @@ func (i *iterator) Err() error { return i.err }
 
 func (i *iterator) Close() error {
 	i.closed = true
-	if err := i.response.Body.Close(); err != nil {
-		return err
-	}
-	return nil
+	return i.response.Body.Close()
 }
 
 // endpoint returns an endpoint URL starting with the

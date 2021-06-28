@@ -218,7 +218,7 @@ keystore:
 
   gcp:
     # The Google Cloud Platform secret manager.
-    # for more information take a look at:
+    # For more information take a look at:
     # https://cloud.google.com/secret-manager
     secretmanager:
       # The project ID is a unique, user-assigned ID that can be used by Google APIs.
@@ -235,4 +235,17 @@ keystore:
         client_id:      "" # The service account client ID                      - e.g. 113491952745362495489"
         private_key_id: "" # The service account private key                    - e.g. 381514ebd3cf45a64ca8adc561f0ce28fca5ec06
         private_key:    "" # The raw encoded private key of the service account - e.g "-----BEGIN PRIVATE KEY-----\n ... \n-----END PRIVATE KEY-----\n
+
+  azure:
+    # The Azure KeyVault configuration.
+    # For more information take a look at:
+    # https://azure.microsoft.com/services/key-vault
+    keyvault:
+      endpoint: ""      # The KeyVault endpoint - e.g. https://my-instance.vault.azure.net
+      # Azure client credentials used to
+      # authenticate to Azure KeyVault.
+      credentials:
+        tenant_id: ""      # The ID of the tenant the client belongs to - i.e. a UUID.
+        client_id: ""      # The ID of the client - i.e. a UUID.
+        client_secret: ""  # The value of the client secret.
 

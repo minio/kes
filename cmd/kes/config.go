@@ -17,6 +17,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/aws"
+	"github.com/minio/kes/internal/azure"
 	"github.com/minio/kes/internal/fs"
 	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
@@ -169,6 +170,12 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	config.KeyStore.GCP.SecretManager.Credentials.Key = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.Key)
 	config.KeyStore.GCP.SecretManager.Credentials.KeyID = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.KeyID)
 
+	// Azure KeyVault backend
+	config.KeyStore.Azure.KeyVault.Endpoint = expandEnv(config.KeyStore.Azure.KeyVault.Endpoint)
+	config.KeyStore.Azure.KeyVault.Credentials.TenantID = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.TenantID)
+	config.KeyStore.Azure.KeyVault.Credentials.ClientID = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.ClientID)
+	config.KeyStore.Azure.KeyVault.Credentials.Secret = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.Secret)
+
 	// We handle the Hashicorp Vault Kubernetes JWT specially
 	// since it can either be specified directly or be mounted
 	// as a file (K8S secret).
@@ -296,6 +303,30 @@ type kmsServerConfig struct {
 		} `yaml:"secretsmanager"`
 	} `yaml:"aws"`
 
+	GCP struct {
+		SecretManager struct {
+			ProjectID   string `yaml:"project_id"`
+			Endpoint    string `yaml:"endpoint"`
+			Credentials struct {
+				Client   string `yaml:"client_email"`
+				ClientID string `yaml:"client_id"`
+				KeyID    string `yaml:"private_key_id"`
+				Key      string `yaml:"private_key"`
+			} `yaml:"credentials"`
+		} `yaml:"secretmanager"`
+	} `yaml:"gcp"`
+
+	Azure struct {
+		KeyVault struct {
+			Endpoint    string `yaml:"endpoint"`
+			Credentials struct {
+				TenantID string `yaml:"tenant_id"`
+				ClientID string `yaml:"client_id"`
+				Secret   string `yaml:"client_secret"`
+			}
+		} `yaml:"keyvault"`
+	} `yaml:"azure"`
+
 	Gemalto struct {
 		KeySecure struct {
 			Endpoint string `yaml:"endpoint"`
@@ -311,19 +342,6 @@ type kmsServerConfig struct {
 			} `yaml:"tls"`
 		} `yaml:"keysecure"`
 	} `yaml:"gemalto"`
-
-	GCP struct {
-		SecretManager struct {
-			ProjectID   string `yaml:"project_id"`
-			Endpoint    string `yaml:"endpoint"`
-			Credentials struct {
-				Client   string `yaml:"client_email"`
-				ClientID string `yaml:"client_id"`
-				KeyID    string `yaml:"private_key_id"`
-				Key      string `yaml:"private_key"`
-			} `yaml:"credentials"`
-		} `yaml:"secretmanager"`
-	} `yaml:"gcp"`
 }
 
 // SetDefaults set default values for fields that may be empty b/c not specified by user.
@@ -359,6 +377,9 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Fs.Path != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: FS and GCP secret manager are specified at the same time")
+	case config.Fs.Path != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: FS and Azure KeyVault are specified at the same time")
+
 	case config.Generic.Endpoint != "" && config.Vault.Endpoint != "":
 		return errors.New("ambiguous configuration: Generic and Hashicorp Vault endpoint are specified at the same time")
 	case config.Generic.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
@@ -367,18 +388,32 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: Generic and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Generic.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: Generic and GCP SecretManager endpoint are specified at the same time")
+	case config.Generic.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: Generic and Azure KeyVault are specified at the same time")
+
 	case config.Vault.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
 	case config.Vault.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Vault.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
+	case config.Vault.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: Hashicorp Vault and Azure KeyVault are specified at the same time")
+
 	case config.Aws.SecretsManager.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
 	case config.Aws.SecretsManager.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
+	case config.Aws.SecretsManager.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: AWS SecretsManager and Azure KeyVault are specified at the same time")
+
 	case config.Gemalto.KeySecure.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: Gemalto KeySecure endpoint and GCP secret manager are specified at the same time")
+		return errors.New("ambiguous configuration: Gemalto KeySecure and GCP secret manager are specified at the same time")
+	case config.Gemalto.KeySecure.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: Gemalto KeySecure and Azure KeyVault are specified at the same time")
+
+	case config.GCP.SecretManager.ProjectID != "" && config.Azure.KeyVault.Endpoint != "":
+		return errors.New("ambiguous configuration: GCP secrets manager and Azure KeyVault are specified at the same time")
 	}
 
 	if config.Vault.Endpoint != "" {
@@ -486,25 +521,6 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = awsStore
-	case config.Gemalto.KeySecure.Endpoint != "":
-		gemaltoStore := &gemalto.KeySecure{
-			Endpoint: config.Gemalto.KeySecure.Endpoint,
-			CAPath:   config.Gemalto.KeySecure.TLS.CAPath,
-			ErrorLog: errorLog,
-			Login: gemalto.Credentials{
-				Token:  config.Gemalto.KeySecure.Login.Token,
-				Domain: config.Gemalto.KeySecure.Login.Domain,
-				Retry:  time.Duration(config.Gemalto.KeySecure.Login.Retry),
-			},
-		}
-
-		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
-		quiet.Print(msg)
-		if err := gemaltoStore.Authenticate(); err != nil {
-			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
-		}
-		quiet.ClearMessage(msg)
-		store.Remote = gemaltoStore
 	case config.GCP.SecretManager.ProjectID != "":
 		gcpStore := &gcp.SecretManager{
 			Endpoint:  config.GCP.SecretManager.Endpoint,
@@ -525,6 +541,43 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 		}
 		quiet.ClearMessage(msg)
 		store.Remote = gcpStore
+	case config.Azure.KeyVault.Endpoint != "":
+		azureStore := &azure.KeyVault{
+			Endpoint: config.Azure.KeyVault.Endpoint,
+			ErrorLog: errorLog,
+		}
+		msg := fmt.Sprintf("Authenticating to Azure KeyVault '%s' ... ", config.Azure.KeyVault.Endpoint)
+		quiet.Print(msg)
+		err := azureStore.Authenticate(azure.Credentials{
+			TenantID: config.Azure.KeyVault.Credentials.TenantID,
+			ClientID: config.Azure.KeyVault.Credentials.ClientID,
+			Secret:   config.Azure.KeyVault.Credentials.Secret,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
+		}
+		quiet.ClearMessage(msg)
+
+		store.Remote = azureStore
+	case config.Gemalto.KeySecure.Endpoint != "":
+		gemaltoStore := &gemalto.KeySecure{
+			Endpoint: config.Gemalto.KeySecure.Endpoint,
+			CAPath:   config.Gemalto.KeySecure.TLS.CAPath,
+			ErrorLog: errorLog,
+			Login: gemalto.Credentials{
+				Token:  config.Gemalto.KeySecure.Login.Token,
+				Domain: config.Gemalto.KeySecure.Login.Domain,
+				Retry:  time.Duration(config.Gemalto.KeySecure.Login.Retry),
+			},
+		}
+
+		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
+		quiet.Print(msg)
+		if err := gemaltoStore.Authenticate(); err != nil {
+			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		store.Remote = gemaltoStore
 	default:
 		store.Remote = &mem.Store{}
 	}
@@ -557,6 +610,9 @@ func (config *kmsServerConfig) Description() (kind, endpoint string, err error) 
 	case config.GCP.SecretManager.ProjectID != "":
 		kind = "GCP SecretManager"
 		endpoint = config.GCP.SecretManager.Endpoint + " | Project: " + config.GCP.SecretManager.ProjectID
+	case config.Azure.KeyVault.Endpoint != "":
+		kind = "Azure KeyVault"
+		endpoint = config.Azure.KeyVault.Endpoint
 	default:
 		kind = "In-Memory"
 		endpoint = "non-persistent"
