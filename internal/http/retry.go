@@ -192,9 +192,9 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 		var delay time.Duration
 		switch {
 		case Jitter < time.Microsecond:
-			delay = Delay + time.Duration(rand.Int63n(int64(Jitter)))*time.Nanosecond
+			delay = Delay + time.Duration(rand.Int63n(Jitter.Nanoseconds()))*time.Nanosecond
 		case Jitter < time.Millisecond:
-			delay = Delay + time.Duration(rand.Int63n(int64(Jitter)))*time.Microsecond
+			delay = Delay + time.Duration(rand.Int63n(Jitter.Microseconds()))*time.Microsecond
 		default:
 			delay = Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond
 		}

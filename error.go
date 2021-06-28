@@ -18,24 +18,24 @@ var (
 	// ErrNotAllowed represents a KES server response returned when the
 	// client has not sufficient policy permissions to perform a particular
 	// operation.
-	ErrNotAllowed Error = NewError(http.StatusForbidden, "prohibited by policy")
+	ErrNotAllowed = NewError(http.StatusForbidden, "prohibited by policy")
 
 	// ErrKeyNotFound represents a KES server response returned when a client
 	// tries to access or use a cryptographic key which does not exist.
-	ErrKeyNotFound Error = NewError(http.StatusNotFound, "key does not exist")
+	ErrKeyNotFound = NewError(http.StatusNotFound, "key does not exist")
 
 	// ErrKeyExists represents a KES server response returned when a client tries
 	// to create a cryptographic key which already exists.
-	ErrKeyExists Error = NewError(http.StatusBadRequest, "key does already exist")
+	ErrKeyExists = NewError(http.StatusBadRequest, "key does already exist")
 
 	// ErrPolicyNotFound represents a KES server response returned when a client
 	// tries to access a policy which does not exist.
-	ErrPolicyNotFound Error = NewError(http.StatusNotFound, "policy does not exist")
+	ErrPolicyNotFound = NewError(http.StatusNotFound, "policy does not exist")
 
 	// ErrDecrypt represents a KES server response returned when the server fails
 	// to decrypt an encrypted ciphertext. It may occur when a client uses the
 	// the wrong key or the ciphertext has been (maliciously) modified.
-	ErrDecrypt Error = NewError(http.StatusBadRequest, "decryption failed: ciphertext is not authentic")
+	ErrDecrypt = NewError(http.StatusBadRequest, "decryption failed: ciphertext is not authentic")
 )
 
 // Error is the type of client-server API errors.

@@ -312,7 +312,7 @@ func server(args []string) {
 		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuthFlag)
 	}
 
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
