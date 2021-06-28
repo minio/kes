@@ -112,10 +112,7 @@ type Store struct {
 // this name then it does not replace the secret and
 // returns kes.ErrKeyExists.
 func (s *Store) Create(name string, secret Secret) (err error) {
-	if err = s.Remote.Create(name, secret.String()); err != nil {
-		return err
-	}
-	return nil
+	return s.Remote.Create(name, secret.String())
 }
 
 // Delete deletes the secret associated with the given
