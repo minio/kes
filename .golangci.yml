@@ -12,7 +12,7 @@ linters:
     - goimports
     - misspell
     - govet
-    - golint
+    - revive
     - ineffassign
     - gosimple
     - deadcode
@@ -28,4 +28,4 @@ issues:
       - error strings should not be capitalized or end with punctuation or a newline
       - should have comment           # TODO(aead): Remove once all exported ident. have comments!
 service:
-  golangci-lint-version: 1.33.0 # use the fixed version to not introduce new linters unexpectedly
+  golangci-lint-version: 1.40.0 # use the fixed version to not introduce new linters unexpectedly

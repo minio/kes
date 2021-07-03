@@ -439,7 +439,7 @@ func migrate(args []string) {
 		uiTicker            = time.NewTicker(100 * time.Millisecond)
 		listContext, cancel = context.WithCancel(context.Background())
 		uiContext, cancelUI = context.WithCancel(listContext)
-		signals             = make(chan os.Signal)
+		signals             = make(chan os.Signal, 1)
 	)
 	defer cancel()
 	defer cancelUI()

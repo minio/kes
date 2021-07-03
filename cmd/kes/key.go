@@ -88,7 +88,7 @@ func createKey(args []string) {
 	}
 
 	var (
-		name  string = cli.Arg(0)
+		name  = cli.Arg(0)
 		bytes []byte
 	)
 	if cli.NArg() == 2 {
@@ -157,7 +157,7 @@ func decryptKey(args []string) {
 	}
 
 	var (
-		name       string = cli.Arg(0)
+		name       = cli.Arg(0)
 		ciphertext []byte
 		cryptoCtx  []byte
 		err        error
@@ -223,7 +223,7 @@ func deriveKey(args []string) {
 	}
 
 	var (
-		name      string = cli.Arg(0)
+		name      = cli.Arg(0)
 		cryptoCtx []byte
 	)
 	if cli.NArg() == 2 {
