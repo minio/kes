@@ -171,6 +171,7 @@ keystore:
   vault:
     endpoint: ""  # The Vault endpoint - e.g. https://127.0.0.1:8200
     engine: ""    # The path of the K/V engine - e.g. secrets. If empty, defaults to: kv. (Vault default)
+    version: ""   # The K/V engine version - either "v1" or "v2". The "v1" engine is recommended.
     namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
     prefix: ""    # An optional K/V prefix. The server will store keys under this prefix.
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
