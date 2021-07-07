@@ -134,6 +134,7 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	// Hashicorp Vault backend
 	config.KeyStore.Vault.Endpoint = expandEnv(config.KeyStore.Vault.Endpoint)
 	config.KeyStore.Vault.EnginePath = expandEnv(config.KeyStore.Vault.EnginePath)
+	config.KeyStore.Vault.EngineVersion = expandEnv(config.KeyStore.Vault.EngineVersion)
 	config.KeyStore.Vault.Namespace = expandEnv(config.KeyStore.Vault.Namespace)
 	config.KeyStore.Vault.Prefix = expandEnv(config.KeyStore.Vault.Prefix)
 	config.KeyStore.Vault.AppRole.EnginePath = expandEnv(config.KeyStore.Vault.AppRole.EnginePath)
@@ -249,9 +250,10 @@ type kmsServerConfig struct {
 	} `yaml:"generic"`
 
 	Vault struct {
-		Endpoint   string `yaml:"endpoint"`
-		EnginePath string `yaml:"engine"`
-		Namespace  string `yaml:"namespace"`
+		Endpoint      string `yaml:"endpoint"`
+		EnginePath    string `yaml:"engine"`
+		EngineVersion string `yaml:"version"`
+		Namespace     string `yaml:"namespace"`
 
 		Prefix string `yaml:"prefix"`
 
@@ -328,6 +330,9 @@ type kmsServerConfig struct {
 func (config *kmsServerConfig) SetDefaults() {
 	if config.Vault.EnginePath == "" {
 		config.Vault.EnginePath = "kv" // If not set, use the Vault default engine path.
+	}
+	if config.Vault.EngineVersion == "" {
+		config.Vault.EngineVersion = vault.EngineV1
 	}
 	if config.Vault.AppRole.EnginePath == "" {
 		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path for AppRole.
@@ -430,10 +435,11 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 		store.Remote = genericStore
 	case config.Vault.Endpoint != "":
 		vaultStore := &vault.Store{
-			Addr:      config.Vault.Endpoint,
-			Engine:    config.Vault.EnginePath,
-			Location:  config.Vault.Prefix,
-			Namespace: config.Vault.Namespace,
+			Addr:          config.Vault.Endpoint,
+			Engine:        config.Vault.EnginePath,
+			EngineVersion: config.Vault.EngineVersion,
+			Location:      config.Vault.Prefix,
+			Namespace:     config.Vault.Namespace,
 			AppRole: vault.AppRole{
 				Engine: config.Vault.AppRole.EnginePath,
 				ID:     config.Vault.AppRole.ID,

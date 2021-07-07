@@ -61,6 +61,15 @@ type Store struct {
 	// at arbitrary paths.
 	Engine string
 
+	// EngineVersion is the API version of the K/V engine.
+	//
+	// It has to be set to "v1" for the K/V v1 engine (unversioned)
+	// or to "v2" for the K/V v2 engine (versioned).
+	//
+	// For more information about the K/V engine differences, see:
+	// https://www.vaultproject.io/docs/secrets/kv
+	EngineVersion string
+
 	// Location is the location on Vault's K/V store
 	// where this KeyStore will save secret keys.
 	//
@@ -195,6 +204,16 @@ var (
 	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
+const (
+	// EngineV1 is the Hashicorp Vault K/V secret engine version 1.
+	// This K/V secret store is not versioned.
+	EngineV1 = "v1"
+
+	// EngineV2 is the Hashicorp Vault K/V secret engine version 2.
+	// This K/V secret store is versioned.
+	EngineV2 = "v2"
+)
+
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
 func (s *Store) Get(key string) (string, error) {
@@ -206,7 +225,14 @@ func (s *Store) Get(key string) (string, error) {
 		return "", errSealed
 	}
 
-	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
+	var location string
+	if s.EngineVersion == EngineV2 {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#read-secret-version
+		location = path.Join(s.Engine, "data", s.Location, key) // /<engine>/data/<location>/<key>
+	} else {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#read-secret
+		location = path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
+	}
 	entry, err := s.client.Logical().Read(location)
 	if err != nil || entry == nil {
 		// Vault will not return an error if e.g. the key existed but has
@@ -218,8 +244,22 @@ func (s *Store) Get(key string) (string, error) {
 		return "", errGetKey
 	}
 
+	var data = entry.Data
+	if s.EngineVersion == EngineV2 { // See: https://www.vaultproject.io/api/secret/kv/kv-v2#sample-response-1 (differs from v1 format)
+		v, ok := entry.Data["data"]
+		if !ok || v == nil {
+			s.logf("vault: failed to read '%s': invalid K/V v2 format: missing 'data' entry", location)
+			return "", errGetKey
+		}
+		data, ok = v.(map[string]interface{})
+		if !ok || data == nil {
+			s.logf("vault: failed to read '%s': invalid K/V v2 format: invalid 'data' entry", location)
+			return "", errGetKey
+		}
+	}
+
 	// Verify that we got a well-formed response from Vault
-	v, ok := entry.Data[key]
+	v, ok := data[key]
 	if !ok || v == nil {
 		s.logf("vault: failed to read '%s': entry exists but no secret key is present", location)
 		return "", errGetKey
@@ -246,7 +286,14 @@ func (s *Store) Create(key, value string) error {
 
 	// We try to check whether key exists on the K/V store.
 	// If so, we must not overwrite it.
-	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
+	var location string
+	if s.EngineVersion == EngineV2 {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#create-update-secret
+		location = path.Join(s.Engine, "data", s.Location, key) // /<engine>/data/<location>/<key>
+	} else {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#create-update-secret
+		location = path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
+	}
 
 	// Vault will return nil for the secret as well as a nil-error
 	// if the specified entry does not exist.
@@ -269,9 +316,29 @@ func (s *Store) Create(key, value string) error {
 	// the entry does not exist but that some other error (e.g.
 	// network error) occurred.
 	switch secret, err := s.client.Logical().Read(location); {
-	case err == nil && secret != nil:
+	case err == nil && secret != nil && s.EngineVersion != EngineV2:
+		if err != nil {
+			return err
+		}
 		if _, ok := secret.Data[key]; !ok {
 			s.logf("vault: entry exist but failed to read '%s': invalid K/V format", location)
+			return errCreateKey
+		}
+		return kes.ErrKeyExists
+	case err == nil && secret != nil && s.EngineVersion == EngineV2 && len(secret.Data) > 0:
+		var data = secret.Data
+		v, ok := data["data"]
+		if !ok || v == nil {
+			s.logf("vault: entry exists but failed to read '%s': invalid K/V v2 format: missing 'data' entry", location)
+			return errCreateKey
+		}
+		data, ok = v.(map[string]interface{})
+		if !ok || data == nil {
+			s.logf("vault: entry exists but failed to read '%s': invalid K/V v2 format: invalid 'data' entry", location)
+			return errCreateKey
+		}
+		if _, ok := data[key]; !ok {
+			s.logf("vault: failed to read '%s': entry exists but no secret key is present", location)
 			return errCreateKey
 		}
 		return kes.ErrKeyExists
@@ -286,9 +353,22 @@ func (s *Store) Create(key, value string) error {
 	// Since there is now way we can detect that reliable we require
 	// that whoever has the permission to create keys does that in
 	// a non-racy way.
-	_, err := s.client.Logical().Write(location, map[string]interface{}{
-		key: value,
-	})
+	var data map[string]interface{}
+	if s.EngineVersion == EngineV2 {
+		data = map[string]interface{}{
+			"options": map[string]interface{}{
+				"cas": 0, // We need to set CAS to 0 to ensure atomic creates / avoid any overwrite.
+			},
+			"data": map[string]interface{}{
+				key: value,
+			},
+		}
+	} else {
+		data = map[string]interface{}{
+			key: value,
+		}
+	}
+	_, err := s.client.Logical().Write(location, data)
 	if err != nil {
 		s.logf("vault: failed to create '%s': %v", location, err)
 		return errCreateKey
@@ -307,14 +387,22 @@ func (s *Store) Delete(key string) error {
 		return errSealed
 	}
 
+	var location string
+	if s.EngineVersion == EngineV2 {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#delete-metadata-and-all-versions
+		location = path.Join(s.Engine, "metadata", s.Location, key) // /<engine>/metadata/<location>/<key>
+	} else {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#delete-secret
+		location = path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
+	}
+
 	// Vault will not return an error if an entry does not
 	// exist. Instead, it responds with 204 No Content and
 	// no body. In this case the client also returns a nil-error
 	// Therefore, we can just try to delete it in any case.
-	location := path.Join(s.Engine, s.Location, key) // /<engine>/<location>/<key>
 	_, err := s.client.Logical().Delete(location)
 	if err != nil {
-		s.logf("vault: failed to delete '%s': %v", location, err)
+		s.logf("vault: failed to delete '%s': %v", key, err)
 		return errDeleteKey
 	}
 	return nil
@@ -337,9 +425,15 @@ func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
 	// occurs, etc.) we want to abort the listing immediately.
 	// Therefore, we have to use low-level SDK functionality here.
 
-	location := path.Join(s.Engine, s.Location)
-	r := s.client.NewRequest("LIST", path.Join("/v1", location))
-	r.Method = "GET"
+	var location string
+	if s.EngineVersion == EngineV2 {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#list-secrets
+		location = path.Join("/v1", s.Engine, "metadata", s.Location)
+	} else {
+		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#list-secrets
+		location = path.Join("/v1", s.Engine, s.Location)
+	}
+	r := s.client.NewRequest("LIST", location)
 	r.Params.Set("list", "true")
 
 	resp, err := s.client.RawRequestWithContext(ctx, r)
