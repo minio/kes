@@ -415,9 +415,6 @@ func TestReadWritePolicy(t *testing.T) {
 		t.SkipNow()
 	}
 
-	_ = readWritePolicyTests // TODO: remove once we enable the tests again
-	t.Skip("TODO: enable once there is a release newer than v0.14.0")
-
 	client, err := newClient()
 	if err != nil {
 		t.Fatalf("Failed to create KES client: %v", err)
@@ -452,9 +449,6 @@ func TestAssignIdentity(t *testing.T) {
 		t.SkipNow()
 	}
 
-	_ = newPolicy() // TODO: remove once we enable the tests again
-	t.Skip("TODO: enable once there is a release newer than v0.14.0")
-
 	client, err := newClient()
 	if err != nil {
 		t.Fatalf("Failed to create KES client: %v", err)
@@ -476,7 +470,6 @@ func TestForgetIdentity(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
-	t.Skip("TODO: enable once there is a release newer than v0.14.0")
 
 	client, err := newClient()
 	if err != nil {
