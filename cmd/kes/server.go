@@ -274,8 +274,9 @@ func server(args []string) {
 		},
 		ErrorLog: errorLog.Log(),
 
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 0 * time.Second, // explicitly set no write timeout - see timeout handler.
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - see timeout handler.
+		IdleTimeout:       90 * time.Second,
 	}
 
 	// Limit the supported cipher suites to the secure TLS 1.2/1.3 subset - i.e. only ECDHE key exchange and only AEAD ciphers.
