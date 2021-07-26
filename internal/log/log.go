@@ -118,9 +118,7 @@ func (w *ErrEncoder) WriteString(s string) (int, error) {
 	// A log.Logger will add a newline character to each
 	// log message. This newline has to be removed since
 	// it's not part of the actual error message.
-	if strings.HasSuffix(s, "\n") {
-		s = s[:len(s)-1]
-	}
+	s = strings.TrimSuffix(s, "\n")
 
 	err := w.encoder.Encode(kes.ErrorEvent{
 		Message: s,

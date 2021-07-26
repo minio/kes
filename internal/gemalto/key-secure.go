@@ -423,9 +423,8 @@ func parseServerError(resp *http.Response) (errResponse, error) {
 		return errResponse{}, err
 	}
 	message := strings.TrimSpace(s.String())
-	if strings.HasSuffix(message, "\n") { // Some error message end with '\n' causing messy logs
-		message = strings.TrimSuffix(message, "\n")
-	}
+	message = strings.TrimSuffix(message, "\n") // Some error message end with '\n' causing messy logs
+
 	return errResponse{
 		Code:    resp.StatusCode,
 		Message: message,
