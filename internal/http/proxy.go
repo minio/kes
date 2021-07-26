@@ -43,6 +43,6 @@ func TLSProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 			// not the TLS proxy.
 			aw.Identity = auth.Identify(r, proxy.Identify)
 		}
-		f(aw, r)
+		f(w, r)
 	}
 }
