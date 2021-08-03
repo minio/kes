@@ -115,7 +115,6 @@ func (s *Store) Create(name string, secret Secret) (err error) {
 	if err = s.Remote.Create(name, secret.String()); err != nil {
 		return err
 	}
-	s.cache.SetOrGet(name, secret)
 	return nil
 }
 
@@ -145,7 +144,7 @@ func (s *Store) Get(name string) (Secret, error) {
 	if err != nil {
 		return Secret{}, err
 	}
-	return s.cache.SetOrGet(name, secret), nil
+	return s.cache.CompareAndSwap(name, secret), nil
 }
 
 // List returns a new Iterator over all key names.
