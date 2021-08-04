@@ -43,16 +43,15 @@ func (c *cache) Set(name string, secret Secret) {
 	}
 }
 
-// SetOrGet adds  given secret to the cache
-// if and only if no entry for name already
-// exists. Instead, if an entry for the given
-// name exists it returns the secret that is
-// currently present.
+// CompareAndSwap adds the secret to the cache
+// if and only if no entry for given name exists.
+// If an entry for the given name exists it returns
+// the secret that is currently in the cache.
 //
-// SetOrGet will always return the secret that
-// is in the cache right now - either the given
-// one or the one that has been there before.
-func (c *cache) SetOrGet(name string, secret Secret) Secret {
+// CompareAndSwap will always return the secret that
+// is in the cache - either the existing one or the
+// one that has been added by CompareAndSwap itself.
+func (c *cache) CompareAndSwap(name string, secret Secret) Secret {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

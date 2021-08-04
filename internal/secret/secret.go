@@ -10,6 +10,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,6 +48,13 @@ func ParseSecret(s string) (Secret, error) {
 
 func (s Secret) String() string {
 	return `{"bytes":"` + base64.StdEncoding.EncodeToString(s[:]) + `"}`
+}
+
+// ID returns the unique ID of a Secret.
+func (s Secret) ID() string {
+	const Size = 128 / 8 // IDs are 128 bit long
+	h := sha256.Sum256(s[:])
+	return hex.EncodeToString(h[:Size])
 }
 
 // Wrap encrypts and authenticates the plaintext,
@@ -111,12 +119,14 @@ func (s Secret) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 
 	type SealedSecret struct {
 		Algorithm string `json:"aead"`
+		ID        string `json:"id"`
 		IV        []byte `json:"iv"`
 		Nonce     []byte `json:"nonce"`
 		Bytes     []byte `json:"bytes"`
 	}
 	return json.Marshal(SealedSecret{
 		Algorithm: algorithm,
+		ID:        s.ID(),
 		IV:        iv,
 		Nonce:     nonce,
 		Bytes:     ciphertext,
@@ -135,6 +145,7 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 
 	type SealedSecret struct {
 		Algorithm string `json:"aead"`
+		ID        string `json:"id"`
 		IV        []byte `json:"iv"`
 		Nonce     []byte `json:"nonce"`
 		Bytes     []byte `json:"bytes"`
@@ -142,6 +153,9 @@ func (s Secret) Unwrap(ciphertext []byte, associatedData []byte) ([]byte, error)
 	var sealedSecret SealedSecret
 	if err := json.Unmarshal(ciphertext, &sealedSecret); err != nil {
 		return nil, kes.NewError(http.StatusBadRequest, "invalid ciphertext")
+	}
+	if sealedSecret.ID != "" && sealedSecret.ID != s.ID() { // Ciphertexts generated in the past may not contain a secret ID
+		return nil, kes.NewError(http.StatusBadRequest, "invalid ciphertext: key ID mismatch")
 	}
 	if n := len(sealedSecret.IV); n != 16 {
 		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size")

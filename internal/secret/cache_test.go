@@ -31,7 +31,7 @@ func TestCacheSetOrGet(t *testing.T) {
 	secret[0] = 0xff
 
 	var c cache
-	if s := c.SetOrGet("0", secret); s != secret {
+	if s := c.CompareAndSwap("0", secret); s != secret {
 		t.Fatalf("Expected to be able to add an entry: got: %x - want: %x", s, secret)
 	}
 	if s, ok := c.Get("0"); !ok || s != secret {
@@ -39,7 +39,7 @@ func TestCacheSetOrGet(t *testing.T) {
 	}
 
 	secret[0] = 0x11
-	if s := c.SetOrGet("0", secret); s == secret {
+	if s := c.CompareAndSwap("0", secret); s == secret {
 		t.Fatal("Cache entry should already exist")
 	}
 }

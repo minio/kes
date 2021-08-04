@@ -112,46 +112,56 @@ var secretUnwrapTests = []struct {
 		AssociatedData: nil,
 	},
 	{ // 2
+		Ciphertext:     `{"aead":"ChaCha20Poly1305","id":"66687aadf862bd776c8fc18b8e9f8e20","iv":"EC0eZp7Pqt+LnkOae5xaAg==","nonce":"X1ejXKmH/ugFZPkk","bytes":"wIGBTDs6aOvsqJfekZ0PYRT/OHyFX2TXqeNwl1SLXOI="}`,
+		AssociatedData: nil,
+	},
+	{ // 3
 		Ciphertext:     `{"aead":"AES-256-GCM","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // Invalid algorithm
 		Err:            kes.NewError(http.StatusUnprocessableEntity, "unsupported cryptographic algorithm"),
 	},
-	{ // 3
+	{ // 4
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"EjOY4JKqjIrPmQ5z1KSR8zlhggY=","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid IV length
 		Err:            kes.NewError(http.StatusBadRequest, "invalid iv size"),
 	},
-	{ // 4
+	{ // 5
 		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"SXAbms731/c=","bytes":"cw22HjLq/4cx8507SW4hhSrYbDiMuRao4b5+GE+XfbE="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
 		Err:            kes.NewError(http.StatusBadRequest, "invalid nonce size"),
 	},
-	{ // 5
+	{ // 6
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"efY+4kYF9n8=","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid nonce length
 		Err:            kes.NewError(http.StatusBadRequest, "invalid nonce size"),
 	},
-	{ // 6
+	{ // 7
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256","iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"QTza1g5oX3f9cGJMbY1xJwWPj1F7R2VnNl6XpFKYQy0="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
 		Err:            kes.ErrDecrypt,
 	},
-	{ // 7
+	{ // 8
 		Ciphertext:     `{"aead":"ChaCha20Poly1305","iv":"s3fSZ6vk5m+DfQA8yZWeUg==","nonce":"8/kHMnCMs3h9NZ2a","bytes":"TTi8pkO+Jh1JWAHvPxZeUk/iVoBPUCE4ZSVGBy3fW2s="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // ciphertext not authentic
 		Err:            kes.ErrDecrypt,
 	},
-	{ // 8
+	{ // 9
 		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256" "iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
 		AssociatedData: nil,
 		ShouldFail:     true, // invalid JSON
 		Err:            kes.NewError(http.StatusBadRequest, "invalid ciphertext"),
+	},
+	{ // 10
+		Ciphertext:     `{"aead":"AES-256-GCM-HMAC-SHA-256", "id":"00010203040506070809101112131415", "iv":"xLxIN3tSCkg2xMafuvwUwg==","nonce":"gu0mGwUkwcvMEoi5","bytes":"WVgRjeIJm3w50C/l+y7y2i6mbNg5NCAqN1zvOYWZKmc="}`,
+		AssociatedData: nil,
+		ShouldFail:     true, // invalid key ID
+		Err:            kes.NewError(http.StatusBadRequest, "invalid ciphertext: key ID mismatch"),
 	},
 }
 
