@@ -291,7 +291,6 @@ func (store *KeyStore) Create(name string, secret secret.Secret) error {
 		store.logf("vault: failed to create '%s': %v", location, err)
 		return err
 	}
-	store.cache.Set(name, secret)
 	return nil
 }
 
