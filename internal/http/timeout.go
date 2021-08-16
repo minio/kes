@@ -36,8 +36,12 @@ func Timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
 		)
 		var tw = &timeoutResponseWriter{
 			ResponseWriter: w,
-			Flusher:        w.(http.Flusher),
-			Pusher:         w.(http.Pusher),
+		}
+		if f, ok := w.(http.Flusher); ok {
+			tw.Flusher = f
+		}
+		if p, ok := w.(http.Pusher); ok {
+			tw.Pusher = p
 		}
 
 		ctx, cancelCtx := context.WithCancel(r.Context())
