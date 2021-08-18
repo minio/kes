@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"path"
 	"strconv"
@@ -118,6 +119,45 @@ func AuditLog(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.Ha
 //  }
 func HandleVersion(version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, `{"version":"%s"}`, version) }
+}
+
+// HandleStatus returns a handler function that returns status
+// information, like server version and server up-time, as JSON
+// object to the client.
+//
+// The handler function should not return any internal data - like
+// keystore backend, cache expiry, etc.
+func HandleStatus(version string, certificate *Certificate, log *xlog.Target) http.HandlerFunc {
+	type Status struct {
+		Version string        `json:"version"`
+		UpTime  time.Duration `json:"uptime"`
+
+		Certificate struct {
+			Expiry   time.Duration `json:"expiry"`
+			DNSNames []string      `json:"dns,omitempty"`
+			IPs      []net.IP      `json:"ip,omitempty"`
+		} `json:"certificate"`
+	}
+	var startTime = time.Now()
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var status = Status{
+			Version: version,
+			UpTime:  time.Since(startTime).Truncate(time.Second),
+		}
+		switch cert, err := certificate.GetCertificate(nil); {
+		case err == nil && cert != nil && cert.Leaf != nil:
+			status.Certificate.Expiry = time.Until(cert.Leaf.NotAfter).Truncate(time.Second)
+			status.Certificate.DNSNames = cert.Leaf.DNSNames
+			status.Certificate.IPs = cert.Leaf.IPAddresses
+		case err == nil && (cert == nil || cert.Leaf == nil):
+			log.Log().Printf("http: no X.509 server certificate found")
+		case err != nil:
+			log.Log().Printf("http: no X.509 server certificate found: %v", err)
+		}
+		json.NewEncoder(w).Encode(status)
+	}
 }
 
 // HandleCreateKey returns a handler function that generates a new

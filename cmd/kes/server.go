@@ -213,7 +213,8 @@ func server(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	store.StartGC(context.Background(), time.Duration(config.Cache.Expiry.Any), time.Duration(config.Cache.Expiry.Unused))
+	store.CacheExpiryAny = time.Duration(config.Cache.Expiry.Any)
+	store.CacheExpiryUnused = time.Duration(config.Cache.Expiry.Unused)
 
 	for _, key := range config.Keys {
 		var secret secret.Secret
@@ -227,6 +228,12 @@ func server(args []string) {
 			stdlog.Fatalf("Error: failed to create key %q: %v", key.Name, err)
 		}
 	}
+
+	certificate, err := xhttp.LoadCertificate(config.TLS.CertPath, config.TLS.KeyPath)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to load TLS certificate: %v", err)
+	}
+	certificate.ErrorLog = errorLog
 
 	metrics := metric.New()
 	errorLog.Add(metrics.ErrorEventCounter())
@@ -254,6 +261,8 @@ func server(args []string) {
 	mux.Handle("/v1/log/audit/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/audit/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceAuditLog(auditLog))))))))))
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/log/error/trace", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleTraceErrorLog(errorLog))))))))))
 
+	mux.Handle("/v1/status", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/status", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleStatus(version, certificate, errorLog)))))))))))
+
 	// Scrapping /v1/metrics should not change the metrics itself.
 	// Further, scrapping /v1/metrics should, by default, not produce
 	// an audit event. Monitoring systems will scrape the metrics endpoint
@@ -270,7 +279,8 @@ func server(args []string) {
 		Addr:    config.Addr,
 		Handler: mux,
 		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion:     tls.VersionTLS12,
+			GetCertificate: certificate.GetCertificate,
 		},
 		ErrorLog: errorLog.Log(),
 
@@ -313,10 +323,10 @@ func server(args []string) {
 		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuthFlag)
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	termCtx, cancelTerm := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelTerm()
 	go func() {
-		<-sigCh
+		<-termCtx.Done()
 
 		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
 		err := server.Shutdown(shutdownContext)
@@ -327,6 +337,7 @@ func server(args []string) {
 			stdlog.Fatalf("Error: abnormal server shutdown: %v", err)
 		}
 	}()
+	go certificate.ReloadAfter(termCtx, 5*time.Minute) // 5min is a quite reasonable reload interval
 
 	// The following code prints a server startup message similar to:
 	//
