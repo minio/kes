@@ -103,6 +103,12 @@ type Store struct {
 	// used to fetch or store secrets.
 	Remote Remote
 
+	CacheExpiryAny time.Duration
+
+	CacheExpiryUnused time.Duration
+
+	CacheContext context.Context
+
 	cache cache
 	once  sync.Once // For the cache garbage collection
 }
@@ -118,6 +124,8 @@ func (s *Store) Create(name string, secret Secret) (err error) {
 // Delete deletes the secret associated with the given
 // name, if one exists.
 func (s *Store) Delete(name string) error {
+	s.once.Do(s.startGC)
+
 	// We can always remove a secret from the cache.
 	// If the delete operation on the remote store
 	// fails we will fetch it again on the next Get.
@@ -129,6 +137,7 @@ func (s *Store) Delete(name string) error {
 // if any. If no such secret exists it returns
 // kes.ErrKeyNotFound.
 func (s *Store) Get(name string) (Secret, error) {
+	s.once.Do(s.startGC)
 	if secret, ok := s.cache.Get(name); ok {
 		return secret, nil
 	}
@@ -161,14 +170,16 @@ func (s *Store) List(ctx context.Context) (Iterator, error) {
 //
 // There is only one garbage collection background process. Calling
 // StartGC more than once has no effect.
-func (s *Store) StartGC(ctx context.Context, expiry, unusedExpiry time.Duration) {
-	s.once.Do(func() {
-		s.cache.StartGC(ctx, expiry)
+func (s *Store) startGC() {
+	var ctx = s.CacheContext
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.cache.StartGC(ctx, s.CacheExpiryAny)
 
-		// Actually, we also don't run the unused GC if unusedExpiry/2 == 0,
-		// not if unusedExpiry == 0.
-		// However, that can only happen if unusedExpiry is 1ns - which is
-		// anyway an unreasonable value for the expiry.
-		s.cache.StartUnusedGC(ctx, unusedExpiry/2)
-	})
+	// Actually, we also don't run the unused GC if unusedExpiry/2 == 0,
+	// not if unusedExpiry == 0.
+	// However, that can only happen if unusedExpiry is 1ns - which is
+	// anyway an unreasonable value for the expiry.
+	s.cache.StartUnusedGC(ctx, s.CacheExpiryUnused/2)
 }
