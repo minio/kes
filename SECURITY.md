@@ -31,7 +31,7 @@ MinIO uses the following disclosure process:
    If the report is rejected the response explains why.
 3. Code is audited to find any potential similar problems.
 4. Fixes are prepared for the latest release.
-5. On the date that the fixes are applied a security advisory will be published on https://blog.min.io.
+5. On the date that the fixes are applied a security advisory will be published on https://github.com/minio/kes/security/advisories.
    Please inform us in your report email whether MinIO should mention your contribution w.r.t. fixing
    the security issue. By default MinIO will **not** publish this information to protect your privacy.
 
