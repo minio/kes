@@ -13,6 +13,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"os/signal"
 )
 
 const keyCmdUsage = `Usage:
@@ -100,9 +101,11 @@ func createKey(args []string) {
 	}
 
 	var (
-		client = newClient(insecureSkipVerify)
-		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+		client         = newClient(insecureSkipVerify)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	if len(bytes) > 0 {
 		if err := client.ImportKey(ctx, name, bytes); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -173,7 +176,10 @@ func decryptKey(args []string) {
 		}
 	}
 
-	plaintext, err := newClient(insecureSkipVerify).Decrypt(cancelOnSignal(os.Interrupt, os.Kill), name, ciphertext, cryptoCtx)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	plaintext, err := newClient(insecureSkipVerify).Decrypt(ctx, name, ciphertext, cryptoCtx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -234,7 +240,10 @@ func deriveKey(args []string) {
 		cryptoCtx = b
 	}
 
-	key, err := newClient(insecureSkipVerify).GenerateKey(cancelOnSignal(os.Interrupt, os.Kill), name, cryptoCtx)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	key, err := newClient(insecureSkipVerify).GenerateKey(ctx, name, cryptoCtx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -290,7 +299,11 @@ func listKeys(args []string) {
 	if cli.NArg() == 1 {
 		pattern = cli.Arg(0)
 	}
-	iterator, err := newClient(insecureSkipVerify).ListKeys(cancelOnSignal(os.Interrupt, os.Kill), pattern)
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	iterator, err := newClient(insecureSkipVerify).ListKeys(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -347,8 +360,13 @@ func deleteKey(args []string) {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	var name = cli.Arg(0)
-	if err := newClient(insecureSkipVerify).DeleteKey(cancelOnSignal(os.Interrupt, os.Kill), name); err != nil {
+	var (
+		name           = cli.Arg(0)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	)
+	defer cancelCtx()
+
+	if err := newClient(insecureSkipVerify).DeleteKey(ctx, name); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
 		}

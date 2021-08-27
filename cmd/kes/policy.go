@@ -12,6 +12,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"os/signal"
 	"sort"
 
 	"github.com/minio/kes"
@@ -107,9 +108,11 @@ func addPolicy(args []string) {
 	}
 
 	var (
-		client = newClient(insecureSkipVerify)
-		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+		client         = newClient(insecureSkipVerify)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	if err := client.SetPolicy(ctx, name, &policy); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -148,10 +151,12 @@ func showPolicy(args []string) {
 	}
 
 	var (
-		name   = cli.Arg(0)
-		client = newClient(insecureSkipVerify)
-		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+		name           = cli.Arg(0)
+		client         = newClient(insecureSkipVerify)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	policy, err := client.GetPolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -199,7 +204,10 @@ func listPolicies(args []string) {
 		pattern = cli.Arg(0)
 	}
 
-	policies, err := newClient(insecureSkipVerify).ListPolicies(cancelOnSignal(os.Interrupt, os.Kill), pattern)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	policies, err := newClient(insecureSkipVerify).ListPolicies(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -247,8 +255,13 @@ func deletePolicy(args []string) {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	var name = cli.Arg(0)
-	if err := newClient(insecureSkipVerify).DeletePolicy(cancelOnSignal(os.Interrupt, os.Kill), name); err != nil {
+	var (
+		name           = cli.Arg(0)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	)
+	defer cancelCtx()
+
+	if err := newClient(insecureSkipVerify).DeletePolicy(ctx, name); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
 		}

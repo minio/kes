@@ -5,13 +5,11 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	stdlog "log"
 	"os"
-	"os/signal"
 	"strings"
 
 	"github.com/minio/kes"
@@ -123,24 +121,6 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 }
 
 func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
-
-// cancelOnSignal returns a new Context that gets canceled when
-// one of the signals is received. It is allowed to call the
-// function multiple times and with the same signals. Each
-// context will be canceled separately.
-func cancelOnSignal(signals ...os.Signal) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	s := make(chan os.Signal, 1)
-	signal.Notify(s, signals...)
-	go func() {
-		defer signal.Stop(s)
-
-		<-s
-		cancel()
-	}()
-	return ctx
-}
 
 type multiFlag []string
 
