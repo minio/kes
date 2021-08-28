@@ -368,9 +368,18 @@ func (s *Store) Create(key, value string) error {
 			key: value,
 		}
 	}
-	_, err := s.client.Logical().Write(location, data)
+
+	// The Vault SDK may return no error even if it hasn't created
+	// an entry - e.g. in case of some network errors. Therefore,
+	// we also check that the returned entry is not nil to ensure
+	// that we got a response from the Vault cluster.
+	entry, err := s.client.Logical().Write(location, data)
 	if err != nil {
 		s.logf("vault: failed to create '%s': %v", location, err)
+		return errCreateKey
+	}
+	if entry == nil {
+		s.logf("vault: failed to create '%s': no create confirmation from vault", location)
 		return errCreateKey
 	}
 	return nil
