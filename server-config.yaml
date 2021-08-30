@@ -87,10 +87,14 @@ cache:
     # Period after which any cache entries are discarded.
     # It determines how often the KES server has to fetch
     # a secret key from the KMS.
+    #
+    # If not set, KES will default to an expiry of 5 minutes.
     any: 5m0s
     # Period after which all unused cache entries are discarded.
     # It determines how often "not frequently" used secret keys
     # must be fetched from the KMS.
+    #
+    # If not set, KES will default to an expiry of 30 seconds.
     unused: 20s
 
 # The console logging configuration. In general, the KES server

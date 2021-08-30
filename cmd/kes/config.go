@@ -199,6 +199,12 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 
 // SetDefaults set default values for fields that may be empty b/c not specified by user.
 func (config *serverConfig) SetDefaults() {
+	if config.Cache.Expiry.Any == 0 {
+		config.Cache.Expiry.Any = duration(5 * time.Minute)
+	}
+	if config.Cache.Expiry.Unused == 0 {
+		config.Cache.Expiry.Unused = duration(30 * time.Second)
+	}
 	if config.Log.Audit == "" {
 		config.Log.Audit = "off" // If not set, default is off.
 	}
