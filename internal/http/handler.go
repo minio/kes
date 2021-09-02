@@ -17,9 +17,9 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
-	"github.com/minio/kes/internal/secret"
 	"github.com/prometheus/common/expfmt"
 	"github.com/secure-io/sio-go/sioutil"
 )
@@ -167,7 +167,7 @@ func HandleStatus(version string, certificate *Certificate, log *xlog.Target) ht
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleCreateKey(store *secret.Store) http.HandlerFunc {
+func HandleCreateKey(manager *key.Manager) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -177,15 +177,13 @@ func HandleCreateKey(store *secret.Store) http.HandlerFunc {
 			return
 		}
 
-		var secret secret.Secret
-		bytes, err := sioutil.Random(len(secret))
+		bytes, err := sioutil.Random(key.Size)
 		if err != nil {
 			Error(w, err)
 			return
 		}
-		copy(secret[:], bytes)
 
-		if err := store.Create(name, secret); err != nil {
+		if err := manager.Create(r.Context(), name, key.New(bytes)); err != nil {
 			Error(w, err)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -199,7 +197,7 @@ func HandleCreateKey(store *secret.Store) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleImportKey(store *secret.Store) http.HandlerFunc {
+func HandleImportKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -222,14 +220,12 @@ func HandleImportKey(store *secret.Store) http.HandlerFunc {
 			return
 		}
 
-		var secret secret.Secret
-		if len(req.Bytes) != len(secret) {
+		if len(req.Bytes) != key.Size {
 			Error(w, ErrInvalidKey)
 			return
 		}
-		copy(secret[:], req.Bytes)
 
-		if err := store.Create(name, secret); err != nil {
+		if err := manager.Create(r.Context(), name, key.New(req.Bytes)); err != nil {
 			Error(w, err)
 			return
 		}
@@ -237,7 +233,7 @@ func HandleImportKey(store *secret.Store) http.HandlerFunc {
 	}
 }
 
-func HandleDeleteKey(store *secret.Store) http.HandlerFunc {
+func HandleDeleteKey(manager *key.Manager) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -246,7 +242,7 @@ func HandleDeleteKey(store *secret.Store) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		if err := store.Delete(name); err != nil {
+		if err := manager.Delete(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -266,7 +262,7 @@ func HandleDeleteKey(store *secret.Store) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
+func HandleGenerateKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -290,7 +286,7 @@ func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(name)
+		secret, err := manager.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -325,7 +321,7 @@ func HandleGenerateKey(store *secret.Store) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func HandleEncryptKey(store *secret.Store) http.HandlerFunc {
+func HandleEncryptKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -349,7 +345,7 @@ func HandleEncryptKey(store *secret.Store) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(name)
+		secret, err := manager.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -372,7 +368,7 @@ func HandleEncryptKey(store *secret.Store) http.HandlerFunc {
 // If the client has provided a context value during
 // encryption / key generation then the client has to provide
 // the same context value again.
-func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
+func HandleDecryptKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -396,7 +392,7 @@ func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(name)
+		secret, err := manager.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -422,14 +418,14 @@ func HandleDecryptKey(store *secret.Store) http.HandlerFunc {
 // The client is expected to check for an error trailer
 // and only consider the listing complete if it receives
 // no such trailer.
-func HandleListKeys(store *secret.Store) http.HandlerFunc {
+func HandleListKeys(manager *key.Manager) http.HandlerFunc {
 	type Response struct {
 		Name string
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Trailer", "Status,Error")
 
-		iterator, err := store.List(r.Context())
+		iterator, err := manager.List(r.Context())
 		if err != nil {
 			Error(w, err)
 			return
@@ -442,10 +438,11 @@ func HandleListKeys(store *secret.Store) http.HandlerFunc {
 		)
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		for iterator.Next() {
-			if ok, err := path.Match(pattern, iterator.Value()); ok && err == nil {
+			name := iterator.Name()
+			if ok, err := path.Match(pattern, name); ok && err == nil {
 				hasWritten = true
 				err = encoder.Encode(Response{
-					Name: iterator.Value(),
+					Name: name,
 				})
 
 				// Once we encounter ErrHandlerTimeout the client connection

@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,7 +26,7 @@ import (
 
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // Store is a generic KeyStore that stores/fetches keys from a
@@ -60,29 +61,31 @@ var (
 // Create creates the given key-value pair at the generic KeyStore if
 // and only if the given key does not exist. If such an entry already
 // exists it returns kes.ErrKeyExists.
-func (s *Store) Create(key, value string) error {
+func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	type Request struct {
 		Bytes []byte `json:"bytes"`
 	}
 	body, err := json.Marshal(Request{
-		Bytes: []byte(value),
+		Bytes: []byte(key.String()),
 	})
 	if err != nil {
-		s.logf("generic: failed to create key %q: %v", key, err)
+		s.logf("generic: failed to create key %q: %v", name, err)
 		return errCreateKey
 	}
 
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(key))
-	req, err := http.NewRequest(http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
+	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
-		s.logf("generic: failed to create key %q: %v", key, err)
+		s.logf("generic: failed to create key %q: %v", name, err)
 		return errCreateKey
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		s.logf("generic: failed to create key %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("generic: failed to create key %q: %v", name, err)
+		}
 		return errCreateKey
 	}
 	if resp.StatusCode != http.StatusCreated {
@@ -90,7 +93,7 @@ func (s *Store) Create(key, value string) error {
 		case err == kes.ErrKeyExists:
 			return kes.ErrKeyExists
 		default:
-			s.logf("generic: failed to create key %q: %v", key, err)
+			s.logf("generic: failed to create key %q: %v", name, err)
 			return errCreateKey
 		}
 	}
@@ -99,21 +102,23 @@ func (s *Store) Create(key, value string) error {
 
 // Delete removes a the value associated with the given key
 // from the generic KeyStore, if it exists.
-func (s *Store) Delete(key string) error {
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(key))
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+func (s *Store) Delete(ctx context.Context, name string) error {
+	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
-		s.logf("generic: failed to delete key %q: %v", key, err)
+		s.logf("generic: failed to delete key %q: %v", name, err)
 		return errDeleteKey
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		s.logf("generic: failed to delete key %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("generic: failed to delete key %q: %v", name, err)
+		}
 		return errDeleteKey
 	}
 	if resp.StatusCode != http.StatusOK {
 		if err = parseErrorResponse(resp); err != nil {
-			s.logf("generic: failed to delete key %q: %v", key, err)
+			s.logf("generic: failed to delete key %q: %v", name, err)
 		}
 		return errDeleteKey
 	}
@@ -122,46 +127,56 @@ func (s *Store) Delete(key string) error {
 
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(key string) (string, error) {
+func (s *Store) Get(ctx context.Context, name string) (key.Key, error) {
 	type Response struct {
 		Bytes []byte `json:"bytes"`
 	}
 
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(key))
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		s.logf("generic: failed to access key %q: %v", key, err)
-		return "", errGetKey
+		s.logf("generic: failed to access key %q: %v", name, err)
+		return key.Key{}, errGetKey
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		s.logf("generic: failed to access key %q: %v", key, err)
-		return "", errGetKey
+		if !errors.Is(err, context.Canceled) {
+			s.logf("generic: failed to access key %q: %v", name, err)
+		}
+		return key.Key{}, errGetKey
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		switch err = parseErrorResponse(resp); {
 		case err == kes.ErrKeyNotFound:
-			return "", kes.ErrKeyNotFound
+			return key.Key{}, kes.ErrKeyNotFound
 		default:
-			s.logf("generic: failed to access key %q: %v", key, err)
-			return "", errGetKey
+			s.logf("generic: failed to access key %q: %v", name, err)
+			return key.Key{}, errGetKey
 		}
 	}
 
 	var (
-		decoder  = json.NewDecoder(io.LimitReader(resp.Body, secret.MaxSize))
+		decoder  = json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize))
 		response Response
 	)
 	if err = decoder.Decode(&response); err != nil {
-		s.logf("generic: failed to parse server response: %v", err)
-		return "", errGetKey
+		if !errors.Is(err, context.Canceled) {
+			s.logf("generic: failed to parse server response: %v", err)
+		}
+		return key.Key{}, errGetKey
 	}
-	return string(response.Bytes), nil
+
+	k, err := key.Parse(string(response.Bytes))
+	if err != nil {
+		s.logf("generic: failed to parse key %q: %v", name, err)
+		return key.Key{}, err
+	}
+	return k, nil
 }
 
 // List returns a new Iterator over the names of all stored keys.
-func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	url := endpoint(s.Endpoint, "/v1/key")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -261,7 +276,7 @@ func (i *iterator) Next() bool {
 	return true
 }
 
-func (i *iterator) Value() string {
+func (i *iterator) Name() string {
 	return i.last.Name
 }
 

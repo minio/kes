@@ -6,7 +6,7 @@ package aws
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // Credentials represents static AWS credentials:
@@ -62,7 +62,7 @@ type SecretsManager struct {
 	client *secretsmanager.SecretsManager
 }
 
-var _ secret.Remote = (*SecretsManager)(nil)
+var _ key.Store = (*SecretsManager)(nil)
 
 var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
@@ -78,27 +78,29 @@ var (
 // If the SecretsManager.KMSKeyID is set AWS will use this key ID to
 // encrypt the values. Otherwise, AWS will use the default key ID for
 // encrypting secrets at the AWS SecretsManager.
-func (s *SecretsManager) Create(key, value string) error {
+func (s *SecretsManager) Create(ctx context.Context, name string, key key.Key) error {
 	if s.client == nil {
 		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return errCreateKey
 	}
 
 	createOpt := secretsmanager.CreateSecretInput{
-		Name:         aws.String(key),
-		SecretString: aws.String(value),
+		Name:         aws.String(name),
+		SecretString: aws.String(key.String()),
 	}
 	if s.KMSKeyID != "" {
 		createOpt.KmsKeyId = aws.String(s.KMSKeyID)
 	}
-	if _, err := s.client.CreateSecret(&createOpt); err != nil {
+	if _, err := s.client.CreateSecretWithContext(ctx, &createOpt); err != nil {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeResourceExistsException:
 				return kes.ErrKeyExists
 			}
 		}
-		s.logf("aws: failed to create %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("aws: failed to create %q: %v", key, err)
+		}
 		return errCreateKey
 	}
 	return nil
@@ -106,26 +108,29 @@ func (s *SecretsManager) Create(key, value string) error {
 
 // Get returns the value associated with the given key.
 // If no entry for key exists, it returns kes.ErrKeyNotFound.
-func (s *SecretsManager) Get(key string) (string, error) {
+func (s *SecretsManager) Get(ctx context.Context, name string) (key.Key, error) {
 	if s.client == nil {
 		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
-		return "", errGetKey
+		return key.Key{}, errGetKey
 	}
 
-	response, err := s.client.GetSecretValue(&secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(key),
+	response, err := s.client.GetSecretValueWithContext(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(name),
 	})
 	if err != nil {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeDecryptionFailure:
-				return "", kes.NewError(http.StatusForbidden, fmt.Sprintf("aws: cannot access %q: %v", key, err))
+				s.logf("aws: cannot access %q: %v", name, err)
+				return key.Key{}, errGetKey
 			case secretsmanager.ErrCodeResourceNotFoundException:
-				return "", kes.ErrKeyNotFound
+				return key.Key{}, kes.ErrKeyNotFound
 			}
 		}
-		s.logf("aws: failed to read %q: %v", key, err)
-		return "", errGetKey
+		if !errors.Is(err, context.Canceled) {
+			s.logf("aws: failed to read %q: %v", name, err)
+		}
+		return key.Key{}, errGetKey
 	}
 
 	// AWS has two different ways to store a secret. Either as
@@ -135,22 +140,30 @@ func (s *SecretsManager) Get(key string) (string, error) {
 	// However, AWS demands and specifies that only one is present -
 	// either "SecretString" or "SecretBinary" - we can check which
 	// one is present and safely assume that the other one isn't.
+	var value string
 	if response.SecretString != nil {
-		return *response.SecretString, nil
+		value = *response.SecretString
+	} else {
+		value = string(response.SecretBinary)
 	}
-	return string(response.SecretBinary), nil
+	k, err := key.Parse(value)
+	if err != nil {
+		s.logf("aws: failed to parse key %q: %v", name, err)
+		return key.Key{}, errGetKey
+	}
+	return k, nil
 }
 
 // Delete removes the key-value pair from the AWS SecretsManager, if
 // it exists.
-func (s *SecretsManager) Delete(key string) error {
+func (s *SecretsManager) Delete(ctx context.Context, name string) error {
 	if s.client == nil {
 		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return errDeleteKey
 	}
 
-	_, err := s.client.DeleteSecret(&secretsmanager.DeleteSecretInput{
-		SecretId:                   aws.String(key),
+	_, err := s.client.DeleteSecretWithContext(ctx, &secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(name),
 		ForceDeleteWithoutRecovery: aws.Bool(true),
 	})
 	if err != nil {
@@ -159,7 +172,9 @@ func (s *SecretsManager) Delete(key string) error {
 				return nil
 			}
 		}
-		s.logf("aws: failed to delete %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("aws: failed to delete %q: %v", name, err)
+		}
 		return errDeleteKey
 	}
 	return nil
@@ -167,7 +182,7 @@ func (s *SecretsManager) Delete(key string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *SecretsManager) List(ctx context.Context) (secret.Iterator, error) {
+func (s *SecretsManager) List(ctx context.Context) (key.Iterator, error) {
 	if s.client == nil {
 		s.logf("aws: no connection to AWS secrets manager: %q", s.Addr)
 		return nil, errDeleteKey
@@ -215,7 +230,7 @@ func (i *iterator) Next() bool {
 	return true
 }
 
-func (i *iterator) Value() string { return i.last }
+func (i *iterator) Name() string { return i.last }
 
 func (i *iterator) Err() error {
 	i.lock.Lock()

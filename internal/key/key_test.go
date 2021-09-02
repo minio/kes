@@ -1,13 +1,8 @@
-// Copyright 2019 - MinIO, Inc. All rights reserved.
-// Use of this source code is governed by the AGPLv3
-// license that can be found in the LICENSE file.
-
-package secret
+package key
 
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -15,53 +10,53 @@ import (
 	"github.com/secure-io/sio-go/sioutil"
 )
 
-var secretStringTests = []struct {
-	Secret Secret
+var keyStringTests = []struct {
+	Key    Key
 	String string
 }{
-	{Secret: Secret{}, String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`},
-	{Secret: mustDecodeSecret("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
-	{Secret: mustDecodeSecret("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
+	{Key: Key{}, String: `{"bytes":""}`},
+	{Key: mustDecodeKey("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
+	{Key: mustDecodeKey("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
 }
 
-func TestSecretString(t *testing.T) {
-	for i, test := range secretStringTests {
-		if s := test.Secret.String(); s != test.String {
+func TestKeyString(t *testing.T) {
+	for i, test := range keyStringTests {
+		if s := test.Key.String(); s != test.String {
 			t.Fatalf("Test %d: got %s - want %s", i, s, test.String)
 		}
 	}
 }
 
-var secretParseStringTests = []struct {
-	Secret     Secret
+var parseTests = []struct {
+	Key        Key
 	String     string
 	ShouldFail bool
 }{
-	{Secret: Secret{}, String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`},
-	{Secret: mustDecodeSecret("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
-	{Secret: mustDecodeSecret("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
-	{Secret: Secret{}, String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: {
-	{Secret: Secret{}, String: `{bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing first: "
-	{Secret: Secret{}, String: `{"bytes""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: :
-	{Secret: Secret{}, String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="`, ShouldFail: true},  // Missing final }
+	{Key: New(make([]byte, 32)), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`},
+	{Key: mustDecodeKey("0000000000000000000000000000000000000000000000000000000000000001"), String: `{"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE="}`},
+	{Key: mustDecodeKey("27caa63b2115d9c7b6ca8002fb9b7463b0923ff853329a4bed71e9027c9cfb41"), String: `{"bytes":"J8qmOyEV2ce2yoAC+5t0Y7CSP/hTMppL7XHpAnyc+0E="}`},
+	{String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: {
+	{String: `{bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing first: "
+	{String: `{"bytes""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`, ShouldFail: true}, // Missing: :
+	{String: `"bytes":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="`, ShouldFail: true},  // Missing final }
 }
 
-func TestParseString(t *testing.T) {
-	for i, test := range secretParseStringTests {
-		secret, err := ParseSecret(test.String)
+func TestParse(t *testing.T) {
+	for i, test := range parseTests {
+		key, err := Parse(test.String)
 		if err != nil && !test.ShouldFail {
 			t.Fatalf("Test %d: Failed to parse string: %v", i, err)
 		}
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: Parsing should have failed but it succeeded", i)
 		}
-		if err == nil && secret != test.Secret {
-			t.Fatalf("Test %d: got %x - want %x", i, secret, test.Secret)
+		if err == nil && !key.Equal(test.Key) {
+			t.Fatalf("Test %d: got %x - want %x", i, key.bytes, test.Key.bytes)
 		}
 	}
 }
 
-var secretWrapTests = []struct {
+var keyWrapTests = []struct {
 	KeyLen         int
 	AssociatedData []byte
 }{
@@ -74,30 +69,28 @@ var secretWrapTests = []struct {
 	{KeyLen: 63, AssociatedData: mustDecodeHex("cb653b4c5426e0d41f5ae673ffa0f659")}, // 6
 }
 
-func TestSecretWrap(t *testing.T) {
-	var secret Secret
-	copy(secret[:], sioutil.MustRandom(len(secret)))
-
-	for i, test := range secretWrapTests {
+func TestKeyWrap(t *testing.T) {
+	key := New(sioutil.MustRandom(256 / 8))
+	for i, test := range keyWrapTests {
 		data := make([]byte, test.KeyLen)
-		ciphertext, err := secret.Wrap(data, test.AssociatedData)
+		ciphertext, err := key.Wrap(data, test.AssociatedData)
 		if err != nil {
-			t.Logf("Test %d: Secret: %x\n", i, secret)
+			t.Logf("Test %d: Secret: %x\n", i, key.bytes)
 			t.Fatalf("Test %d: Failed to wrap data: %v", i, err)
 		}
-		plaintext, err := secret.Unwrap(ciphertext, test.AssociatedData)
+		plaintext, err := key.Unwrap(ciphertext, test.AssociatedData)
 		if err != nil {
-			t.Logf("Test %d: Secret: %x\n", i, secret)
+			t.Logf("Test %d: Secret: %x\n", i, key.bytes)
 			t.Fatalf("Test %d: Failed to unwrap data: %v", i, err)
 		}
 		if !bytes.Equal(data, plaintext) {
-			t.Logf("Test %d: Secret: %x\n", i, secret)
+			t.Logf("Test %d: Secret: %x\n", i, key.bytes)
 			t.Fatalf("Test %d: Original plaintext does not match unwrapped plaintext", i)
 		}
 	}
 }
 
-var secretUnwrapTests = []struct {
+var keyUnwrapTests = []struct {
 	Ciphertext     string
 	AssociatedData []byte
 	ShouldFail     bool
@@ -165,11 +158,11 @@ var secretUnwrapTests = []struct {
 	},
 }
 
-func TestSecrectUnwrap(t *testing.T) {
-	var secret Secret
+func TestKeyUnwrap(t *testing.T) {
+	key := New(make([]byte, 32))
 	Plaintext := make([]byte, 16)
-	for i, test := range secretUnwrapTests {
-		plaintext, err := secret.Unwrap([]byte(test.Ciphertext), test.AssociatedData)
+	for i, test := range keyUnwrapTests {
+		plaintext, err := key.Unwrap([]byte(test.Ciphertext), test.AssociatedData)
 		if err != nil && !test.ShouldFail {
 			t.Fatalf("Test %d: Failed to unwrap ciphertext: %v", i, err)
 		}
@@ -193,13 +186,4 @@ func mustDecodeHex(s string) []byte {
 	return b
 }
 
-func mustDecodeSecret(s string) Secret {
-	b := mustDecodeHex(s)
-
-	var secret Secret
-	if len(b) != len(secret) {
-		panic(fmt.Sprintf("invalid secret length - got: %d want: %d", len(b), len(secret)))
-	}
-	copy(secret[:], b)
-	return secret
-}
+func mustDecodeKey(s string) Key { return New(mustDecodeHex(s)) }

@@ -29,9 +29,9 @@ import (
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/fips"
 	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
-	"github.com/minio/kes/internal/secret"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -112,6 +112,8 @@ func server(args []string) {
 	if cli.NArg() > 0 {
 		stdlog.Fatal("Error: too many arguments")
 	}
+	var ctx, cancelCtx = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelCtx()
 
 	config, err := loadServerConfig(configFlag)
 	if err != nil {
@@ -213,19 +215,20 @@ func server(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	store.CacheExpiryAny = time.Duration(config.Cache.Expiry.Any)
-	store.CacheExpiryUnused = time.Duration(config.Cache.Expiry.Unused)
+	manager := &key.Manager{
+		CacheExpiryAny:    time.Duration(config.Cache.Expiry.Any),
+		CacheExpiryUnused: time.Duration(config.Cache.Expiry.Unused),
+		Store:             store,
+	}
 
-	for _, key := range config.Keys {
-		var secret secret.Secret
-		bytes, err := sioutil.Random(len(secret))
+	for _, k := range config.Keys {
+		bytes, err := sioutil.Random(key.Size)
 		if err != nil {
-			stdlog.Fatalf("Error: failed to create key %q: %v", key.Name, err)
+			stdlog.Fatalf("Error: failed to create key %q: %v", k.Name, err)
 		}
-		copy(secret[:], bytes)
 
-		if err = store.Remote.Create(key.Name, secret.String()); err != nil && err != kes.ErrKeyExists {
-			stdlog.Fatalf("Error: failed to create key %q: %v", key.Name, err)
+		if err = store.Create(ctx, k.Name, key.New(bytes)); err != nil && err != kes.ErrKeyExists {
+			stdlog.Fatalf("Error: failed to create key %q: %v", k.Name, err)
 		}
 	}
 
@@ -241,13 +244,13 @@ func server(args []string) {
 
 	const MaxBody = 1 << 20 // 1 MiB
 	mux := http.NewServeMux()
-	mux.Handle("/v1/key/create/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(store)))))))))))
-	mux.Handle("/v1/key/import/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(store)))))))))))
-	mux.Handle("/v1/key/delete/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(store)))))))))))
-	mux.Handle("/v1/key/generate/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(store)))))))))))
-	mux.Handle("/v1/key/encrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/encrypt/*", xhttp.LimitRequestBody(MaxBody/2, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleEncryptKey(store)))))))))))
-	mux.Handle("/v1/key/decrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(store)))))))))))
-	mux.Handle("/v1/key/list/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/key/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListKeys(store)))))))))))
+	mux.Handle("/v1/key/create/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/create/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleCreateKey(manager)))))))))))
+	mux.Handle("/v1/key/import/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/import/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleImportKey(manager)))))))))))
+	mux.Handle("/v1/key/delete/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodDelete, xhttp.ValidatePath("/v1/key/delete/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDeleteKey(manager)))))))))))
+	mux.Handle("/v1/key/generate/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/generate/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleGenerateKey(manager)))))))))))
+	mux.Handle("/v1/key/encrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/encrypt/*", xhttp.LimitRequestBody(MaxBody/2, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleEncryptKey(manager)))))))))))
+	mux.Handle("/v1/key/decrypt/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/key/decrypt/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleDecryptKey(manager)))))))))))
+	mux.Handle("/v1/key/list/", xhttp.Timeout(15*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/key/list/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleListKeys(manager)))))))))))
 
 	mux.Handle("/v1/policy/write/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodPost, xhttp.ValidatePath("/v1/policy/write/*", xhttp.LimitRequestBody(MaxBody, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleWritePolicy(roles)))))))))))
 	mux.Handle("/v1/policy/read/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.RequireMethod(http.MethodGet, xhttp.ValidatePath("/v1/policy/read/*", xhttp.LimitRequestBody(0, xhttp.TLSProxy(proxy, xhttp.EnforcePolicies(roles, xhttp.HandleReadPolicy(roles)))))))))))
@@ -323,10 +326,8 @@ func server(args []string) {
 		stdlog.Fatalf("Error: invalid option for --auth: %q", mtlsAuthFlag)
 	}
 
-	termCtx, cancelTerm := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancelTerm()
 	go func() {
-		<-termCtx.Done()
+		<-ctx.Done()
 
 		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
 		err := server.Shutdown(shutdownContext)
@@ -337,7 +338,7 @@ func server(args []string) {
 			stdlog.Fatalf("Error: abnormal server shutdown: %v", err)
 		}
 	}()
-	go certificate.ReloadAfter(termCtx, 5*time.Minute) // 5min is a quite reasonable reload interval
+	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
 
 	// The following code prints a server startup message similar to:
 	//

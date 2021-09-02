@@ -34,7 +34,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/fips"
-	"github.com/minio/kes/internal/secret"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -435,26 +434,15 @@ func migrate(args []string) {
 	}
 
 	var (
-		n                   uint64
-		uiTicker            = time.NewTicker(100 * time.Millisecond)
-		listContext, cancel = context.WithCancel(context.Background())
-		uiContext, cancelUI = context.WithCancel(listContext)
-		signals             = make(chan os.Signal, 1)
+		n              uint64
+		uiTicker       = time.NewTicker(100 * time.Millisecond)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Kill, os.Interrupt)
 	)
-	defer cancel()
-	defer cancelUI()
+	defer cancelCtx()
 	defer uiTicker.Stop()
 
-	// Watch for Ctrl-C and cancel the listing (and the UI).
-	signal.Notify(signals, os.Kill, os.Interrupt)
-	defer signal.Stop(signals)
-	go func() {
-		<-signals
-		cancel()
-	}()
-
 	// Now, we start listing the keys at the source.
-	iterator, err := src.List(listContext)
+	iterator, err := src.List(ctx)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
@@ -468,7 +456,7 @@ func migrate(args []string) {
 				msg := fmt.Sprintf("Migrated keys: %d", atomic.LoadUint64(&n))
 				quietFlag.ClearMessage(msg)
 				quietFlag.Print(msg)
-			case <-uiContext.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -480,36 +468,29 @@ func migrate(args []string) {
 		green = color.New(color.FgGreen)
 	)
 	for iterator.Next() {
-		name := iterator.Value()
+		name := iterator.Name()
 		if ok, _ := filepath.Match(pattern, name); !ok {
 			continue
 		}
 
-		key, err := src.Remote.Get(name)
+		key, err := src.Get(ctx, name)
 		if err != nil {
 			quietFlag.ClearLine()
 			stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
 			stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
 		}
 
-		// We are conservative and only migrate a key if it is well-formed.
-		if _, err = secret.ParseSecret(key); err != nil {
-			quietFlag.ClearLine()
-			stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
-			stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
-		}
-
-		err = dst.Remote.Create(name, key)
+		err = dst.Create(ctx, name, key)
 		if err == kes.ErrKeyExists && mergeFlag {
 			continue // Do not increment the counter since we skip this key
 		}
 		if err == kes.ErrKeyExists && forceFlag { // Try to overwrite the key
-			if err = dst.Remote.Delete(name); err != nil {
+			if err = dst.Delete(ctx, name); err != nil {
 				quietFlag.ClearLine()
 				stdlog.Printf("Failed to migrate %q: Error: %v\n", name, err)
 				stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
 			}
-			err = dst.Remote.Create(name, key)
+			err = dst.Create(ctx, name, key)
 		}
 		if err != nil {
 			quietFlag.ClearLine()
@@ -523,7 +504,7 @@ func migrate(args []string) {
 		stdlog.Printf("Error: failed to list keys: %v\n", err)
 		stdlog.Fatal(fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + red.Sprint("[ FAIL ]"))
 	}
-	cancelUI()
+	cancelCtx()
 
 	// At the end we show how many keys we have migrated successfully.
 	msg := fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n)) + green.Sprint("[ OK ]")

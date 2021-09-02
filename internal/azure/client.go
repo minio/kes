@@ -18,7 +18,7 @@ import (
 
 	"github.com/Azure/go-autorest/autorest"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // status represents a KeyVault operation results.
@@ -47,7 +47,7 @@ type client struct {
 // If a secret with the given name does not exist
 // then KeyVault will not return an error but create
 // another version of the secret with the given value.
-func (c *client) CreateSecret(name, value string) (status, error) {
+func (c *client) CreateSecret(ctx context.Context, name, value string) (status, error) {
 	type Request struct {
 		Value string `json:"value"`
 	}
@@ -59,7 +59,7 @@ func (c *client) CreateSecret(name, value string) (status, error) {
 	}
 
 	var uri = endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
-	req, err := http.NewRequest(http.MethodPut, uri, xhttp.RetryReader(bytes.NewReader(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uri, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
 		return status{}, err
 	}
@@ -106,7 +106,7 @@ func (c *client) CreateSecret(name, value string) (status, error) {
 // GetSecret returns no secret and an error status
 // if the secret is disabled, expired or should not
 // be used, yet.
-func (c *client) GetSecret(name, version string) (string, status, error) {
+func (c *client) GetSecret(ctx context.Context, name, version string) (string, status, error) {
 	type Response struct {
 		Value string `json:"value"`
 		Attr  struct {
@@ -120,7 +120,7 @@ func (c *client) GetSecret(name, version string) (string, status, error) {
 	}
 
 	var uri = endpoint(c.Endpoint, "secrets", name, version) + "?api-version=7.2"
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return "", status{}, err
 	}
@@ -146,8 +146,8 @@ func (c *client) GetSecret(name, version string) (string, status, error) {
 	}
 
 	var limit = resp.ContentLength
-	if limit < 0 || limit > secret.MaxSize {
-		limit = secret.MaxSize
+	if limit < 0 || limit > key.MaxSize {
+		limit = key.MaxSize
 	}
 	var response Response
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
@@ -192,9 +192,9 @@ func (c *client) GetSecret(name, version string) (string, status, error) {
 // KeyVault does not guarantee that the secret has been deleted
 // even if it returns 200 OK. Instead, the secret may be in
 // a transition state from "active" to (soft) deleted.
-func (c *client) DeleteSecret(name string) (status, error) {
+func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) {
 	var uri = endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
-	req, err := http.NewRequest(http.MethodDelete, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return status{}, err
 	}
@@ -230,9 +230,9 @@ func (c *client) DeleteSecret(name string) (status, error) {
 // it removes a deleted secret permanently such that it cannot be
 // recovered. Therefore, deleting a KeyVault secret permanently is
 // a two-step process.
-func (c *client) PurgeSecret(name string) (status, error) {
+func (c *client) PurgeSecret(ctx context.Context, name string) (status, error) {
 	var uri = endpoint(c.Endpoint, "deletedsecrets", name) + "?api-version=7.2"
-	req, err := http.NewRequest(http.MethodDelete, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return status{}, err
 	}
@@ -268,7 +268,7 @@ func (c *client) PurgeSecret(name string) (status, error) {
 // assumptions. In particular, it only inspects 25 (KeyVault API default)
 // versions of the given secret. When a secret contains more then 25
 // versions GetFirstVersions returns a status with a 422 HTTP error code.
-func (c *client) GetFirstVersion(name string) (string, status, error) {
+func (c *client) GetFirstVersion(ctx context.Context, name string) (string, status, error) {
 	type Response struct {
 		Versions []struct {
 			ID   string `json:"id"`
@@ -283,7 +283,7 @@ func (c *client) GetFirstVersion(name string) (string, status, error) {
 	}
 	// We only inspect 25 versions as some reasonable default limit.
 	var uri = endpoint(c.Endpoint, "secrets", name, "versions") + "?api-version=7.2&maxresults=25"
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return "", status{}, err
 	}
