@@ -13,15 +13,15 @@ require (
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hashicorp/vault/api v1.1.0
 	github.com/minio/selfupdate v0.3.1
-	github.com/prometheus/client_golang v1.7.1
+	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.13.0
+	github.com/prometheus/common v0.30.0
 	github.com/secure-io/sio-go v0.3.0
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
-	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68
+	golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
 	google.golang.org/api v0.31.0
 	google.golang.org/genproto v0.0.0-20200901141002-b3bf27a9dbd1
 	google.golang.org/grpc v1.31.1
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 )
