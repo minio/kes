@@ -13,6 +13,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -99,9 +100,11 @@ func logTrace(args []string) {
 	}
 
 	var (
-		client = newClient(insecureSkipVerify)
-		ctx    = cancelOnSignal(os.Interrupt, os.Kill)
+		client         = newClient(insecureSkipVerify)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	switch strings.ToLower(typeFlag) {
 	case "audit":
 		stream, err := client.AuditLog(ctx)
@@ -168,48 +171,56 @@ func logTrace(args []string) {
 // traceMetricsWithUI iterates scraps the KES metrics
 // and prints a table-like UI to STDOUT.
 func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Duration) {
-	draw := func(t *xterm.Table, m *kes.Metric) {
-		N := m.RequestN()
+	draw := func(version string, table *xterm.Table, metric *kes.Metric, reqRate float64) {
+		var (
+			green  = color.New(color.FgGreen)
+			yellow = color.New(color.FgYellow)
+			red    = color.New(color.FgRed)
+			bold   = color.New(color.Bold)
+		)
 
-		t.Draw()
-		fmt.Printf(" Active : %d\n", m.RequestActive)
-		fmt.Printf(" Success: %s%% | %s\n", color.GreenString(fmt.Sprintf("%05.2f", (100*float64(m.RequestOK)/float64(N)))), color.GreenString(strconv.FormatUint(m.RequestOK, 10)))
-		fmt.Printf(" Error  : %s%% | %s\n", color.RedString(fmt.Sprintf("%05.2f", (100*float64(m.RequestErr)/float64(N)))), color.RedString(strconv.FormatUint(m.RequestErr, 10)))
-		fmt.Printf(" Failure: %s%% | %s\n\n", color.MagentaString(fmt.Sprintf("%05.2f", (100*float64(m.RequestFail)/float64(N)))), color.MagentaString(strconv.FormatUint(m.RequestFail, 10)))
-		fmt.Printf(" UpTime : %v\n", m.UpTime)
+		table.SetRow(0, &xterm.Cell{Text: "Success", Color: green}, &xterm.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestOK)/float64(metric.RequestN())), Color: green}, &xterm.Cell{Text: strconv.FormatUint(metric.RequestOK, 10), Color: green})
+		table.SetRow(1, &xterm.Cell{Text: "Error  ", Color: yellow}, &xterm.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestErr)/float64(metric.RequestN())), Color: yellow}, &xterm.Cell{Text: strconv.FormatUint(metric.RequestErr, 10), Color: yellow})
+		table.SetRow(2, &xterm.Cell{Text: "Failure", Color: red}, &xterm.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestFail)/float64(metric.RequestN())), Color: red}, &xterm.Cell{Text: strconv.FormatUint(metric.RequestFail, 10), Color: red})
+		table.SetRow(3, xterm.NewCell("Active "), xterm.NewCell(""), xterm.NewCell(strconv.FormatUint(metric.RequestActive, 10)))
+		table.SetRow(4, xterm.NewCell("Rate   "), xterm.NewCell(""), xterm.NewCell(fmt.Sprintf("%6.1f R/s", reqRate)))
+		table.SetRow(5, xterm.NewCell("Latency"), xterm.NewCell(""), xterm.NewCell(avgLatency(metric.LatencyHistogram).Round(time.Millisecond).String()+" Ø"))
+
+		table.Draw()
+		fmt.Println()
+		if len(client.Endpoints) == 1 {
+			fmt.Println(bold.Sprint(" Endpoint:     "), client.Endpoints[0])
+		} else {
+			fmt.Println(bold.Sprint(" Endpoints:    "), client.Endpoints)
+		}
+		fmt.Println(bold.Sprint(" Version:      "), version)
+		fmt.Println()
+		fmt.Println(bold.Sprint(" UpTime:       "), metric.UpTime)
+		fmt.Println(bold.Sprint(" Audit Events: "), metric.AuditEvents)
+		fmt.Println(bold.Sprint(" Error Events: "), metric.ErrorEvents)
 	}
-
-	var metric kes.Metric
-	var table = xterm.NewTable("0-10ms", "10-50ms", "50-100ms", "100-250ms", "250-500ms", "500ms-1s", "1-1.5s", "1.5-3s", "3-5s", "5-10s")
-	table.Header()[0].Width = 0.095
-	table.Header()[1].Width = 0.095
-	table.Header()[2].Width = 0.095
-	table.Header()[3].Width = 0.095
-	table.Header()[4].Width = 0.095
-	table.Header()[5].Width = 0.095
-	table.Header()[6].Width = 0.095
-	table.Header()[7].Width = 0.095
-	table.Header()[8].Width = 0.095
-	table.Header()[9].Width = 0.095
+	var (
+		metric     kes.Metric
+		version, _ = client.Version(ctx)
+		table      = xterm.NewTable("Request", "Percentage", "Total")
+		requestN   uint64
+		reqRate    float64
+	)
+	table.Header()[0].Width = 0.333
+	table.Header()[1].Width = 0.333
+	table.Header()[2].Width = 0.333
 
 	table.Header()[0].Alignment = xterm.AlignCenter
 	table.Header()[1].Alignment = xterm.AlignCenter
 	table.Header()[2].Alignment = xterm.AlignCenter
-	table.Header()[3].Alignment = xterm.AlignCenter
-	table.Header()[4].Alignment = xterm.AlignCenter
-	table.Header()[5].Alignment = xterm.AlignCenter
-	table.Header()[6].Alignment = xterm.AlignCenter
-	table.Header()[7].Alignment = xterm.AlignCenter
-	table.Header()[8].Alignment = xterm.AlignCenter
-	table.Header()[9].Alignment = xterm.AlignCenter
 
 	// Initialize the terminal UI and listen on resize
 	// events and Ctrl-C / Escape key events.
 	if err := ui.Init(); err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	defer draw(table, &metric) // Draw the table AFTER closing the UI one more time.
-	defer ui.Close()           // Closing the UI cleans the screen.
+	defer draw(version, table, &metric, 0) // Draw the table AFTER closing the UI one more time.
+	defer ui.Close()                       // Closing the UI cleans the screen.
 
 	ticker := time.NewTicker(rate)
 	go func() {
@@ -220,41 +231,14 @@ func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Durat
 				continue
 			}
 
-			var (
-				latency = map[time.Duration]uint64{
-					10 * time.Millisecond:    metric.LatencyHistogram[10*time.Millisecond],
-					50 * time.Millisecond:    metric.LatencyHistogram[50*time.Millisecond],
-					100 * time.Millisecond:   metric.LatencyHistogram[100*time.Millisecond],
-					250 * time.Millisecond:   metric.LatencyHistogram[250*time.Millisecond],
-					500 * time.Millisecond:   metric.LatencyHistogram[500*time.Millisecond],
-					1000 * time.Millisecond:  metric.LatencyHistogram[1000*time.Millisecond],
-					1500 * time.Millisecond:  metric.LatencyHistogram[1500*time.Millisecond],
-					3000 * time.Millisecond:  metric.LatencyHistogram[3000*time.Millisecond],
-					5000 * time.Millisecond:  metric.LatencyHistogram[5000*time.Millisecond],
-					10000 * time.Millisecond: metric.LatencyHistogram[10000*time.Millisecond],
-				}
-				keys   = make([]time.Duration, 0, len(latency))
-				values = make([]uint64, 0, len(latency))
-			)
-			for k := range latency {
-				keys = append(keys, k)
+			// Compute the current request rate
+			if requestN == 0 {
+				requestN = metric.RequestN()
 			}
-			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-			for i, k := range keys {
-				if i == 0 {
-					values = append(values, latency[k])
-				} else {
-					values = append(values, latency[k]-latency[keys[i-1]])
-				}
-			}
+			reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
+			requestN = metric.RequestN()
 
-			var cells = make([]*xterm.Cell, 0, len(values))
-			for _, value := range values {
-				cells = append(cells, xterm.NewCell(strconv.FormatUint(value, 10)))
-			}
-			table.SetRow(0, cells...)
-			draw(table, &metric)
-
+			draw(version, table, &metric, reqRate)
 			select {
 			case <-ctx.Done():
 				return
@@ -269,7 +253,7 @@ func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Durat
 		case event := <-events:
 			switch {
 			case event.Type == ui.ResizeEvent:
-				draw(table, &metric)
+				draw(version, table, &metric, reqRate)
 			case event.ID == "<C-c>" || event.ID == "<Escape>":
 				return
 			}
@@ -427,4 +411,29 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) {
 	if err := stream.Err(); err != nil {
 		stdlog.Fatalf("Error: error log stream closed with: %v", err)
 	}
+}
+
+// avgLatency computes the arithmetic mean latency o
+func avgLatency(histogram map[time.Duration]uint64) time.Duration {
+	var latencies = make([]time.Duration, 0, len(histogram))
+	for l := range histogram {
+		latencies = append(latencies, l)
+	}
+	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+
+	// Compute the total number of requests in the histogram
+	var N uint64
+	for _, l := range latencies {
+		N += histogram[l] - N
+	}
+
+	var (
+		avg float64
+		n   uint64
+	)
+	for _, l := range latencies {
+		avg += float64(l) * (float64(histogram[l]-n) / float64(N))
+		n += histogram[l] - n
+	}
+	return time.Duration(avg)
 }

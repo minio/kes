@@ -12,6 +12,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 
@@ -88,11 +89,13 @@ func assignIdentity(args []string) {
 	}
 
 	var (
-		client   = newClient(insecureSkipVerify)
-		identity = kes.Identity(cli.Arg(0))
-		policy   = cli.Arg(1)
-		ctx      = cancelOnSignal(os.Interrupt, os.Kill)
+		client         = newClient(insecureSkipVerify)
+		identity       = kes.Identity(cli.Arg(0))
+		policy         = cli.Arg(1)
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	if err := client.AssignIdentity(ctx, policy, identity); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -134,7 +137,10 @@ func listIdentity(args []string) {
 		pattern = cli.Arg(0)
 	}
 
-	identities, err := newClient(insecureSkipVerify).ListIdentities(cancelOnSignal(os.Interrupt, os.Kill), pattern)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	identities, err := newClient(insecureSkipVerify).ListIdentities(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
@@ -207,10 +213,12 @@ func forgetIdentity(args []string) {
 	}
 
 	var (
-		client   = newClient(insecureSkipVerify)
-		identity = kes.Identity(cli.Arg(0))
-		ctx      = cancelOnSignal(os.Interrupt, os.Kill)
+		client         = newClient(insecureSkipVerify)
+		identity       = kes.Identity(cli.Arg(0))
+		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	)
+	defer cancelCtx()
+
 	if err := client.ForgetIdentity(ctx, identity); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
