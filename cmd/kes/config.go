@@ -22,8 +22,8 @@ import (
 	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
 	"github.com/minio/kes/internal/generic"
+	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/mem"
-	"github.com/minio/kes/internal/secret"
 	"github.com/minio/kes/internal/vault"
 	"gopkg.in/yaml.v2"
 )
@@ -432,12 +432,11 @@ func (config *kmsServerConfig) Verify() error {
 }
 
 // Connect tries to establish a connection to the KMS specified in the kmsServerConfig.
-func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*secret.Store, error) {
+func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (key.Store, error) {
 	if err := config.Verify(); err != nil {
 		return nil, err
 	}
 
-	var store secret.Store
 	switch {
 	case config.Fs.Path != "":
 		f, err := os.Stat(config.Fs.Path)
@@ -455,10 +454,10 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			}
 			quiet.ClearMessage(msg)
 		}
-		store.Remote = &fs.Store{
+		return &fs.Store{
 			Dir:      config.Fs.Path,
 			ErrorLog: errorLog,
-		}
+		}, nil
 	case config.Generic.Endpoint != "":
 		genericStore := &generic.Store{
 			Endpoint: config.Generic.Endpoint,
@@ -473,7 +472,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to generic KeyStore: %v", err)
 		}
 		quiet.ClearMessage(msg)
-		store.Remote = genericStore
+		return genericStore, nil
 	case config.Vault.Endpoint != "":
 		vaultStore := &vault.Store{
 			Addr:          config.Vault.Endpoint,
@@ -506,7 +505,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to Vault: %v", err)
 		}
 		quiet.ClearMessage(msg)
-		store.Remote = vaultStore
+		return vaultStore, nil
 	case config.Aws.SecretsManager.Endpoint != "":
 		awsStore := &aws.SecretsManager{
 			Addr:     config.Aws.SecretsManager.Endpoint,
@@ -526,7 +525,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to AWS Secrets Manager: %v", err)
 		}
 		quiet.ClearMessage(msg)
-		store.Remote = awsStore
+		return awsStore, nil
 	case config.GCP.SecretManager.ProjectID != "":
 		gcpStore := &gcp.SecretManager{
 			Endpoint:  config.GCP.SecretManager.Endpoint,
@@ -546,7 +545,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to GCP SecretManager: %v", err)
 		}
 		quiet.ClearMessage(msg)
-		store.Remote = gcpStore
+		return gcpStore, nil
 	case config.Azure.KeyVault.Endpoint != "":
 		azureStore := &azure.KeyVault{
 			Endpoint: config.Azure.KeyVault.Endpoint,
@@ -563,8 +562,7 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
 		}
 		quiet.ClearMessage(msg)
-
-		store.Remote = azureStore
+		return azureStore, nil
 	case config.Gemalto.KeySecure.Endpoint != "":
 		gemaltoStore := &gemalto.KeySecure{
 			Endpoint: config.Gemalto.KeySecure.Endpoint,
@@ -583,11 +581,10 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (*s
 			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
 		}
 		quiet.ClearMessage(msg)
-		store.Remote = gemaltoStore
+		return gemaltoStore, nil
 	default:
-		store.Remote = &mem.Store{}
+		return &mem.Store{}, nil
 	}
-	return &store, nil
 }
 
 func (config *kmsServerConfig) Description() (kind, endpoint string, err error) {

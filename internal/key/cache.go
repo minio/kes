@@ -1,8 +1,4 @@
-// Copyright 2019 - MinIO, Inc. All rights reserved.
-// Use of this source code is governed by the AGPLv3
-// license that can be found in the LICENSE file.
-
-package secret
+package key
 
 import (
 	"context"
@@ -11,87 +7,53 @@ import (
 	"time"
 )
 
-// An entry holds a cached secret and additional
-// cache-related metadata. For instance, whether
-// the entry has been used recently.
-type entry struct {
-	Secret Secret
-
-	used uint32
-}
-
-// cache is a in-memory cache mapping names to
-// cache entries. It is safe for concurrent use.
 type cache struct {
 	lock  sync.RWMutex
 	store map[string]*entry
 }
 
-// Set adds the given secret to the cache.
-// If there is already an entry for the given
-// name then Set replaces this entry.
-func (c *cache) Set(name string, secret Secret) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if c.store == nil {
-		c.store = map[string]*entry{}
-	}
-	c.store[name] = &entry{
-		Secret: secret,
-		used:   1,
-	}
-}
-
-// CompareAndSwap adds the secret to the cache
-// if and only if no entry for given name exists.
-// If an entry for the given name exists it returns
-// the secret that is currently in the cache.
-//
-// CompareAndSwap will always return the secret that
-// is in the cache - either the existing one or the
-// one that has been added by CompareAndSwap itself.
-func (c *cache) CompareAndSwap(name string, secret Secret) Secret {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if entry, ok := c.store[name]; ok {
-		atomic.StoreUint32(&entry.used, 1)
-		return entry.Secret
-	}
-
-	if c.store == nil {
-		c.store = map[string]*entry{}
-	}
-	c.store[name] = &entry{
-		Secret: secret,
-		used:   1,
-	}
-	return secret
-}
-
-// Get returns the secret for the given name.
-// It returns true if and only if a cache entry
-// exists.
-func (c *cache) Get(name string) (Secret, bool) {
+func (c *cache) Get(name string) (Key, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	entry, ok := c.store[name]
 	if !ok {
-		return Secret{}, ok
+		return Key{}, false
 	}
 	atomic.StoreUint32(&entry.used, 1)
-	return entry.Secret, ok
+	return entry.Key, true
 }
 
-// Delete removes the entry with the
-// given name if it exists.
+func (c *cache) CompareAndSwap(name string, key Key) Key {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if entry, ok := c.store[name]; ok {
+		atomic.StoreUint32(&entry.used, 1)
+		return entry.Key
+	}
+
+	if c.store == nil {
+		c.store = map[string]*entry{}
+	}
+	c.store[name] = &entry{
+		Key:  key,
+		used: 1,
+	}
+	return key
+}
+
 func (c *cache) Delete(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	delete(c.store, name)
+}
+
+type entry struct {
+	Key Key
+
+	used uint32
 }
 
 // StartGC spawns a new go-routine that clears

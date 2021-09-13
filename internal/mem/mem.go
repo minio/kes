@@ -10,69 +10,68 @@ import (
 	"sync"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // Store is an in-memory key-value store. Its zero value is
 // ready to use.
 type Store struct {
 	lock  sync.RWMutex
-	store map[string]string
+	store map[string]key.Key
 }
 
-var _ secret.Remote = (*Store)(nil)
+var _ key.Store = (*Store)(nil)
 
-// Create adds the given key-value pair to the store if and
-// only if no entry for key exists. If an entry already exists
-// it returns kes.ErrKeyExists.
-func (s *Store) Create(key, value string) error {
+// Create adds the given key to the store if and only if
+// no entry for the given name exists. If an entry already
+// exists it returns kes.ErrKeyExists.
+func (s *Store) Create(_ context.Context, name string, k key.Key) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if s.store == nil {
-		s.store = map[string]string{}
+		s.store = map[string]key.Key{}
 	}
-	if _, ok := s.store[key]; ok {
+	if _, ok := s.store[name]; ok {
 		return kes.ErrKeyExists
 	}
-	s.store[key] = value
+	s.store[name] = k
 	return nil
 }
 
-// Delete removes the value for the given key, if it exists.
-func (s *Store) Delete(key string) error {
+// Delete removes the key with the given value, if it exists.
+func (s *Store) Delete(_ context.Context, name string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	delete(s.store, key)
+	delete(s.store, name)
 	return nil
 }
 
-// Get returns the value associated with the given key. If no
-// entry for key exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(key string) (string, error) {
+// Get returns the key associated with the given name. If no
+// entry for this name exists it returns kes.ErrKeyNotFound.
+func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	value, ok := s.store[key]
+	k, ok := s.store[name]
 	if !ok {
-		return "", kes.ErrKeyNotFound
+		return key.Key{}, kes.ErrKeyNotFound
 	}
-	return value, nil
+	return k, nil
 }
 
-// List returns a new Iterator over the names of
-// all stored keys.
-func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+// List returns a new iterator over the metadata of all stored keys.
+func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	keys := make([]string, 0, len(s.store))
-	for key := range s.store {
-		keys = append(keys, key)
+	names := make([]string, 0, len(s.store))
+	for name := range s.store {
+		names = append(names, name)
 	}
 	return &iterator{
-		values: keys,
+		values: names,
 	}, nil
 }
 
@@ -81,7 +80,7 @@ type iterator struct {
 	last   string
 }
 
-var _ secret.Iterator = (*iterator)(nil)
+var _ key.Iterator = (*iterator)(nil)
 
 func (i *iterator) Next() bool {
 	if len(i.values) > 0 {
@@ -92,6 +91,6 @@ func (i *iterator) Next() bool {
 	return false
 }
 
-func (i *iterator) Value() string { return i.last }
+func (i *iterator) Name() string { return i.last }
 
 func (*iterator) Err() error { return nil }

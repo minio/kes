@@ -12,13 +12,12 @@ import (
 	"errors"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // Store is a file system key-value store that stores
@@ -37,106 +36,122 @@ type Store struct {
 	ErrorLog *log.Logger
 }
 
-var _ secret.Remote = (*Store)(nil)
+var _ key.Store = (*Store)(nil)
 
-var (
-	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
-	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
-	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
-	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
-)
-
-// Create creates a new file in the directory if no file
-// with the name 'key' does not exists and writes value
-// to it.
+// Create stores the key in a new file in the KeyStore
+// directory if and only if no file with the given name
+// does not exists.
+//
 // If such a file already exists it returns kes.ErrKeyExists.
-func (s *Store) Create(key, value string) error {
+func (s *Store) Create(_ context.Context, name string, key key.Key) error {
+	if err := validatePath(name); err != nil {
+		s.logf("fs: invalid key name %q: %v", name, err)
+		return err
+	}
+
 	// We use os.O_CREATE and os.O_EXCL to enforce that the
 	// file must not have existed before.
-	path := filepath.Join(s.Dir, key)
+	var path = filepath.Join(s.Dir, name)
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if errors.Is(err, os.ErrExist) {
 		return kes.ErrKeyExists
 	}
 	if err != nil {
-		s.logf("fs: cannot open %s: %v", path, err)
-		return errCreateKey
+		s.logf("fs: cannot open %q: %v", path, err)
+		return err
 	}
 	defer file.Close()
 
-	if _, err = file.WriteString(value); err != nil {
-		s.logf("fs: failed to write to %s: %v", path, err)
+	if _, err = file.WriteString(key.String()); err != nil {
+		s.logf("fs: failed to write to %q: %v", path, err)
 		if rmErr := os.Remove(path); rmErr != nil {
-			s.logf("fs: cannot remove %s: %v", path, rmErr)
+			s.logf("fs: cannot remove %q: %v", path, rmErr)
 		}
-		return errCreateKey
+		return err
 	}
 
 	if err = file.Sync(); err != nil { // Ensure that we wrote the value to disk
 		s.logf("fs: cannot to flush and sync %s: %v", path, err)
 		if rmErr := os.Remove(path); rmErr != nil {
-			s.logf("fs: cannot remove %s: %v", path, rmErr)
+			s.logf("fs: cannot remove %q: %v", path, rmErr)
 		}
-		return errCreateKey
+		return err
 	}
 	return nil
 }
 
-// Delete removes a the secret key with the given name
-// from the key store and deletes the associated file,
-// if it exists.
-func (s *Store) Delete(key string) error {
-	path := filepath.Join(s.Dir, key)
-	err := os.Remove(path)
-	if errors.Is(err, os.ErrNotExist) {
-		err = nil // Ignore the error if the file does not exist
+// Delete removes the file with the given name in the
+// KeyStore directory, if it exists. It does not return
+// an error if the file does not exist.
+func (s *Store) Delete(_ context.Context, name string) error {
+	if err := validatePath(name); err != nil {
+		s.logf("fs: invalid key name %q: %v", name, err)
+		return err
 	}
+
+	var (
+		path = filepath.Join(s.Dir, name)
+		err  = os.Remove(path)
+	)
 	if err != nil {
-		s.logf("fs: failed to delete '%s': %v", path, err)
-		return errDeleteKey
+		if errors.Is(err, os.ErrNotExist) {
+			return kes.ErrKeyNotFound
+		}
+		s.logf("fs: failed to delete %q: %v", path, err)
+		return err
 	}
 	return nil
 }
 
-// Get returns the secret key associated with the given name.
-// If no entry for name exists, Get returns kes.ErrKeyNotFound.
-//
-// In particular, Get reads the secret key from the associated
-// file in KeyStore.Dir.
-func (s *Store) Get(key string) (string, error) {
-	path := filepath.Join(s.Dir, key)
-	file, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", kes.ErrKeyNotFound
+// Get returns the key associated with the given name. If no
+// entry for name exists, Get returns kes.ErrKeyNotFound. In
+// particular, Get reads the key from the associated
+// file in KeyStore directory.
+func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
+	if err := validatePath(name); err != nil {
+		s.logf("fs: invalid key name %q: %v", name, err)
+		return key.Key{}, err
 	}
+
+	var (
+		path      = filepath.Join(s.Dir, name)
+		file, err = os.Open(path)
+	)
 	if err != nil {
-		s.logf("fs: cannot open '%s': %v", path, err)
-		return "", errGetKey
+		if errors.Is(err, os.ErrNotExist) {
+			return key.Key{}, kes.ErrKeyNotFound
+		}
+		s.logf("fs: cannot open %q: %v", path, err)
+		return key.Key{}, err
 	}
 	defer file.Close()
 
 	var value strings.Builder
-	if _, err := io.Copy(&value, io.LimitReader(file, secret.MaxSize)); err != nil {
-		s.logf("fs: failed to read from '%s': %v", path, err)
-		return "", errGetKey
+	if _, err := io.Copy(&value, io.LimitReader(file, key.MaxSize)); err != nil {
+		s.logf("fs: failed to read from %q: %v", path, err)
+		return key.Key{}, err
 	}
-	return value.String(), nil
+	k, err := key.Parse(value.String())
+	if err != nil {
+		s.logf("fs: failed to parse key from %q: %v", path, err)
+		return key.Key{}, err
+	}
+	return k, nil
 }
 
-// List returns a new Iterator over the names of
-// all stored keys.
-func (s *Store) List(ctx context.Context) (secret.Iterator, error) {
+// List returns a new iterator over the metadata of all stored keys.
+func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	file, err := os.Open(s.Dir)
 	if err != nil {
-		s.logf("fs: cannot open '%s': %v", s.Dir, err)
-		return nil, errListKey
+		s.logf("fs: cannot open %q: %v", s.Dir, err)
+		return nil, err
 	}
 	defer file.Close()
 
 	files, err := file.Readdir(0)
 	if err != nil {
 		s.logf("fs: failed to list keys: %v", err)
-		return nil, errListKey
+		return nil, err
 	}
 	return &iterator{
 		values: files,
@@ -148,7 +163,7 @@ type iterator struct {
 	last   string
 }
 
-var _ secret.Iterator = (*iterator)(nil)
+var _ key.Iterator = (*iterator)(nil)
 
 func (i *iterator) Next() bool {
 	for len(i.values) > 0 {
@@ -162,7 +177,7 @@ func (i *iterator) Next() bool {
 	return false
 }
 
-func (i *iterator) Value() string { return i.last }
+func (i *iterator) Name() string { return i.last }
 
 func (*iterator) Err() error { return nil }
 
@@ -172,4 +187,18 @@ func (s *Store) logf(format string, v ...interface{}) {
 	} else {
 		s.ErrorLog.Printf(format, v...)
 	}
+}
+
+// validatePath returns an error of the given key name
+// contains a path separator, and therefore, is an
+// invalid key name.
+//
+// Key names that contain path separator(s) are considered
+// malicious because they may be abused for directory traversal
+// attacks.
+func validatePath(name string) error {
+	if strings.ContainsRune(name, filepath.Separator) {
+		return errors.New("fs: key name contains path separator")
+	}
+	return nil
 }

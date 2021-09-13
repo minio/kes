@@ -30,7 +30,7 @@ Options:
    -h, --help               Show this list of command line options.
 `
 
-func key(args []string) {
+func keyCmd(args []string) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	cli.Usage = func() { fmt.Fprintf(os.Stderr, keyCmdUsage) }
 	cli.Parse(args[1:])

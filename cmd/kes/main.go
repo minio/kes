@@ -72,7 +72,7 @@ func main() {
 	case "server":
 		server(args)
 	case "key":
-		key(args)
+		keyCmd(args)
 	case "log":
 		log(args)
 	case "identity":

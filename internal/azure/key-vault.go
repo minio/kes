@@ -17,7 +17,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 )
 
 // Credentials are Azure client credentials to authenticate an application
@@ -41,6 +41,8 @@ type KeyVault struct {
 
 	client client
 }
+
+var _ key.Store = (*KeyVault)(nil)
 
 var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
@@ -68,38 +70,44 @@ var (
 // purging but will eventually give up and fail. However,
 // a subsequent create may succeed once KeyVault has purged
 // the secret completely.
-func (kv *KeyVault) Create(key, value string) error {
-	_, stat, err := kv.client.GetSecret(key, "")
+func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error {
+	_, stat, err := kv.client.GetSecret(ctx, name, "")
 	if err != nil {
-		kv.logf("azure: failed to create %q: failed to check whether %q already exists: %v", key, key, err)
+		if !errors.Is(err, context.Canceled) {
+			kv.logf("azure: failed to create %q: failed to check whether %q already exists: %v", name, name, err)
+		}
 		return errCreateKey
 	}
 	switch {
 	case stat.StatusCode == http.StatusOK:
 		return kes.ErrKeyExists
 	case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
-		kv.logf("azure: failed to create %q: insufficient permissions to check whether %q already exists: %s (%s)", key, key, stat.Message, stat.ErrorCode)
+		kv.logf("azure: failed to create %q: insufficient permissions to check whether %q already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
 		return errCreateKey
 	default:
 		if stat.StatusCode != http.StatusNotFound {
-			kv.logf("azure: failed to create %q: failed to check whether %q already exists: %s (%s)", key, key, stat.Message, stat.ErrorCode)
+			kv.logf("azure: failed to create %q: failed to check whether %q already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
 			return errCreateKey
 		}
 	}
 
-	stat, err = kv.client.CreateSecret(key, value)
+	stat, err = kv.client.CreateSecret(ctx, name, key.String())
 	if err != nil {
-		kv.logf("azure: failed to create %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			kv.logf("azure: failed to create %q: %v", name, err)
+		}
 		return errCreateKey
 	}
 	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsDeletedButRecoverable" {
-		stat, err = kv.client.PurgeSecret(key)
+		stat, err = kv.client.PurgeSecret(ctx, name)
 		if err != nil {
-			kv.logf("azure: failed to create %q: failed to purge deleted secret: %v", key, err)
+			if !errors.Is(err, context.Canceled) {
+				kv.logf("azure: failed to create %q: failed to purge deleted secret: %v", name, err)
+			}
 			return errCreateKey
 		}
 		if stat.StatusCode != http.StatusNoContent {
-			kv.logf("azure: failed to create %q: failed to purge deleted secret: %s (%s)", key, stat.Message, stat.ErrorCode)
+			kv.logf("azure: failed to create %q: failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 			return errCreateKey
 		}
 
@@ -109,9 +117,11 @@ func (kv *KeyVault) Create(key, value string) error {
 			Jitter = 800 * time.Millisecond
 		)
 		for i := 0; i < Retry; i++ {
-			stat, err = kv.client.CreateSecret(key, value)
+			stat, err = kv.client.CreateSecret(ctx, name, key.String())
 			if err != nil {
-				kv.logf("azure: failed to create %q: %v", key, err)
+				if !errors.Is(err, context.Canceled) {
+					kv.logf("azure: failed to create %q: %v", name, err)
+				}
 				return errDeleteKey
 			}
 			if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
@@ -150,7 +160,7 @@ func (kv *KeyVault) Create(key, value string) error {
 //
 // Since KeyVault only supports two-steps deletes, KES cannot
 // guarantee that a Delete operation has atomic semantics.
-func (kv *KeyVault) Delete(key string) error {
+func (kv *KeyVault) Delete(ctx context.Context, name string) error {
 	// Deleting a key from KeyVault is a two-step
 	// process. First, the key has to be deleted
 	// (soft delete) and then purged. It is not
@@ -169,13 +179,15 @@ func (kv *KeyVault) Delete(key string) error {
 	// key - hoping that KeyVault finishes the
 	// internal soft-delete process.
 
-	stat, err := kv.client.DeleteSecret(key)
+	stat, err := kv.client.DeleteSecret(ctx, name)
 	if err != nil {
-		kv.logf("azure: failed to delete %q: %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			kv.logf("azure: failed to delete %q: %v", name, err)
+		}
 		return errDeleteKey
 	}
 	if stat.StatusCode != http.StatusOK && stat.StatusCode != http.StatusNotFound {
-		kv.logf("azure: failed to delete %q: %s (%s)", key, stat.Message, stat.ErrorCode)
+		kv.logf("azure: failed to delete %q: %s (%s)", name, stat.Message, stat.ErrorCode)
 		return errDeleteKey
 	}
 
@@ -193,9 +205,11 @@ func (kv *KeyVault) Delete(key string) error {
 		Jitter = 800 * time.Millisecond
 	)
 	for i := 0; i < Retry; i++ {
-		stat, err = kv.client.PurgeSecret(key)
+		stat, err = kv.client.PurgeSecret(ctx, name)
 		if err != nil {
-			kv.logf("azure: failed to delete %q: %s (%s)", key, stat.Message, stat.ErrorCode)
+			if !errors.Is(err, context.Canceled) {
+				kv.logf("azure: failed to delete %q: %s (%s)", name, stat.Message, stat.ErrorCode)
+			}
 			return errDeleteKey
 		}
 		switch {
@@ -215,7 +229,7 @@ func (kv *KeyVault) Delete(key string) error {
 	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
 		return nil
 	}
-	kv.logf("azure: failed to delete %q: failed to purge deleted secret: %s (%s)", key, stat.Message, stat.ErrorCode)
+	kv.logf("azure: failed to delete %q: failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 	return errDeleteKey
 }
 
@@ -225,35 +239,42 @@ func (kv *KeyVault) Delete(key string) error {
 // Since Get has to fetch and filter the secrets versions first
 // before actually accessing the secret, Get may return inconsistent
 // responses when the secret is modified concurrently.
-func (kv *KeyVault) Get(key string) (string, error) {
-	version, stat, err := kv.client.GetFirstVersion(key)
+func (kv *KeyVault) Get(ctx context.Context, name string) (key.Key, error) {
+	version, stat, err := kv.client.GetFirstVersion(ctx, name)
 	if err != nil {
-		kv.logf("azure: failed to get %q: failed to list versions: %v", key, err)
-		return "", err
+		if !errors.Is(err, context.Canceled) {
+			kv.logf("azure: failed to get %q: failed to list versions: %v", name, err)
+		}
+		return key.Key{}, err
 	}
 	if stat.StatusCode == http.StatusNotFound && stat.ErrorCode == "NoObjectVersions" {
-		return "", kes.ErrKeyNotFound
+		return key.Key{}, kes.ErrKeyNotFound
 	}
 	if stat.StatusCode != http.StatusOK {
-		kv.logf("azure: failed to get %q: failed to list versions: %s (%s)", key, stat.Message, stat.ErrorCode)
-		return "", errGetKey
+		kv.logf("azure: failed to get %q: failed to list versions: %s (%s)", name, stat.Message, stat.ErrorCode)
+		return key.Key{}, errGetKey
 	}
 
-	value, stat, err := kv.client.GetSecret(key, version)
+	value, stat, err := kv.client.GetSecret(ctx, name, version)
 	if err != nil {
-		kv.logf("azure: failed to get %q: %v", key, err)
-		return "", errGetKey
+		kv.logf("azure: failed to get %q: %v", name, err)
+		return key.Key{}, errGetKey
 	}
 	if stat.StatusCode != http.StatusOK {
-		kv.logf("azure: failed to get %q: %s (%s)", key, stat.Message, stat.ErrorCode)
-		return "", errGetKey
+		kv.logf("azure: failed to get %q: %s (%s)", name, stat.Message, stat.ErrorCode)
+		return key.Key{}, errGetKey
 	}
-	return value, nil
+	k, err := key.Parse(value)
+	if err != nil {
+		kv.logf("azure: failed to parse key %q: %v", name, err)
+		return key.Key{}, err
+	}
+	return k, nil
 }
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (kv *KeyVault) List(ctx context.Context) (secret.Iterator, error) {
+func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
 	var (
 		values   = make(chan string, 10)
 		iterator = &iterator{
@@ -330,7 +351,7 @@ func (i *iterator) Next() bool {
 	return true
 }
 
-func (i *iterator) Value() string { return i.last }
+func (i *iterator) Name() string { return i.last }
 
 func (i *iterator) Err() error {
 	i.lock.Lock()

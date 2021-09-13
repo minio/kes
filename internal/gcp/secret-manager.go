@@ -13,7 +13,7 @@ import (
 	"path"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/key"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -95,7 +95,7 @@ type SecretManager struct {
 	client *secretmanager.Client
 }
 
-var _ secret.Remote = (*SecretManager)(nil) // compiler check
+var _ key.Store = (*SecretManager)(nil) // compiler check
 
 var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
@@ -111,15 +111,15 @@ var (
 // Creating a secret at the GCP SecretManager requires first creating
 // secret itself and then adding a secret version with some payload
 // data. The payload data contains the actual value.
-func (s *SecretManager) Create(key, value string) error {
+func (s *SecretManager) Create(ctx context.Context, name string, key key.Key) error {
 	if s.client == nil {
-		s.logf("gcp: no connection to GCP secret manager: '%s' '%s'", s.Endpoint, s.ProjectID)
+		s.logf("gcp: no connection to GCP secret manager: %q %q", s.Endpoint, s.ProjectID)
 		return errCreateKey
 	}
 
-	secret, err := s.client.CreateSecret(context.Background(), &secretmanagerpb.CreateSecretRequest{
+	secret, err := s.client.CreateSecret(ctx, &secretmanagerpb.CreateSecretRequest{
 		Parent:   path.Join("projects", s.ProjectID),
-		SecretId: key,
+		SecretId: name,
 		Secret: &secretmanagerpb.Secret{
 			Replication: &secretmanagerpb.Replication{
 				Replication: &secretmanagerpb.Replication_Automatic_{
@@ -132,45 +132,53 @@ func (s *SecretManager) Create(key, value string) error {
 		if grpc.Code(err) == codes.AlreadyExists {
 			return kes.ErrKeyExists
 		}
-		s.logf("gcp: failed to create '%s': %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("gcp: failed to create %q: %v", name, err)
+		}
 		return errCreateKey
 	}
 
-	_, err = s.client.AddSecretVersion(context.Background(), &secretmanagerpb.AddSecretVersionRequest{
+	_, err = s.client.AddSecretVersion(ctx, &secretmanagerpb.AddSecretVersionRequest{
 		Parent: secret.Name,
 		Payload: &secretmanagerpb.SecretPayload{
-			Data: []byte(value),
+			Data: []byte(key.String()),
 		},
 	})
 	if err != nil {
-		s.logf("gcp: failed to upload '%s': %v", key, err)
+		if !errors.Is(err, context.Canceled) {
+			s.logf("gcp: failed to create %q: %v", name, err)
+		}
 		return errCreateKey
 	}
 	return nil
 }
 
 // Get returns the value associated with the given key.
-func (s *SecretManager) Get(key string) (string, error) {
+func (s *SecretManager) Get(ctx context.Context, name string) (key.Key, error) {
 	if s.client == nil {
-		s.logf("gcp: no connection to GCP secret manager: '%s' '%s'", s.Endpoint, s.ProjectID)
-		return "", errGetKey
+		s.logf("gcp: no connection to GCP secret manager: %q %q", s.Endpoint, s.ProjectID)
+		return key.Key{}, errGetKey
 	}
 
-	result, err := s.client.AccessSecretVersion(context.Background(),
-		&secretmanagerpb.AccessSecretVersionRequest{
-			Name: path.Join("projects", s.ProjectID, "secrets", key, "versions", "1"),
-		},
-	)
+	result, err := s.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
+		Name: path.Join("projects", s.ProjectID, "secrets", name, "versions", "1"),
+	})
 	if err != nil {
 		if grpc.Code(err) == codes.NotFound {
-			return "", kes.ErrKeyNotFound
+			return key.Key{}, kes.ErrKeyNotFound
 		}
-		s.logf("gcp: failed to read '%s': %v", key, err)
-		return "", errGetKey
+		if !errors.Is(err, context.Canceled) {
+			s.logf("gcp: failed to read %q: %v", name, err)
+		}
+		return key.Key{}, errGetKey
 	}
 
-	secret := string(result.Payload.Data)
-	return secret, nil
+	k, err := key.Parse(string(result.Payload.Data))
+	if err != nil {
+		s.logf("gcp: failed to parse key %q: %v", name, err)
+		return key.Key{}, errGetKey
+	}
+	return k, nil
 }
 
 // Delete remove the key-value pair from GCP SecretManager.
@@ -181,20 +189,22 @@ func (s *SecretManager) Get(key string) (string, error) {
 // versions through e.g. the GCP CLI. However, KES does not
 // support multiple secret versions and expects a different
 // mechanism for "key-rotation".
-func (s *SecretManager) Delete(key string) error {
+func (s *SecretManager) Delete(ctx context.Context, name string) error {
 	if s.client == nil {
-		s.logf("gcp: no connection to GCP secret manager: '%s' '%s'", s.Endpoint, s.ProjectID)
+		s.logf("gcp: no connection to GCP secret manager: %q %q", s.Endpoint, s.ProjectID)
 		return errDeleteKey
 	}
 
-	err := s.client.DeleteSecret(context.Background(), &secretmanagerpb.DeleteSecretRequest{
-		Name: path.Join("projects", s.ProjectID, "secrets", key),
+	err := s.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
+		Name: path.Join("projects", s.ProjectID, "secrets", name),
 	})
 	if err != nil {
 		if grpc.Code(err) == codes.NotFound {
 			return nil
 		}
-		s.logf("gcp: failed to delete '%s': %v", key, err)
+		if errors.Is(err, context.Canceled) {
+			s.logf("gcp: failed to delete %q: %v", name, err)
+		}
 		return errDeleteKey
 	}
 	return nil
@@ -202,9 +212,9 @@ func (s *SecretManager) Delete(key string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *SecretManager) List(ctx context.Context) (secret.Iterator, error) {
+func (s *SecretManager) List(ctx context.Context) (key.Iterator, error) {
 	if s.client == nil {
-		s.logf("gcp: no connection to GCP secret manager: '%s' '%s'", s.Endpoint, s.ProjectID)
+		s.logf("gcp: no connection to GCP secret manager: %q %q", s.Endpoint, s.ProjectID)
 		return nil, errListKey
 	}
 	location := path.Join("projects", s.ProjectID, "*")
@@ -239,7 +249,7 @@ func (i *iterator) Next() bool {
 	return true
 }
 
-func (i *iterator) Value() string { return i.last }
+func (i *iterator) Name() string { return i.last }
 
 func (i *iterator) Err() error { return i.err }
 
