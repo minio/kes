@@ -102,47 +102,42 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
 	}
 
-	if len(req.TLS.PeerCertificates) != 1 {
-		if len(req.TLS.PeerCertificates) == 0 {
-			// If the request is forwarded by a TLS proxy then the
-			// proxy didn't send a client certificate to authenticate
-			// itself as proxy.
-			// However, if the request comes from an actual kes client
-			// directly (bypassing the TLS proxy) then this client didn't
-			// send a certificate.
-			// We cannot distinguish both cases because we would have to
-			// compute the identity from the certificate (which is not present)
-			// first. So, we return the same error message as if there is
-			// no TLS proxy.
-			return kes.NewError(http.StatusBadRequest, "no client certificate is present")
+	// A TLS proxy may send none, one or multiple peer certificates
+	// as part of the TLS handshake. However, we expect exactly
+	// one client certificate to check whether it is an authentic
+	// proxy that can forward client certificates.
+	//
+	// In particular, a TLS proxy may send multiple certificates - for
+	// example their client certificate as well as intermediate or
+	// root CA certificates.
+	// Therefore, we filter all CA certificates and only
+	// process the remaining leaf certificate(s).
+	var peerCertificates = make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
+	for _, cert := range req.TLS.PeerCertificates {
+		if cert.IsCA {
+			continue
 		}
+		peerCertificates = append(peerCertificates, cert)
+	}
 
-		// For now we require that the client sends
-		// only one certificate. However, it's possible
-		// to support multiple - but we have to think
-		// about the semantics.
-		//
-		// Again, we cannot distinguish whether the request
-		// comes from a TLS proxy or an actual kes client.
-		// Therefore, we behave as if there is no TLS proxy.
+	if len(peerCertificates) == 0 {
+		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
+	}
+	if len(peerCertificates) > 1 {
 		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
 	}
+	req.TLS.PeerCertificates = peerCertificates
 
-	identify := p.Identify
-	if identify == nil {
-		identify = defaultIdentify
-	}
-
-	identity := identify(req.TLS.PeerCertificates[0])
+	identity := Identify(req, p.Identify)
 	if identity.IsUnknown() {
 		return kes.ErrNotAllowed
 	}
 
 	// If identity is the/a proxy we extract the certificate
-	// of the actual kes client from the request headers and
+	// of the actual KES client from the request headers and
 	// modify the TLS connection state such that for handlers
 	// further down the stack it looks like the request has
-	// been made by the kes client itself.
+	// been made by the KES client itself.
 	// They can consume the TLS connection state as usual without
 	// having to care about a TLS proxy.
 	if p.Is(identity) {

@@ -164,18 +164,34 @@ func (r *Roles) Verify(req *http.Request) error {
 	if req.TLS == nil {
 		// This can only happen if the server accepts non-TLS
 		// connections - which violates our fundamental security
-		// assumption. Therefore, we respond with BadRequest
-		// and log that the server is not correctly configured.
+		// assumption.
 		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
 	}
 
-	if len(req.TLS.PeerCertificates) > 1 {
-		// For now we require that the client sends
-		// only one certificate. However, it's possible
-		// to support multiple - but we have to think
-		// about the semantics.
-		return kes.NewError(http.StatusBadRequest, "too many identities: more than one certificate is present")
+	// A client may send none, one or multiple peer certificates
+	// as part of the TLS handshake. However, expect exactly
+	// one client certificate to map it to a policy.
+	//
+	// In particular, clients may send multiple certificates - for
+	// example their client certificate as well as intermediate or
+	// root CA certificates.
+	// Therefore, we filter all CA certificates and only
+	// process the remaining leaf certificate(s).
+	var peerCertificates = make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
+	for _, cert := range req.TLS.PeerCertificates {
+		if cert.IsCA {
+			continue
+		}
+		peerCertificates = append(peerCertificates, cert)
 	}
+
+	if len(peerCertificates) == 0 {
+		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
+	}
+	if len(peerCertificates) > 1 {
+		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
+	}
+	req.TLS.PeerCertificates = peerCertificates
 
 	identity := Identify(req, r.Identify)
 	if identity.IsUnknown() {
