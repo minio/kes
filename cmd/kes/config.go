@@ -18,6 +18,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/azure"
+	"github.com/minio/kes/internal/fortanix"
 	"github.com/minio/kes/internal/fs"
 	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
@@ -147,6 +148,12 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	config.KeyStore.Vault.TLS.KeyPath = expandEnv(config.KeyStore.Vault.TLS.KeyPath)
 	config.KeyStore.Vault.TLS.CertPath = expandEnv(config.KeyStore.Vault.TLS.CertPath)
 	config.KeyStore.Vault.TLS.CAPath = expandEnv(config.KeyStore.Vault.TLS.CAPath)
+
+	// Fortanix SDKMS backend
+	config.KeyStore.Fortanix.SDKMS.Endpoint = expandEnv(config.KeyStore.Fortanix.SDKMS.Endpoint)
+	config.KeyStore.Fortanix.SDKMS.GroupID = expandEnv(config.KeyStore.Fortanix.SDKMS.GroupID)
+	config.KeyStore.Fortanix.SDKMS.Login.APIKey = expandEnv(config.KeyStore.Fortanix.SDKMS.Login.APIKey)
+	config.KeyStore.Fortanix.SDKMS.TLS.CAPath = expandEnv(config.KeyStore.Fortanix.SDKMS.TLS.CAPath)
 
 	// AWS SecretsManager backend
 	config.KeyStore.Aws.SecretsManager.Endpoint = expandEnv(config.KeyStore.Aws.SecretsManager.Endpoint)
@@ -295,6 +302,21 @@ type kmsServerConfig struct {
 		} `yaml:"status"`
 	} `yaml:"vault"`
 
+	Fortanix struct {
+		SDKMS struct {
+			Endpoint string `yaml:"endpoint"`
+			GroupID  string `yaml:"group_id"`
+
+			Login struct {
+				APIKey string `yaml:"key"`
+			} `yaml:"credentials"`
+
+			TLS struct {
+				CAPath string `yaml:"ca"`
+			} `yaml:"tls"`
+		} `yaml:"sdkms"`
+	} `yaml:"fortanix"`
+
 	Aws struct {
 		SecretsManager struct {
 			Endpoint string `yaml:"endpoint"`
@@ -385,6 +407,8 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: FS and GCP secret manager are specified at the same time")
 	case config.Fs.Path != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: FS and Azure KeyVault are specified at the same time")
+	case config.Fs.Path != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: FS and Fortanix SDKMS are specified at the same time")
 
 	case config.Generic.Endpoint != "" && config.Vault.Endpoint != "":
 		return errors.New("ambiguous configuration: Generic and Hashicorp Vault endpoint are specified at the same time")
@@ -396,6 +420,8 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: Generic and GCP SecretManager endpoint are specified at the same time")
 	case config.Generic.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: Generic and Azure KeyVault are specified at the same time")
+	case config.Generic.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: Generic and Fortanix SDKMS are specified at the same time")
 
 	case config.Vault.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
@@ -405,6 +431,8 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
 	case config.Vault.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: Hashicorp Vault and Azure KeyVault are specified at the same time")
+	case config.Vault.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: Hashicorp Vault and Fortanix SDKMS are specified at the same time")
 
 	case config.Aws.SecretsManager.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
 		return errors.New("ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
@@ -412,14 +440,23 @@ func (config *kmsServerConfig) Verify() error {
 		return errors.New("ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
 	case config.Aws.SecretsManager.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: AWS SecretsManager and Azure KeyVault are specified at the same time")
+	case config.Aws.SecretsManager.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: AWS SecretsManager and Fortanix SDKMS are specified at the same time")
 
 	case config.Gemalto.KeySecure.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
 		return errors.New("ambiguous configuration: Gemalto KeySecure and GCP secret manager are specified at the same time")
 	case config.Gemalto.KeySecure.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: Gemalto KeySecure and Azure KeyVault are specified at the same time")
+	case config.Gemalto.KeySecure.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: Gemalto KeySecure and Fortanix SDKMS are specified at the same time")
 
 	case config.GCP.SecretManager.ProjectID != "" && config.Azure.KeyVault.Endpoint != "":
 		return errors.New("ambiguous configuration: GCP secrets manager and Azure KeyVault are specified at the same time")
+	case config.GCP.SecretManager.ProjectID != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: GCP secrets manager and Fortanix SDKMS are specified at the same time")
+
+	case config.Azure.KeyVault.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
+		return errors.New("ambiguous configuration: Azure KeyVault and Fortanix SDKMS are specified at the same time")
 	}
 
 	if config.Vault.Endpoint != "" {
@@ -506,6 +543,21 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 		}
 		quiet.ClearMessage(msg)
 		return vaultStore, nil
+	case config.Fortanix.SDKMS.Endpoint != "":
+		fortanixStore := &fortanix.KeyStore{
+			Endpoint: config.Fortanix.SDKMS.Endpoint,
+			GroupID:  config.Fortanix.SDKMS.GroupID,
+			APIKey:   fortanix.APIKey(config.Fortanix.SDKMS.Login.APIKey),
+			ErrorLog: errorLog,
+			CAPath:   config.Fortanix.SDKMS.TLS.CAPath,
+		}
+		msg := fmt.Sprintf("Authenticating to Fortanix SDKMS '%s' ... ", fortanixStore.Endpoint)
+		quiet.Print(msg)
+		if err := fortanixStore.Authenticate(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to connect to Fortanix SDKMS: %v", err)
+		}
+		quiet.ClearMessage(msg)
+		return fortanixStore, nil
 	case config.Aws.SecretsManager.Endpoint != "":
 		awsStore := &aws.SecretsManager{
 			Addr:     config.Aws.SecretsManager.Endpoint,
@@ -604,6 +656,9 @@ func (config *kmsServerConfig) Description() (kind, endpoint string, err error) 
 	case config.Vault.Endpoint != "":
 		kind = "Hashicorp Vault"
 		endpoint = config.Vault.Endpoint
+	case config.Fortanix.SDKMS.Endpoint != "":
+		kind = "Fortanix SDKMS"
+		endpoint = config.Fortanix.SDKMS.Endpoint
 	case config.Aws.SecretsManager.Endpoint != "":
 		kind = "AWS SecretsManager"
 		endpoint = config.Aws.SecretsManager.Endpoint
