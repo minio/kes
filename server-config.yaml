@@ -195,6 +195,17 @@ keystore:
     status:     # Vault status configuration. The server will periodically reach out to Vault to check its status.
       ping: 10s   # Duration until the server checks Vault's status again.
 
+  fortanix:
+    # The Fortanix SDKMS key store. The server will store secret keys at the Fortanix SDKMS.
+    # See: https://www.fortanix.com/products/data-security-manager/key-management-service
+    sdkms: 
+      endpoint: ""   # The Fortanix SDKMS endpoint - for example: https://sdkms.fortanix.com
+      group_id: ""   # An optional group ID newly created keys will be placed at. For example: ce08d547-2a82-411e-ae2d-83655a4b7617 
+                     # If empty, the applications default group is used. 
+      credentials:   # The Fortanix SDKMS access credentials
+        key: ""      # The application's API key - for example: NWMyMWZlNzktZDRmZS00NDFhLWFjMzMtNjZmY2U0Y2ViMThhOnJWQlh0M1lZaDcxZC1NNnh4OGV2MWNQSDVVSEt1eXEyaURqMHRrRU1pZDg=
+      tls:           # The KeySecure client TLS configuration
+        ca: ""       # Path to one or multiple PEM-encoded CA certificates for verifying the Fortanix SDKMS TLS certificate. 
   aws:
     # The AWS SecretsManager key store. The server will store
     # secret keys at the AWS SecretsManager encrypted with
