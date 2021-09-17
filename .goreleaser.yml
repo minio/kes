@@ -67,7 +67,7 @@ changelog:
 dockers:
 - image_templates:
   - "minio/kes:{{ .Tag }}-amd64"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -77,7 +77,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "minio/kes:{{ .Tag }}-ppc64le"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -87,7 +87,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "minio/kes:{{ .Tag }}-s390x"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -97,7 +97,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "minio/kes:{{ .Tag }}-arm64"
-  use_buildx: true
+  use: buildx
   goarch: arm64
   dockerfile: Dockerfile.release
   extra_files:
@@ -108,7 +108,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "quay.io/minio/kes:{{ .Tag }}-amd64"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -118,7 +118,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "quay.io/minio/kes:{{ .Tag }}-ppc64le"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -128,7 +128,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "quay.io/minio/kes:{{ .Tag }}-s390x"
-  use_buildx: true
+  use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
@@ -138,7 +138,7 @@ dockers:
   - "--build-arg=TAG={{ .Tag }}"
 - image_templates:
   - "quay.io/minio/kes:{{ .Tag }}-arm64"
-  use_buildx: true
+  use: buildx
   goarch: arm64
   dockerfile: Dockerfile.release
   extra_files:
