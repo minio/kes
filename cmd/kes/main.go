@@ -25,6 +25,8 @@ const usage = `Usage:
 
 Commands:
     server                   Starts a KES server.
+    gateway                  Starts a KES gateway.
+
     key                      Manage secret keys.
     log                      Work with server logs.
     policy                   Manage the kes server policies.
@@ -71,6 +73,8 @@ func main() {
 	switch args := cli.Args(); args[0] {
 	case "server":
 		server(args)
+	case "gateway":
+		gatewayCmd(args)
 	case "key":
 		keyCmd(args)
 	case "log":

@@ -1,0 +1,266 @@
+# The TCP address (ip:port) for the KES gateway to listen on.
+address: 0.0.0.0:7373
+
+# The root identity. Root is the identity that can perform
+# any operation. A root identity must be specified - either
+# here as part of the config file or via a CLI argument.
+root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
+
+# The TLS configuration for the KES gateway. A KES gateway
+# accepts HTTP only over TLS (HTTPS). Therefore, a TLS
+# private key and public certificate must be specified,
+# either here as part of the config file or via CLI arguments.
+tls:
+  key: ./server.key   # Path to the TLS private key
+  cert: ./server.cert # Path to the TLS certificate
+
+  # The TLS proxy configuration. A TLS proxy, like nginx, sits in
+  # between a KES client and the KES gateway and usually acts as a
+  # load balancer or common endpoint.
+  # All connections from the KES client to the TLS proxy as well
+  # the connections from the TLS proxy to the KES gateway must be
+  # established over TLS.
+  proxy:
+    # The identities of all TLS proxies directly connected to the
+    # KES gateway.
+    #
+    # Note that a TLS proxy can act as any identity (including root)
+    # since it can forward arbitrary client certificates. Client certificates
+    # aren't secret information and a malicious TLS proxy can fake any
+    # identity it has seen before. Therefore, its critical that all TLS proxy
+    # identities are secure and trusted servers.
+    identities: []
+    # The HTTP header sent by the TLS proxy to forward certain data
+    # about the client to the KES gateway.
+    header:
+      # The HTTP header containing the URL-escaped and PEM-encoded
+      # certificate of the kes client forwarded by the TLS proxy.
+      cert: X-Tls-Client-Cert
+
+# The (pre-defined) policy definitions.
+#
+# A policy must have an unique name (e.g my-app) and specifies which
+# gateway APIs can be accessed. An API path pattern is a glob pattern
+# of the following form:
+#   <API-version>/<API>/<operation>/[<argument-0>/<argument-1>/...]>
+#
+# Each KES gateway API has an unique path - e.g. /v1/key/create/<key-name>.
+# A client request is allowed if and only if no deny pattern AND at least one
+# allow pattern matches the request URL path.
+#
+# A policy has zero (by default) or more assigned identities. However,
+# an identity can never be assigned to more than one policy at the same
+# time. So, one policy has N assigned identities but one identity is
+# assigned to at most one policy.
+#
+# In general, each user/application should only have the minimal
+# set of policy permissions to accomplish whatever it needs to do.
+# Therefore, it is recommended to define policies based on workflows
+# and then assign them to the identities.
+
+# The following policy section shows some example policy definitions.
+# Please remove/adjust to your needs.
+policy:
+  my-app:
+    allow:
+    - /v1/key/create/my-app*
+    - /v1/key/generate/my-app*
+    - /v1/key/decrypt/my-app*
+    deny:
+    - /v1/key/generate/my-app-internal*
+    - /v1/key/decrypt/my-app-internal*
+    identities:
+    - df7281ca3fed4ef7d06297eb7cb9d590a4edc863b4425f4762bb2afaebfd3258
+    - c0ecd5962eaf937422268b80a93dde4786dc9783fb2480ddea0f3e5fe471a731
+
+  my-app-ops:
+    allow:
+    - /v1/key/delete/my-app*
+    - /v1/policy/show/my-app
+    - /v1/identity/assign/my-app/*
+    identities:
+    - 7ec8095a5308a535b72b35c7ccd4ce1d7c14af713acd22e2935a9d6e4fe18127
+
+cache:
+  # Cache expiry specifies when cache entries expire.
+  expiry:
+    # Period after which any cache entries are discarded.
+    # It determines how often the KES gateway has to fetch
+    # a secret key from the KMS.
+    #
+    # If not set, KES will default to an expiry of 5 minutes.
+    any: 5m0s
+    # Period after which all unused cache entries are discarded.
+    # It determines how often "not frequently" used secret keys
+    # must be fetched from the KMS.
+    #
+    # If not set, KES will default to an expiry of 30 seconds.
+    unused: 20s
+
+# The console logging configuration. In general, the KES gateway
+# distinguishes between (operational) errors and audit events.
+# By default, the KES gateway logs error events to STDERR but
+# does not log audit log events to STDOUT.
+#
+# The following log configuration only affects logging to console.
+log:
+  # Enable/Disable logging error events to STDERR. Valid values
+  # are "on" or "off". If not set the default is "on". If no error
+  # events should be logged to STDERR it has to be set explicitly
+  # to: "off".
+  error: on
+
+  # Enable/Disable logging audit events to STDOUT. Valid values
+  # are "on" and "off". If not set the default is "off".
+  # Logging audit events to STDOUT may flood your console since
+  # there will be one audit log event per request-response pair.
+  #
+  # For tracing/monitoring audit logs take a look at the
+  # /v1/log/audit/trace API.
+  #
+  # Each audit event is a JSON object representing a request-response
+  # pair that contains the time, client identity, the API path, HTTP
+  # response status code etc.
+  # {
+  #   "time": "2006-01-02T15:04:05Z07:00",
+  #   "request": {
+  #     "path":     "/v1/key/create/my-app-key",
+  #     "identity": "4067503933d4a78358f908a2df7ec14e554c612acf8a9d1aa29b7da4aa018ec9",
+  #   },
+  #   "response": {
+  #     "status": 200
+  #   }
+  # }
+  # The gateway will write such an audit log entry for every HTTP
+  # request-response pair - including invalid requests.
+  audit: off
+
+# In the keys section, pre-defined keys can be specified. The KES
+# gateway will try to create the listed keys before startup.
+keys:
+  - name: some-key-name 
+  - name: another-key-name
+
+# The keystore section specifies which KMS - or in general key store - is
+# used to store and fetch encryption keys.
+# A KES gateway can only use one KMS / key store at the same time.
+# If no store is explicitly specified the gateway will use store
+# keys in-memory. In this case all keys are lost when the KES gateway
+# restarts.
+keystore:
+  # Configuration for storing keys on the filesystem.
+  # The path must be path to a directory. If it doesn't
+  # exist then the KES gateway will create the directory.
+  #
+  # The main purpose of the fs configuration is testing
+  # and development. It should not be used for production.
+  fs:
+    path: "" # Path to directory. Keys will be stored as files.
+
+  # Configuration for storing keys via a KES KeyStore plugin or at
+  # a KeyStore that exposes an API compatible to the KES KeyStore
+  # plugin specification: https://github.com/minio/kes/blob/master/internal/generic/spec-v1.md
+  generic:
+    endpoint: "" # The plugin endpoint - e.g. https://127.0.0.1:7001
+    tls:         # The KES client TLS configuration for mTLS authentication and certificate verification.
+      key: ""    # Path to the TLS client private key for mTLS authentication
+      cert: ""   # Path to the TLS client certificate for mTLS authentication
+      ca: ""     # Path to one or multiple PEM root CA certificates
+
+  # Hashicorp Vault configuration. The KES gateway will store/fetch
+  # secret keys at/from Vault's key-value backend.
+  #
+  # For more information take a look at:
+  # https://www.vaultproject.io/api/secret/kv/kv-v1.html
+  vault:
+    endpoint: ""  # The Vault endpoint - e.g. https://127.0.0.1:8200
+    engine: ""    # The path of the K/V engine - e.g. secrets. If empty, defaults to: kv. (Vault default)
+    version: ""   # The K/V engine version - either "v1" or "v2". The "v1" engine is recommended.
+    namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+    prefix: ""    # An optional K/V prefix. The gateway will store keys under this prefix.
+    approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
+      engine: ""  # The path of the AppRole engine - e.g. authenticate. If empty, defaults to: approle. (Vault default)
+      id: ""      # Your AppRole Role ID
+      secret: ""  # Your AppRole Secret ID
+      retry: 15s  # Duration until the gateway tries to re-authenticate after connection loss.
+    kubernetes: # Kubernetes credentials. See: https://www.vaultproject.io/docs/auth/kubernetes
+      engine: ""  # The path of the Kubernetes engine e.g. authenticate. If empty, defaults to: kubernetes. (Vault default)
+      role: ""    # The Kubernetes JWT role
+      jwt:  ""    # Either the JWT provided by K8S or a path to a K8S secret containing the JWT.
+      retry: 15s  # Duration until the gateway tries to re-authenticate after connection loss.
+    tls:        # The Vault client TLS configuration for mTLS authentication and certificate verification
+      key: ""     # Path to the TLS client private key for mTLS authentication to Vault
+      cert: ""    # Path to the TLS client certificate for mTLS authentication to Vault
+      ca: ""      # Path to one or multiple PEM root CA certificates
+    status:     # Vault status configuration. The gateway will periodically reach out to Vault to check its status.
+      ping: 10s   # Duration until the gateway checks Vault's status again.
+
+  fortanix:
+    # The Fortanix SDKMS key store. The gateway will store secret keys at the Fortanix SDKMS.
+    # See: https://www.fortanix.com/products/data-security-manager/key-management-service
+    sdkms: 
+      endpoint: ""   # The Fortanix SDKMS endpoint - for example: https://sdkms.fortanix.com
+      group_id: ""   # An optional group ID newly created keys will be placed at. For example: ce08d547-2a82-411e-ae2d-83655a4b7617 
+                     # If empty, the applications default group is used. 
+      credentials:   # The Fortanix SDKMS access credentials
+        key: ""      # The application's API key - for example: NWMyMWZlNzktZDRmZS00NDFhLWFjMzMtNjZmY2U0Y2ViMThhOnJWQlh0M1lZaDcxZC1NNnh4OGV2MWNQSDVVSEt1eXEyaURqMHRrRU1pZDg=
+      tls:           # The KeySecure client TLS configuration
+        ca: ""       # Path to one or multiple PEM-encoded CA certificates for verifying the Fortanix SDKMS TLS certificate. 
+  aws:
+    # The AWS SecretsManager key store. The gateway will store
+    # secret keys at the AWS SecretsManager encrypted with
+    # AWS-KMS. See: https://aws.amazon.com/secrets-manager
+    secretsmanager:
+      endpoint: ""   # The AWS SecretsManager endpoint      - e.g.: secretsmanager.us-east-2.amazonaws.com
+      region: ""     # The AWS region of the SecretsManager - e.g.: us-east-2
+      kmskey: ""     # The AWS-KMS key ID used to en/decrypt secrets at the SecretsManager. By default (if not set) the default AWS-KMS key will be used.
+      credentials:   # The AWS credentials for accessing secrets at the AWS SecretsManager.
+        accesskey: ""  # Your AWS Access Key
+        secretkey: ""  # Your AWS Secret Key
+        token: ""      # Your AWS session token (usually optional)
+
+  gemalto:
+    # The Gemalto KeySecure key store. The gateway will store
+    # keys as secrets on the KeySecure instance.
+    keysecure:
+      endpoint: ""    # The KeySecure endpoint - e.g. https://127.0.0.1
+      credentials:    # The authentication to access the KeySecure instance.
+        token: ""     # The refresh token to obtain new short-lived authentication tokens.
+        domain: ""    # The KeySecure domain for which the refresh token is valid. If empty, defaults to the root domain.
+        retry: 15s    # The time the KES gateway waits before it tries to re-authenticate after connection loss.
+      tls:            # The KeySecure client TLS configuration
+        ca: ""        # Path to one or multiple PEM-encoded CA certificates for verifying the KeySecure TLS certificate.
+
+  gcp:
+    # The Google Cloud Platform secret manager.
+    # For more information take a look at:
+    # https://cloud.google.com/secret-manager
+    secretmanager:
+      # The project ID is a unique, user-assigned ID that can be used by Google APIs.
+      # The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens.
+      # It must start with a letter, and cannot have a trailing hyphen.
+      # See: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
+      project_id: ""
+      # An optional GCP SecretManager endpoint. If not set, defaults to: secretmanager.googleapis.com:443
+      endpoint: ""
+      # The credentials for your GCP service account. If running inside GCP (app engine) the credentials
+      # can be empty and will be fetched from the app engine environment automatically.
+      credentials:
+        client_email:   "" # The service account email                          - e.g. <account>@<project-ID>.iam.gserviceaccount.com
+        client_id:      "" # The service account client ID                      - e.g. 113491952745362495489"
+        private_key_id: "" # The service account private key                    - e.g. 381514ebd3cf45a64ca8adc561f0ce28fca5ec06
+        private_key:    "" # The raw encoded private key of the service account - e.g "-----BEGIN PRIVATE KEY-----\n ... \n-----END PRIVATE KEY-----\n
+
+  azure:
+    # The Azure KeyVault configuration.
+    # For more information take a look at:
+    # https://azure.microsoft.com/services/key-vault
+    keyvault:
+      endpoint: ""      # The KeyVault endpoint - e.g. https://my-instance.vault.azure.net
+      # Azure client credentials used to
+      # authenticate to Azure KeyVault.
+      credentials:
+        tenant_id: ""      # The ID of the tenant the client belongs to - i.e. a UUID.
+        client_id: ""      # The ID of the client - i.e. a UUID.
+        client_secret: ""  # The value of the client secret.
+
