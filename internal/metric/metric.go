@@ -131,13 +131,16 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 		m.requestActive.Inc()
 		defer m.requestActive.Dec()
 
-		h(&countResponseWriter{
+		var rw = countResponseWriter{
 			ResponseWriter: w,
-			flusher:        w.(http.Flusher),
 			succeeded:      m.requestSucceeded,
 			errored:        m.requestErrored,
 			failed:         m.requestFailed,
-		}, r)
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			rw.flusher = flusher
+		}
+		h(&rw, r)
 	}
 }
 
@@ -150,12 +153,15 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 // the application can handle.
 func (m *Metrics) Latency(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		h(&latencyResponseWriter{
+		var rw = latencyResponseWriter{
 			ResponseWriter: w,
-			flusher:        w.(http.Flusher),
 			start:          time.Now(),
 			histogram:      m.requestLatency,
-		}, r)
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			rw.flusher = flusher
+		}
+		h(&rw, r)
 	}
 }
 
