@@ -99,7 +99,7 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 
 	keyPath, ok := os.LookupEnv("KES_CLIENT_KEY")
 	if !ok {
-		stdlog.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_CERT' is not set")
+		stdlog.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_KEY' is not set")
 	}
 	if strings.TrimSpace(keyPath) == "" {
 		stdlog.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_KEY' is empty")
