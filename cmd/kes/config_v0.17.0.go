@@ -6,12 +6,13 @@ package main
 
 import "github.com/minio/kes"
 
-// serverConfigV0135 represents a KES server configuration up to
-// v0.13.5. It provides backward-compatible unmarshaling of exiting
+// serverConfigV0170 represents a KES server configuration between v0.14.0
+// and v0.17.0. It provides backward-compatible unmarshaling of exiting
 // configuration files.
 //
-// It will be removed at some time in the future.
-type serverConfigV0135 struct {
+// It will be removed at some time in the future - once serverConfigV0140
+// got removed.
+type serverConfigV0170 struct {
 	Addr string       `yaml:"address"`
 	Root kes.Identity `yaml:"root"`
 
@@ -26,10 +27,7 @@ type serverConfigV0135 struct {
 		} `yaml:"proxy"`
 	} `yaml:"tls"`
 
-	Policies map[string]struct {
-		Paths      []string       `yaml:"paths"`
-		Identities []kes.Identity `yaml:"identities"`
-	} `yaml:"policy"`
+	Policies map[string]policyConfig `yaml:"policy"`
 
 	Cache struct {
 		Expiry struct {
@@ -43,24 +41,23 @@ type serverConfigV0135 struct {
 		Audit string `yaml:"audit"`
 	} `yaml:"log"`
 
-	Keys kmsServerConfig `yaml:"keys"`
+	Keys []struct {
+		Name string `yaml:"name"`
+	} `yaml:"keys"`
+
+	KeyStore kmsServerConfig `yaml:"keystore"`
 }
 
-func (c *serverConfigV0135) Migrate() serverConfig {
-	config := serverConfig{
-		Addr:     c.Addr,
-		TLS:      c.TLS,
-		Cache:    c.Cache,
-		Log:      c.Log,
-		KeyStore: c.Keys,
+func (s *serverConfigV0170) Migrate() serverConfig {
+	var config = serverConfig{
+		Addr:     s.Addr,
+		TLS:      s.TLS,
+		Policies: s.Policies,
+		Cache:    s.Cache,
+		Log:      s.Log,
+		Keys:     s.Keys,
+		KeyStore: s.KeyStore,
 	}
-	config.Admin.Identity = c.Root
-	config.Policies = make(map[string]policyConfig, len(c.Policies))
-	for name, policy := range c.Policies {
-		config.Policies[name] = policyConfig{
-			Allow:      policy.Paths,
-			Identities: policy.Identities,
-		}
-	}
+	config.Admin.Identity = s.Root
 	return config
 }

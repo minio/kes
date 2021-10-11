@@ -30,8 +30,10 @@ import (
 )
 
 type serverConfig struct {
-	Addr string       `yaml:"address"`
-	Root kes.Identity `yaml:"root"`
+	Addr  string `yaml:"address"`
+	Admin struct {
+		Identity kes.Identity `yaml:"identity"`
+	} `yaml:"admin"`
 
 	TLS struct {
 		KeyPath  string `yaml:"key"`
@@ -79,19 +81,28 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 			return config, err
 		}
 
-		var configV0140 serverConfigV0140
-		if errV0140 := yaml.Unmarshal(b, &configV0140); errV0140 == nil {
-			config = configV0140.Migrate()
+		var configV0170 serverConfigV0170
+		if errV0170 := yaml.Unmarshal(b, &configV0170); errV0170 == nil {
+			config = configV0170.Migrate()
 		} else {
-			if _, ok := errV0140.(*yaml.TypeError); !ok {
+			if _, ok := errV0170.(*yaml.TypeError); !ok {
 				return config, err // return the actual unmarshal error on purpose
 			}
 
-			var configV0135 serverConfigV0135
-			if yaml.Unmarshal(b, &configV0135) != nil {
-				return config, err // return the actual unmarshal error on purpose
+			var configV0140 serverConfigV0140
+			if errV0140 := yaml.Unmarshal(b, &configV0140); errV0140 == nil {
+				config = configV0140.Migrate()
+			} else {
+				if _, ok := errV0140.(*yaml.TypeError); !ok {
+					return config, err // return the actual unmarshal error on purpose
+				}
+
+				var configV0135 serverConfigV0135
+				if yaml.Unmarshal(b, &configV0135) != nil {
+					return config, err // return the actual unmarshal error on purpose
+				}
+				config = configV0135.Migrate()
 			}
-			config = configV0135.Migrate()
 		}
 	}
 
@@ -108,7 +119,7 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	// Especially replacing policy paths is quite dangerous since it would not
 	// be obvious which operations are allowed by a policy.
 	config.Addr = expandEnv(config.Addr)
-	config.Root = kes.Identity(expandEnv(config.Root.String()))
+	config.Admin.Identity = kes.Identity(expandEnv(config.Admin.Identity.String()))
 
 	config.TLS.KeyPath = expandEnv(config.TLS.KeyPath)
 	config.TLS.CertPath = expandEnv(config.TLS.CertPath)
@@ -224,7 +235,7 @@ func (config *serverConfig) SetDefaults() {
 // Verify checks whether the serverConfig contains invalid entries, and if so,
 // returns an error.
 func (config *serverConfig) Verify() error {
-	if config.Root.IsUnknown() {
+	if config.Admin.Identity.IsUnknown() {
 		return errors.New("no root identity has been specified")
 	}
 	if config.TLS.KeyPath == "" {
@@ -235,7 +246,7 @@ func (config *serverConfig) Verify() error {
 	}
 
 	for i, identity := range config.TLS.Proxy.Identities {
-		if identity == config.Root {
+		if identity == config.Admin.Identity {
 			return fmt.Errorf("The %d-th TLS proxy identity is equal to the root identity %q. The root identity cannot be used as TLS proxy", i, identity)
 		}
 	}
