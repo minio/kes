@@ -219,7 +219,7 @@ const (
 // Create creates the given key-value pair at Vault if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
-func (s *Store) Create(_ context.Context, name string, key key.Key) error {
+func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	if s.client == nil {
 		s.logf("vault: no connection to vault server: %q", s.Addr)
 		return errCreateKey
@@ -310,18 +310,34 @@ func (s *Store) Create(_ context.Context, name string, key key.Key) error {
 		}
 	}
 
-	// The Vault SDK may return no error even if it hasn't created
-	// an entry - e.g. in case of some network errors. Therefore,
-	// we also check that the returned entry is not nil to ensure
-	// that we got a response from the Vault cluster.
-	entry, err := s.client.Logical().Write(location, data)
+	// The Vault SDK may not return an error even if it hasn't created
+	// an entry - e.g. in case of some network errors. Therefore, we
+	// implement the specific key creation logic ourself.
+	//
+	// We expect HTTP 204 (No Content) when a key got created successfully.
+	// So, we check that Vault response with 204. Otherwise, we return an
+	// error.
+	var req = s.client.Client.NewRequest(http.MethodPut, "/v1/"+location)
+	if err := req.SetJSONBody(data); err != nil {
+		s.logf("vault: failed to create %q: %v", location, err)
+		return err
+	}
+	resp, err := s.client.Client.RawRequestWithContext(ctx, req)
 	if err != nil {
 		s.logf("vault: failed to create %q: %v", location, err)
 		return err
 	}
-	if entry == nil {
-		s.logf("vault: failed to create %q: no create confirmation from vault", location)
-		return errCreateKey
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		if _, err = vaultapi.ParseSecret(resp.Body); err != nil {
+			s.logf("vault: failed to create %q: %v", location, err)
+			return err
+		}
+		err = fmt.Errorf("expected response %s (%d) but received %s (%d)", resp.Status, resp.StatusCode, http.StatusText(http.StatusNoContent), http.StatusNoContent)
+		s.logf("vault: failed to create %q: %v", location, err)
+		return err
 	}
 	return nil
 }
@@ -391,7 +407,7 @@ func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 
 // Delete removes a the value associated with the given key
 // from Vault, if it exists.
-func (s *Store) Delete(_ context.Context, name string) error {
+func (s *Store) Delete(ctx context.Context, name string) error {
 	if s.client == nil {
 		s.logf("vault: no connection to vault server: %q", s.Addr)
 		return errDeleteKey
@@ -409,18 +425,30 @@ func (s *Store) Delete(_ context.Context, name string) error {
 		location = path.Join(s.Engine, s.Location, name) // /<engine>/<location>/<name>
 	}
 
-	// Vault will not return an error if an entry does not
-	// exist. Instead, it responds with 204 No Content and
-	// no body. In this case the client also returns a nil-error
-	// Therefore, we can just try to delete it in any case.
-	result, err := s.client.Logical().Delete(location)
+	// The Vault SDK may not return an error even if it hasn't deleted
+	// an entry - e.g. in case of some network errors. Therefore, we
+	// implement the specific key deletion logic ourself.
+	//
+	// We expect HTTP 204 (No Content) when a key got deleted successfully.
+	// So, we check that Vault response with 204. Otherwise, we return an
+	// error.
+	var req = s.client.Client.NewRequest("DELETE", "/v1/"+location)
+	resp, err := s.client.Client.RawRequestWithContext(ctx, req)
 	if err != nil {
-		s.logf("vault: failed to delete %q: %v", name, err)
+		s.logf("vault: failed to delete %q: %v", location, err)
 		return err
 	}
-	if result == nil {
-		s.logf("vault: failed to delete %q: no delete confirmation from vault", name)
-		return errDeleteKey
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		if _, err := vaultapi.ParseSecret(resp.Body); err != nil {
+			s.logf("vault: failed to delete %q: %v", location, err)
+			return err
+		}
+		err = fmt.Errorf("expected response %s (%d) but received %s (%d)", resp.Status, resp.StatusCode, http.StatusText(http.StatusNoContent), http.StatusNoContent)
+		s.logf("vault: failed to delete %q: %v", location, err)
+		return err
 	}
 	return nil
 }
