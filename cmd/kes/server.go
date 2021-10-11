@@ -42,10 +42,6 @@ const serverCmdUsage = `Usage:
 Options:
     --addr <IP:PORT>       The address of the server (default: 0.0.0.0:7373)
     --config <PATH>        Path to the server configuration file
-    --root  <IDENTITY>     The identity of root - who can perform any operation.
-                           A root identity must be specified - either via this
-                           flag or within the config file. This flag takes
-                           precedence over the config file
 
     --mlock                Lock all allocated memory pages to prevent the OS from
                            swapping them to the disk and eventually leak secrets
@@ -70,18 +66,12 @@ Starts a KES server. The server address can be specified in the config file but
 may be overwriten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
 the PORT to 7373.
 
-The server's root identity can be specified in the config file but may be overwriten
-by the --root flag. The IDENTITY should be a hash of a TLS public key encoded as hex
-string. If the IDENTITY is not a public key hash e.g. --root="not-a-hash", the root
-identity is effectively disabled.
-
 The client TLS verification can be disabled by setting --auth=off. The server then
 accepts arbitrary client certificates but still maps them to policies. So, it disables
 authentication but not authorization.
 
 Examples:
-    $ export KES_ROOT_IDENTITY=$(kes tool identity of root.cert)
-    $ kes server --key=private.key --cert=public.crt --root="$KES_ROOT_IDENTITY" --auth=off
+    $ kes server --config config.yml --auth =off
 `
 
 func server(args []string) {
@@ -91,7 +81,6 @@ func server(args []string) {
 	var (
 		addrFlag     string
 		configFlag   string
-		rootFlag     string
 		mlockFlag    bool
 		tlsKeyFlag   string
 		tlsCertFlag  string
@@ -100,7 +89,6 @@ func server(args []string) {
 	)
 	cli.StringVar(&addrFlag, "addr", "0.0.0.0:7373", "The address of the server")
 	cli.StringVar(&configFlag, "config", "", "Path to the server configuration file")
-	cli.StringVar(&rootFlag, "root", "", "The identity of root - who can perform any operation")
 	cli.BoolVar(&mlockFlag, "mlock", false, "Lock all allocated memory pages")
 	cli.StringVar(&tlsKeyFlag, "key", "", "Path to the TLS private key")
 	cli.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
@@ -122,9 +110,6 @@ func server(args []string) {
 	config.SetDefaults()
 	if config.Addr == "" {
 		config.Addr = addrFlag
-	}
-	if config.Root == "" {
-		config.Root = kes.Identity(rootFlag)
 	}
 	if config.TLS.KeyPath == "" {
 		config.TLS.KeyPath = tlsKeyFlag
@@ -186,7 +171,7 @@ func server(args []string) {
 	}
 
 	roles := &auth.Roles{
-		Root: config.Root,
+		Root: config.Admin.Identity,
 	}
 	for name, policy := range config.Policies {
 		p, err := kes.NewPolicy(policy.Allow...)
@@ -377,10 +362,10 @@ func server(args []string) {
 	quietFlag.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
 	quietFlag.Println()
 
-	if r, err := hex.DecodeString(config.Root.String()); err == nil && len(r) == sha256.Size {
-		quietFlag.Println(blue.Sprint("Root:    "), config.Root)
+	if r, err := hex.DecodeString(config.Admin.Identity.String()); err == nil && len(r) == sha256.Size {
+		quietFlag.Println(blue.Sprint("Admin:   "), config.Admin.Identity)
 	} else {
-		quietFlag.Println(blue.Sprint("Root:    "), "_     [ disabled ]")
+		quietFlag.Println(blue.Sprint("Admin:   "), "_     [ disabled ]")
 	}
 	if auth := strings.ToLower(mtlsAuthFlag); auth == "on" {
 		quietFlag.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))

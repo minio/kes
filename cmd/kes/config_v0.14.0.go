@@ -54,13 +54,13 @@ type serverConfigV0140 struct {
 func (c *serverConfigV0140) Migrate() serverConfig {
 	config := serverConfig{
 		Addr:     c.Addr,
-		Root:     c.Root,
 		TLS:      c.TLS,
 		Cache:    c.Cache,
 		Log:      c.Log,
 		Keys:     c.Keys,
 		KeyStore: c.KeyStore,
 	}
+	config.Admin.Identity = c.Root
 	config.Policies = make(map[string]policyConfig, len(c.Policies))
 	for name, policy := range c.Policies {
 		config.Policies[name] = policyConfig{
