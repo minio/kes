@@ -11,8 +11,9 @@ root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
 # private key and public certificate must be specified,
 # either here as part of the config file or via CLI arguments.
 tls:
-  key: ./server.key   # Path to the TLS private key
-  cert: ./server.cert # Path to the TLS certificate
+  key:      ./server.key   # Path to the TLS private key
+  cert:     ./server.cert  # Path to the TLS certificate
+  password: ""             # An optional password to decrypt the TLS private key
 
   # The TLS proxy configuration. A TLS proxy, like nginx, sits in
   # between a KES client and the KES server and usually acts as a

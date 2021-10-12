@@ -217,7 +217,7 @@ func server(args []string) {
 		}
 	}
 
-	certificate, err := xhttp.LoadCertificate(config.TLS.CertPath, config.TLS.KeyPath)
+	certificate, err := xhttp.LoadCertificate(config.TLS.CertPath, config.TLS.KeyPath, config.TLS.KeyPassword)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to load TLS certificate: %v", err)
 	}
@@ -389,8 +389,11 @@ func server(args []string) {
 		quietFlag.Println("         ", bold.Sprint("kes --help"))
 	}
 
-	// Start the HTTPS server
-	if err := server.ListenAndServeTLS(config.TLS.CertPath, config.TLS.KeyPath); err != http.ErrServerClosed {
+	// Start the HTTPS server. We pass a tls.Config.GetCertificate.
+	// Therefore, we pass no certificate or private key file.
+	// Passing the private key file here directly would break support
+	// for encrypted private keys - which must be decrypted beforehand.
+	if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		stdlog.Fatalf("Error: failed to start server: %v", err)
 	}
 }

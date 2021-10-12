@@ -48,16 +48,20 @@ type serverConfigV0170 struct {
 	KeyStore kmsServerConfig `yaml:"keystore"`
 }
 
-func (s *serverConfigV0170) Migrate() serverConfig {
+func (c *serverConfigV0170) Migrate() serverConfig {
 	var config = serverConfig{
-		Addr:     s.Addr,
-		TLS:      s.TLS,
-		Policies: s.Policies,
-		Cache:    s.Cache,
-		Log:      s.Log,
-		Keys:     s.Keys,
-		KeyStore: s.KeyStore,
+		Addr:     c.Addr,
+		Policies: c.Policies,
+		Cache:    c.Cache,
+		Log:      c.Log,
+		Keys:     c.Keys,
+		KeyStore: c.KeyStore,
 	}
-	config.Admin.Identity = s.Root
+	config.Admin.Identity = c.Root
+
+	config.TLS.KeyPath = c.TLS.KeyPath
+	config.TLS.CertPath = c.TLS.CertPath
+	config.TLS.Proxy = c.TLS.Proxy
+
 	return config
 }
