@@ -36,9 +36,10 @@ type serverConfig struct {
 	} `yaml:"admin"`
 
 	TLS struct {
-		KeyPath  string `yaml:"key"`
-		CertPath string `yaml:"cert"`
-		Proxy    struct {
+		KeyPath     string `yaml:"key"`
+		KeyPassword string `yaml:"password"`
+		CertPath    string `yaml:"cert"`
+		Proxy       struct {
 			Identities []kes.Identity `yaml:"identities"`
 			Header     struct {
 				ClientCert string `yaml:"cert"`
@@ -122,6 +123,7 @@ func loadServerConfig(path string) (config serverConfig, err error) {
 	config.Admin.Identity = kes.Identity(expandEnv(config.Admin.Identity.String()))
 
 	config.TLS.KeyPath = expandEnv(config.TLS.KeyPath)
+	config.TLS.KeyPassword = expandEnv(config.TLS.KeyPassword)
 	config.TLS.CertPath = expandEnv(config.TLS.CertPath)
 	config.TLS.Proxy.Header.ClientCert = expandEnv(config.TLS.Proxy.Header.ClientCert)
 	for i, identity := range config.TLS.Proxy.Identities { // The TLS proxy identities section
