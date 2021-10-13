@@ -1,10 +1,12 @@
 # The TCP address (ip:port) for the KES server to listen on.
 address: 0.0.0.0:7373
 
-# The root identity. Root is the identity that can perform
-# any operation. A root identity must be specified - either
-# here as part of the config file or via a CLI argument.
-root: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
+admin:
+  # The admin identity identifies the public/private key pair
+  # that can perform any API operation.
+  # The admin account can be disabled by setting a value that
+  # cannot match any public key - e.g. "foobar" or "disabled".
+  identity: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
 
 # The TLS configuration for the KES server. A KES server
 # accepts HTTP only over TLS (HTTPS). Therefore, a TLS
