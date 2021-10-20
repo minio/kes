@@ -32,6 +32,7 @@ import (
 	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/yml"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -103,24 +104,6 @@ func server(args []string) {
 	var ctx, cancelCtx = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelCtx()
 
-	config, err := loadServerConfig(configFlag)
-	if err != nil {
-		stdlog.Fatalf("Error: failed to read config file: %v", err)
-	}
-	config.SetDefaults()
-	if config.Addr == "" {
-		config.Addr = addrFlag
-	}
-	if config.TLS.KeyPath == "" {
-		config.TLS.KeyPath = tlsKeyFlag
-	}
-	if config.TLS.CertPath == "" {
-		config.TLS.CertPath = tlsCertFlag
-	}
-	if err = config.Verify(); err != nil {
-		stdlog.Fatalf("Error: %v", err)
-	}
-
 	if mlockFlag {
 		if runtime.GOOS != "linux" {
 			stdlog.Fatal("Error: cannot lock memory: syscall requires a linux system")
@@ -130,8 +113,31 @@ func server(args []string) {
 		}
 	}
 
+	config, err := yml.ReadServerConfig(configFlag)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to read config file: %v", err)
+	}
+	if config.Address.Value() == "" {
+		config.Address.Set(addrFlag)
+	}
+	if config.TLS.PrivateKey.Value() == "" {
+		config.TLS.PrivateKey.Set(tlsKeyFlag)
+	}
+	if config.TLS.Certificate.Value() == "" {
+		config.TLS.Certificate.Set(tlsCertFlag)
+	}
+	if config.Admin.Identity.Value().IsUnknown() {
+		stdlog.Fatal("Error: no admin identity specified")
+	}
+	if config.TLS.PrivateKey.Value() == "" {
+		stdlog.Fatal("Error: no TLS private key specified")
+	}
+	if config.TLS.Certificate.Value() == "" {
+		stdlog.Fatal("Error: no TLS certificate specified")
+	}
+
 	var errorLog *xlog.Target
-	switch strings.ToLower(config.Log.Error) {
+	switch strings.ToLower(config.Log.Error.Value()) {
 	case "on":
 		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
 			errorLog = xlog.NewTarget(os.Stderr)
@@ -141,37 +147,37 @@ func server(args []string) {
 	case "off":
 		errorLog = xlog.NewTarget(ioutil.Discard)
 	default:
-		stdlog.Fatalf("Error: %q is an invalid error log configuration", config.Log.Error)
+		stdlog.Fatalf("Error: %q is an invalid error log configuration", config.Log.Error.Value())
 	}
 
 	var auditLog *xlog.Target
-	switch strings.ToLower(config.Log.Audit) {
+	switch strings.ToLower(config.Log.Audit.Value()) {
 	case "on":
 		auditLog = xlog.NewTarget(os.Stdout)
 	case "off":
 		auditLog = xlog.NewTarget(ioutil.Discard)
 	default:
-		stdlog.Fatalf("Error: %q is an invalid audit log configuration", config.Log.Audit)
+		stdlog.Fatalf("Error: %q is an invalid audit log configuration", config.Log.Audit.Value())
 	}
 	auditLog.Log().SetFlags(0)
 
 	var proxy *auth.TLSProxy
 	if len(config.TLS.Proxy.Identities) != 0 {
 		proxy = &auth.TLSProxy{
-			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert),
+			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert.Value()),
 		}
 		if strings.ToLower(mtlsAuthFlag) != "off" {
 			proxy.VerifyOptions = new(x509.VerifyOptions)
 		}
 		for _, identity := range config.TLS.Proxy.Identities {
-			if !identity.IsUnknown() {
-				proxy.Add(identity)
+			if !identity.Value().IsUnknown() {
+				proxy.Add(identity.Value())
 			}
 		}
 	}
 
 	roles := &auth.Roles{
-		Root: config.Admin.Identity,
+		Root: config.Admin.Identity.Value(),
 	}
 	for name, policy := range config.Policies {
 		p, err := kes.NewPolicy(policy.Allow...)
@@ -184,25 +190,25 @@ func server(args []string) {
 		roles.Set(name, p)
 
 		for _, identity := range policy.Identities {
-			if proxy != nil && proxy.Is(identity) {
-				stdlog.Fatalf("Error: cannot assign policy %q to TLS proxy %q", name, identity)
+			if proxy != nil && proxy.Is(identity.Value()) {
+				stdlog.Fatalf("Error: cannot assign policy %q to TLS proxy %q", name, identity.Value())
 			}
-			if roles.IsAssigned(identity) {
-				stdlog.Fatalf("Error: cannot assign policy %q to identity %q: this identity already has a policy", name, identity)
+			if roles.IsAssigned(identity.Value()) {
+				stdlog.Fatalf("Error: cannot assign policy %q to identity %q: this identity already has a policy", name, identity.Value())
 			}
-			if !identity.IsUnknown() {
-				roles.Assign(name, identity)
+			if !identity.Value().IsUnknown() {
+				roles.Assign(name, identity.Value())
 			}
 		}
 	}
 
-	store, err := config.KeyStore.Connect(quietFlag, errorLog.Log())
+	store, err := connect(config, quietFlag, errorLog.Log())
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
 	manager := &key.Manager{
-		CacheExpiryAny:    time.Duration(config.Cache.Expiry.Any),
-		CacheExpiryUnused: time.Duration(config.Cache.Expiry.Unused),
+		CacheExpiryAny:    config.Cache.Expiry.Any.Value(),
+		CacheExpiryUnused: config.Cache.Expiry.Unused.Value(),
 		Store:             store,
 	}
 
@@ -212,12 +218,12 @@ func server(args []string) {
 			stdlog.Fatalf("Error: failed to create key %q: %v", k.Name, err)
 		}
 
-		if err = store.Create(ctx, k.Name, key.New(bytes)); err != nil && err != kes.ErrKeyExists {
-			stdlog.Fatalf("Error: failed to create key %q: %v", k.Name, err)
+		if err = store.Create(ctx, k.Name.Value(), key.New(bytes)); err != nil && err != kes.ErrKeyExists {
+			stdlog.Fatalf("Error: failed to create key %q: %v", k.Name.Value(), err)
 		}
 	}
 
-	certificate, err := xhttp.LoadCertificate(config.TLS.CertPath, config.TLS.KeyPath, config.TLS.KeyPassword)
+	certificate, err := xhttp.LoadCertificate(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value())
 	if err != nil {
 		stdlog.Fatalf("Error: failed to load TLS certificate: %v", err)
 	}
@@ -264,7 +270,7 @@ func server(args []string) {
 	mux.Handle("/", xhttp.Timeout(10*time.Second, metrics.Count(metrics.Latency(xhttp.AuditLog(auditLog.Log(), roles, xhttp.TLSProxy(proxy, http.NotFound))))))
 
 	server := http.Server{
-		Addr:    config.Addr,
+		Addr:    config.Address.Value(),
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			MinVersion:     tls.VersionTLS12,
@@ -351,8 +357,8 @@ func server(args []string) {
 		bold   = color.New(color.Bold)
 		italic = color.New(color.Italic)
 	)
-	ip, port := serverAddr(config.Addr)
-	kmsKind, kmsEndpoint, err := config.KeyStore.Description()
+	ip, port := serverAddr(config.Address.Value())
+	kmsKind, kmsEndpoint, err := description(config)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
@@ -362,7 +368,7 @@ func server(args []string) {
 	quietFlag.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
 	quietFlag.Println()
 
-	if r, err := hex.DecodeString(config.Admin.Identity.String()); err == nil && len(r) == sha256.Size {
+	if r, err := hex.DecodeString(config.Admin.Identity.Value().String()); err == nil && len(r) == sha256.Size {
 		quietFlag.Println(blue.Sprint("Admin:   "), config.Admin.Identity)
 	} else {
 		quietFlag.Println(blue.Sprint("Admin:   "), "_     [ disabled ]")
