@@ -34,6 +34,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/fips"
+	"github.com/minio/kes/internal/yml"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -406,29 +407,21 @@ func migrate(args []string) {
 		pattern = "*"
 	}
 
-	sourceConfig, err := loadServerConfig(fromFlag)
+	sourceConfig, err := yml.ReadServerConfig(fromFlag)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
-	sourceConfig.KeyStore.SetDefaults()
-	if err := sourceConfig.KeyStore.Verify(); err != nil {
-		stdlog.Fatalf("Error: %v", err)
-	}
 
-	targetConfig, err := loadServerConfig(toFlag)
+	targetConfig, err := yml.ReadServerConfig(toFlag)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to read config file: %v", err)
 	}
-	targetConfig.KeyStore.SetDefaults()
-	if err := targetConfig.KeyStore.Verify(); err != nil {
-		stdlog.Fatalf("Error: %v", err)
-	}
 
-	src, err := sourceConfig.KeyStore.Connect(quietFlag, nil)
+	src, err := connect(sourceConfig, quietFlag, nil)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	dst, err := targetConfig.KeyStore.Connect(quietFlag, nil)
+	dst, err := connect(targetConfig, quietFlag, nil)
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}

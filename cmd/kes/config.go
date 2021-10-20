@@ -8,14 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	stdlog "log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/minio/kes"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/azure"
 	"github.com/minio/kes/internal/fortanix"
@@ -26,546 +24,87 @@ import (
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/vault"
+	"github.com/minio/kes/internal/yml"
 	"gopkg.in/yaml.v2"
 )
 
-type serverConfig struct {
-	Addr  string `yaml:"address"`
-	Admin struct {
-		Identity kes.Identity `yaml:"identity"`
-	} `yaml:"admin"`
-
-	TLS struct {
-		KeyPath     string `yaml:"key"`
-		KeyPassword string `yaml:"password"`
-		CertPath    string `yaml:"cert"`
-		Proxy       struct {
-			Identities []kes.Identity `yaml:"identities"`
-			Header     struct {
-				ClientCert string `yaml:"cert"`
-			} `yaml:"header"`
-		} `yaml:"proxy"`
-	} `yaml:"tls"`
-
-	Policies map[string]policyConfig `yaml:"policy"`
-
-	Cache struct {
-		Expiry struct {
-			Any    duration `yaml:"any"`    // Use custom type for env. var support
-			Unused duration `yaml:"unused"` // Use custom type for env. var support
-		} `yaml:"expiry"`
-	} `yaml:"cache"`
-
-	Log struct {
-		Error string `yaml:"error"`
-		Audit string `yaml:"audit"`
-	} `yaml:"log"`
-
-	Keys []struct {
-		Name string `yaml:"name"`
-	} `yaml:"keys"`
-
-	KeyStore kmsServerConfig `yaml:"keystore"`
-}
-
-func loadServerConfig(path string) (config serverConfig, err error) {
-	if path == "" {
-		return config, nil
-	}
-
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return config, err
-	}
-	if err = yaml.UnmarshalStrict(b, &config); err != nil {
-		if _, ok := err.(*yaml.TypeError); !ok {
-			return config, err
-		}
-
-		var configV0170 serverConfigV0170
-		if errV0170 := yaml.Unmarshal(b, &configV0170); errV0170 == nil {
-			config = configV0170.Migrate()
-		} else {
-			if _, ok := errV0170.(*yaml.TypeError); !ok {
-				return config, err // return the actual unmarshal error on purpose
-			}
-
-			var configV0140 serverConfigV0140
-			if errV0140 := yaml.Unmarshal(b, &configV0140); errV0140 == nil {
-				config = configV0140.Migrate()
-			} else {
-				if _, ok := errV0140.(*yaml.TypeError); !ok {
-					return config, err // return the actual unmarshal error on purpose
-				}
-
-				var configV0135 serverConfigV0135
-				if yaml.Unmarshal(b, &configV0135) != nil {
-					return config, err // return the actual unmarshal error on purpose
-				}
-				config = configV0135.Migrate()
-			}
-		}
-	}
-
-	// Replace any configuration file fields that refer to env. variables
-	// with the corresponding env. variable value.
-	// A field refers to an env. variable if it has the form:
-	//   ${<env-var-name>}
-	//
-	// We have to replace fields that refer to env. variables before we
-	// do anything else (e.g. verify that the config file is well-formed)
-	// since we have to take values coming from the env. into account.
-	//
-	// We don't replace any durations - e.g. cache expiry - and policy paths.
-	// Especially replacing policy paths is quite dangerous since it would not
-	// be obvious which operations are allowed by a policy.
-	config.Addr = expandEnv(config.Addr)
-	config.Admin.Identity = kes.Identity(expandEnv(config.Admin.Identity.String()))
-
-	config.TLS.KeyPath = expandEnv(config.TLS.KeyPath)
-	config.TLS.KeyPassword = expandEnv(config.TLS.KeyPassword)
-	config.TLS.CertPath = expandEnv(config.TLS.CertPath)
-	config.TLS.Proxy.Header.ClientCert = expandEnv(config.TLS.Proxy.Header.ClientCert)
-	for i, identity := range config.TLS.Proxy.Identities { // The TLS proxy identities section
-		config.TLS.Proxy.Identities[i] = kes.Identity(expandEnv(identity.String()))
-	}
-
-	config.Log.Audit = expandEnv(config.Log.Audit)
-	config.Log.Error = os.ExpandEnv(config.Log.Error)
-
-	for _, policy := range config.Policies { // The policy section
-		for i, identity := range policy.Identities {
-			policy.Identities[i] = kes.Identity(expandEnv(identity.String()))
-		}
-	}
-
-	for i, key := range config.Keys {
-		config.Keys[i].Name = expandEnv(key.Name)
-	}
-
-	// FS backend
-	config.KeyStore.Fs.Path = expandEnv(config.KeyStore.Fs.Path)
-
-	// Hashicorp Vault backend
-	config.KeyStore.Vault.Endpoint = expandEnv(config.KeyStore.Vault.Endpoint)
-	config.KeyStore.Vault.EnginePath = expandEnv(config.KeyStore.Vault.EnginePath)
-	config.KeyStore.Vault.EngineVersion = expandEnv(config.KeyStore.Vault.EngineVersion)
-	config.KeyStore.Vault.Namespace = expandEnv(config.KeyStore.Vault.Namespace)
-	config.KeyStore.Vault.Prefix = expandEnv(config.KeyStore.Vault.Prefix)
-	config.KeyStore.Vault.AppRole.EnginePath = expandEnv(config.KeyStore.Vault.AppRole.EnginePath)
-	config.KeyStore.Vault.AppRole.ID = expandEnv(config.KeyStore.Vault.AppRole.ID)
-	config.KeyStore.Vault.AppRole.Secret = expandEnv(config.KeyStore.Vault.AppRole.Secret)
-	config.KeyStore.Vault.Kubernetes.EnginePath = expandEnv(config.KeyStore.Vault.Kubernetes.EnginePath)
-	config.KeyStore.Vault.Kubernetes.JWT = expandEnv(config.KeyStore.Vault.Kubernetes.JWT)
-	config.KeyStore.Vault.Kubernetes.Role = expandEnv(config.KeyStore.Vault.Kubernetes.Role)
-	config.KeyStore.Vault.TLS.KeyPath = expandEnv(config.KeyStore.Vault.TLS.KeyPath)
-	config.KeyStore.Vault.TLS.CertPath = expandEnv(config.KeyStore.Vault.TLS.CertPath)
-	config.KeyStore.Vault.TLS.CAPath = expandEnv(config.KeyStore.Vault.TLS.CAPath)
-
-	// Fortanix SDKMS backend
-	config.KeyStore.Fortanix.SDKMS.Endpoint = expandEnv(config.KeyStore.Fortanix.SDKMS.Endpoint)
-	config.KeyStore.Fortanix.SDKMS.GroupID = expandEnv(config.KeyStore.Fortanix.SDKMS.GroupID)
-	config.KeyStore.Fortanix.SDKMS.Login.APIKey = expandEnv(config.KeyStore.Fortanix.SDKMS.Login.APIKey)
-	config.KeyStore.Fortanix.SDKMS.TLS.CAPath = expandEnv(config.KeyStore.Fortanix.SDKMS.TLS.CAPath)
-
-	// AWS SecretsManager backend
-	config.KeyStore.Aws.SecretsManager.Endpoint = expandEnv(config.KeyStore.Aws.SecretsManager.Endpoint)
-	config.KeyStore.Aws.SecretsManager.Region = expandEnv(config.KeyStore.Aws.SecretsManager.Region)
-	config.KeyStore.Aws.SecretsManager.KmsKey = expandEnv(config.KeyStore.Aws.SecretsManager.KmsKey)
-	config.KeyStore.Aws.SecretsManager.Login.AccessKey = expandEnv(config.KeyStore.Aws.SecretsManager.Login.AccessKey)
-	config.KeyStore.Aws.SecretsManager.Login.SecretKey = expandEnv(config.KeyStore.Aws.SecretsManager.Login.SecretKey)
-	config.KeyStore.Aws.SecretsManager.Login.SessionToken = expandEnv(config.KeyStore.Aws.SecretsManager.Login.SessionToken)
-
-	// Gemalto KeySecure backend
-	config.KeyStore.Gemalto.KeySecure.Endpoint = expandEnv(config.KeyStore.Gemalto.KeySecure.Endpoint)
-	config.KeyStore.Gemalto.KeySecure.TLS.CAPath = expandEnv(config.KeyStore.Gemalto.KeySecure.TLS.CAPath)
-	config.KeyStore.Gemalto.KeySecure.Login.Domain = expandEnv(config.KeyStore.Gemalto.KeySecure.Login.Domain)
-	config.KeyStore.Gemalto.KeySecure.Login.Token = expandEnv(config.KeyStore.Gemalto.KeySecure.Login.Token)
-
-	// GCP SecretManager backend
-	config.KeyStore.GCP.SecretManager.ProjectID = expandEnv(config.KeyStore.GCP.SecretManager.ProjectID)
-	config.KeyStore.GCP.SecretManager.Endpoint = expandEnv(config.KeyStore.GCP.SecretManager.Endpoint)
-	config.KeyStore.GCP.SecretManager.Credentials.Client = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.Client)
-	config.KeyStore.GCP.SecretManager.Credentials.ClientID = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.ClientID)
-	config.KeyStore.GCP.SecretManager.Credentials.Key = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.Key)
-	config.KeyStore.GCP.SecretManager.Credentials.KeyID = expandEnv(config.KeyStore.GCP.SecretManager.Credentials.KeyID)
-
-	// Azure KeyVault backend
-	config.KeyStore.Azure.KeyVault.Endpoint = expandEnv(config.KeyStore.Azure.KeyVault.Endpoint)
-	config.KeyStore.Azure.KeyVault.Credentials.TenantID = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.TenantID)
-	config.KeyStore.Azure.KeyVault.Credentials.ClientID = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.ClientID)
-	config.KeyStore.Azure.KeyVault.Credentials.Secret = expandEnv(config.KeyStore.Azure.KeyVault.Credentials.Secret)
-
-	// We handle the Hashicorp Vault Kubernetes JWT specially
-	// since it can either be specified directly or be mounted
-	// as a file (K8S secret).
-	// Therefore, we check whether the JWT field is a file, and if so,
-	// read the JWT from there.
-	if config.KeyStore.Vault.Kubernetes.JWT != "" {
-		f, err := os.Open(config.KeyStore.Vault.Kubernetes.JWT)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return config, fmt.Errorf("failed to open Vault Kubernetes JWT: %v", err)
-		}
-		if err == nil {
-			jwt, err := ioutil.ReadAll(f)
-			if err != nil {
-				return config, fmt.Errorf("failed to read Vault Kubernetes JWT: %v", err)
-			}
-			config.KeyStore.Vault.Kubernetes.JWT = string(jwt)
-		}
-	}
-	return config, nil
-}
-
-// SetDefaults set default values for fields that may be empty b/c not specified by user.
-func (config *serverConfig) SetDefaults() {
-	if config.Cache.Expiry.Any == 0 {
-		config.Cache.Expiry.Any = duration(5 * time.Minute)
-	}
-	if config.Cache.Expiry.Unused == 0 {
-		config.Cache.Expiry.Unused = duration(30 * time.Second)
-	}
-	if config.Log.Audit == "" {
-		config.Log.Audit = "off" // If not set, default is off.
-	}
-	if config.Log.Error == "" {
-		config.Log.Error = "on" // If not set, default is on.
-	}
-	config.KeyStore.SetDefaults()
-}
-
-// Verify checks whether the serverConfig contains invalid entries, and if so,
-// returns an error.
-func (config *serverConfig) Verify() error {
-	if config.Admin.Identity.IsUnknown() {
-		return errors.New("no root identity has been specified")
-	}
-	if config.TLS.KeyPath == "" {
-		return errors.New("no private key file has been specified")
-	}
-	if config.TLS.CertPath == "" {
-		return errors.New("no certificate file has been specified")
-	}
-
-	for i, identity := range config.TLS.Proxy.Identities {
-		if identity == config.Admin.Identity {
-			return fmt.Errorf("The %d-th TLS proxy identity is equal to the root identity %q. The root identity cannot be used as TLS proxy", i, identity)
-		}
-	}
-
-	if v := strings.ToLower(config.Log.Audit); v != "on" && v != "off" {
-		return fmt.Errorf("%q is an invalid audit log configuration", v)
-	}
-	if v := strings.ToLower(config.Log.Error); v != "on" && v != "off" {
-		return fmt.Errorf("%q is an invalid error log configuration", v)
-	}
-	return config.KeyStore.Verify()
-}
-
-type policyConfig struct {
-	Allow      []string       `yaml:"allow"`
-	Deny       []string       `yaml:"deny"`
-	Identities []kes.Identity `yaml:"identities"`
-}
-
-type kmsServerConfig struct {
-	Fs struct {
-		Path string `yaml:"path"`
-	} `yaml:"fs"`
-
-	Generic struct {
-		Endpoint string `yaml:"endpoint"`
-		TLS      struct {
-			KeyPath  string `yaml:"key"`
-			CertPath string `yaml:"cert"`
-			CAPath   string `yaml:"ca"`
-		} `yaml:"tls"`
-	} `yaml:"generic"`
-
-	Vault struct {
-		Endpoint      string `yaml:"endpoint"`
-		EnginePath    string `yaml:"engine"`
-		EngineVersion string `yaml:"version"`
-		Namespace     string `yaml:"namespace"`
-
-		Prefix string `yaml:"prefix"`
-
-		AppRole struct {
-			EnginePath string   `yaml:"engine"`
-			ID         string   `yaml:"id"`
-			Secret     string   `yaml:"secret"`
-			Retry      duration `yaml:"retry"` // Use custom type for env. var support
-		} `yaml:"approle"`
-
-		Kubernetes struct {
-			EnginePath string   `yaml:"engine"`
-			Role       string   `yaml:"role"`
-			JWT        string   `yaml:"jwt"`   // Can be either a JWT or a path to a file containing a JWT
-			Retry      duration `yaml:"retry"` // Use custom type for env. var support
-		} `yaml:"kubernetes"`
-
-		TLS struct {
-			KeyPath  string `yaml:"key"`
-			CertPath string `yaml:"cert"`
-			CAPath   string `yaml:"ca"`
-		} `yaml:"tls"`
-
-		Status struct {
-			Ping duration `yaml:"ping"` // Use custom type for env. var support
-		} `yaml:"status"`
-	} `yaml:"vault"`
-
-	Fortanix struct {
-		SDKMS struct {
-			Endpoint string `yaml:"endpoint"`
-			GroupID  string `yaml:"group_id"`
-
-			Login struct {
-				APIKey string `yaml:"key"`
-			} `yaml:"credentials"`
-
-			TLS struct {
-				CAPath string `yaml:"ca"`
-			} `yaml:"tls"`
-		} `yaml:"sdkms"`
-	} `yaml:"fortanix"`
-
-	Aws struct {
-		SecretsManager struct {
-			Endpoint string `yaml:"endpoint"`
-			Region   string `yaml:"region"`
-			KmsKey   string ` yaml:"kmskey"`
-
-			Login struct {
-				AccessKey    string `yaml:"accesskey"`
-				SecretKey    string `yaml:"secretkey"`
-				SessionToken string `yaml:"token"`
-			} `yaml:"credentials"`
-		} `yaml:"secretsmanager"`
-	} `yaml:"aws"`
-
-	GCP struct {
-		SecretManager struct {
-			ProjectID   string `yaml:"project_id"`
-			Endpoint    string `yaml:"endpoint"`
-			Credentials struct {
-				Client   string `yaml:"client_email"`
-				ClientID string `yaml:"client_id"`
-				KeyID    string `yaml:"private_key_id"`
-				Key      string `yaml:"private_key"`
-			} `yaml:"credentials"`
-		} `yaml:"secretmanager"`
-	} `yaml:"gcp"`
-
-	Azure struct {
-		KeyVault struct {
-			Endpoint    string `yaml:"endpoint"`
-			Credentials struct {
-				TenantID string `yaml:"tenant_id"`
-				ClientID string `yaml:"client_id"`
-				Secret   string `yaml:"client_secret"`
-			} `yaml:"credentials"`
-			ManagedIdentity struct {
-				ClientID string `yaml:"client_id"`
-			} `yaml:"managed_identity"`
-		} `yaml:"keyvault"`
-	} `yaml:"azure"`
-
-	Gemalto struct {
-		KeySecure struct {
-			Endpoint string `yaml:"endpoint"`
-
-			Login struct {
-				Token  string   `yaml:"token"`
-				Domain string   `yaml:"domain"`
-				Retry  duration `yaml:"retry"` // Use custom type for env. var support
-			} `yaml:"credentials"`
-
-			TLS struct {
-				CAPath string `yaml:"ca"`
-			} `yaml:"tls"`
-		} `yaml:"keysecure"`
-	} `yaml:"gemalto"`
-}
-
-// SetDefaults set default values for fields that may be empty b/c not specified by user.
-func (config *kmsServerConfig) SetDefaults() {
-	if config.Vault.EnginePath == "" {
-		config.Vault.EnginePath = "kv" // If not set, use the Vault default engine path.
-	}
-	if config.Vault.EngineVersion == "" {
-		config.Vault.EngineVersion = vault.EngineV1
-	}
-	if config.Vault.AppRole.EnginePath == "" {
-		config.Vault.AppRole.EnginePath = "approle" // If not set, use the Vault default auth path for AppRole.
-	}
-	if config.Vault.Kubernetes.EnginePath == "" {
-		config.Vault.Kubernetes.EnginePath = "kubernetes" // If not set, use the Vault default auth path for Kubernetes.
-	}
-	if config.GCP.SecretManager.ProjectID != "" && config.GCP.SecretManager.Endpoint == "" {
-		config.GCP.SecretManager.Endpoint = "secretmanager.googleapis.com:443"
-	}
-}
-
-// Verify checks whether the kmsServerConfig contains invalid entries, and if so,
-// returns an error.
-func (config *kmsServerConfig) Verify() error {
+// connect tries to establish a connection to the KMS specified in the ServerConfig
+func connect(config *yml.ServerConfig, quiet quiet, errorLog *stdlog.Logger) (key.Store, error) {
 	switch {
-	case config.Fs.Path != "" && config.Generic.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and Generic endpoint specified at the same time")
-	case config.Fs.Path != "" && config.Vault.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and Hashicorp Vault endpoint specified at the same time")
-	case config.Fs.Path != "" && config.Aws.SecretsManager.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and AWS Secrets Manager endpoint are specified at the same time")
-	case config.Fs.Path != "" && config.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Fs.Path != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: FS and GCP secret manager are specified at the same time")
-	case config.Fs.Path != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and Azure KeyVault are specified at the same time")
-	case config.Fs.Path != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: FS and Fortanix SDKMS are specified at the same time")
-
-	case config.Generic.Endpoint != "" && config.Vault.Endpoint != "":
-		return errors.New("ambiguous configuration: Generic and Hashicorp Vault endpoint are specified at the same time")
-	case config.Generic.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
-		return errors.New("ambiguous configuration: Generic and AWS SecretsManager endpoint are specified at the same time")
-	case config.Generic.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("ambiguous configuration: Generic and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Generic.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: Generic and GCP SecretManager endpoint are specified at the same time")
-	case config.Generic.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: Generic and Azure KeyVault are specified at the same time")
-	case config.Generic.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: Generic and Fortanix SDKMS are specified at the same time")
-
-	case config.Vault.Endpoint != "" && config.Aws.SecretsManager.Endpoint != "":
-		return errors.New("ambiguous configuration: Hashicorp Vault and AWS SecretsManager endpoint are specified at the same time")
-	case config.Vault.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("ambiguous configuration: Hashicorp Vault and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Vault.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: Hashicorp Vault and GCP secret manager are specified at the same time")
-	case config.Vault.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: Hashicorp Vault and Azure KeyVault are specified at the same time")
-	case config.Vault.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: Hashicorp Vault and Fortanix SDKMS are specified at the same time")
-
-	case config.Aws.SecretsManager.Endpoint != "" && config.Gemalto.KeySecure.Endpoint != "":
-		return errors.New("ambiguous configuration: AWS SecretsManager and Gemalto KeySecure endpoint are specified at the same time")
-	case config.Aws.SecretsManager.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: AWS SecretsManager and GCP secret manager are specified at the same time")
-	case config.Aws.SecretsManager.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: AWS SecretsManager and Azure KeyVault are specified at the same time")
-	case config.Aws.SecretsManager.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: AWS SecretsManager and Fortanix SDKMS are specified at the same time")
-
-	case config.Gemalto.KeySecure.Endpoint != "" && config.GCP.SecretManager.ProjectID != "":
-		return errors.New("ambiguous configuration: Gemalto KeySecure and GCP secret manager are specified at the same time")
-	case config.Gemalto.KeySecure.Endpoint != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: Gemalto KeySecure and Azure KeyVault are specified at the same time")
-	case config.Gemalto.KeySecure.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: Gemalto KeySecure and Fortanix SDKMS are specified at the same time")
-
-	case config.GCP.SecretManager.ProjectID != "" && config.Azure.KeyVault.Endpoint != "":
-		return errors.New("ambiguous configuration: GCP secrets manager and Azure KeyVault are specified at the same time")
-	case config.GCP.SecretManager.ProjectID != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: GCP secrets manager and Fortanix SDKMS are specified at the same time")
-
-	case config.Azure.KeyVault.Endpoint != "" && config.Fortanix.SDKMS.Endpoint != "":
-		return errors.New("ambiguous configuration: Azure KeyVault and Fortanix SDKMS are specified at the same time")
-	}
-
-	if config.Vault.Endpoint != "" {
-		approle, k8s := config.Vault.AppRole, config.Vault.Kubernetes
-		if (approle.ID != "" || approle.Secret != "") && (k8s.Role != "" || k8s.JWT != "") {
-			return errors.New("invalid configuration: Vault AppRole and Kubernetes credentials are specified at the same time")
-		}
-	}
-	return nil
-}
-
-// Connect tries to establish a connection to the KMS specified in the kmsServerConfig.
-func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (key.Store, error) {
-	if err := config.Verify(); err != nil {
-		return nil, err
-	}
-
-	switch {
-	case config.Fs.Path != "":
-		f, err := os.Stat(config.Fs.Path)
+	case config.KeyStore.Fs.Path.Value() != "":
+		f, err := os.Stat(config.KeyStore.Fs.Path.Value())
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to open %q: %v", config.Fs.Path, err)
+			return nil, fmt.Errorf("failed to open %q: %v", config.KeyStore.Fs.Path.Value(), err)
 		}
 		if err == nil && !f.IsDir() {
-			return nil, fmt.Errorf("%q is not a directory", config.Fs.Path)
+			return nil, fmt.Errorf("%q is not a directory", config.KeyStore.Fs.Path.Value())
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			msg := fmt.Sprintf("Creating directory '%s' ... ", config.Fs.Path)
+			msg := fmt.Sprintf("Creating directory '%s' ... ", config.KeyStore.Fs.Path.Value())
 			quiet.Print(msg)
-			if err = os.MkdirAll(config.Fs.Path, 0700); err != nil {
-				return nil, fmt.Errorf("failed to create directory %q: %v", config.Fs.Path, err)
+			if err = os.MkdirAll(config.KeyStore.Fs.Path.Value(), 0700); err != nil {
+				return nil, fmt.Errorf("failed to create directory %q: %v", config.KeyStore.Fs.Path.Value(), err)
 			}
 			quiet.ClearMessage(msg)
 		}
 		return &fs.Store{
-			Dir:      config.Fs.Path,
+			Dir:      config.KeyStore.Fs.Path.Value(),
 			ErrorLog: errorLog,
 		}, nil
-	case config.Generic.Endpoint != "":
+	case config.KeyStore.Generic.Endpoint.Value() != "":
 		genericStore := &generic.Store{
-			Endpoint: config.Generic.Endpoint,
-			KeyPath:  config.Generic.TLS.KeyPath,
-			CertPath: config.Generic.TLS.CertPath,
-			CAPath:   config.Generic.TLS.CAPath,
+			Endpoint: config.KeyStore.Generic.Endpoint.Value(),
+			KeyPath:  config.KeyStore.Generic.TLS.PrivateKey.Value(),
+			CertPath: config.KeyStore.Generic.TLS.Certificate.Value(),
+			CAPath:   config.KeyStore.Generic.TLS.CAPath.Value(),
 			ErrorLog: errorLog,
 		}
-		msg := fmt.Sprintf("Authenticating to generic KeyStore '%s' ... ", config.Generic.Endpoint)
+		msg := fmt.Sprintf("Authenticating to generic KeyStore '%s' ... ", config.KeyStore.Generic.Endpoint.Value())
 		quiet.Print(msg)
 		if err := genericStore.Authenticate(); err != nil {
 			return nil, fmt.Errorf("failed to connect to generic KeyStore: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		return genericStore, nil
-	case config.Vault.Endpoint != "":
-		vaultStore := &vault.Store{
-			Addr:          config.Vault.Endpoint,
-			Engine:        config.Vault.EnginePath,
-			EngineVersion: config.Vault.EngineVersion,
-			Location:      config.Vault.Prefix,
-			Namespace:     config.Vault.Namespace,
+	case config.KeyStore.Vault.Endpoint.Value() != "":
+		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", config.KeyStore.Vault.Endpoint.Value())
+		quiet.Print(msg)
+		vaultStore, err := vault.Connect(context.Background(), &vault.Config{
+			Endpoint:   config.KeyStore.Vault.Endpoint.Value(),
+			Engine:     config.KeyStore.Vault.Engine.Value(),
+			APIVersion: config.KeyStore.Vault.APIVersion.Value(),
+			Prefix:     config.KeyStore.Vault.Prefix.Value(),
+			Namespace:  config.KeyStore.Vault.Namespace.Value(),
 			AppRole: vault.AppRole{
-				Engine: config.Vault.AppRole.EnginePath,
-				ID:     config.Vault.AppRole.ID,
-				Secret: config.Vault.AppRole.Secret,
-				Retry:  time.Duration(config.Vault.AppRole.Retry),
+				Engine: config.KeyStore.Vault.AppRole.Engine.Value(),
+				ID:     config.KeyStore.Vault.AppRole.ID.Value(),
+				Secret: config.KeyStore.Vault.AppRole.Secret.Value(),
+				Retry:  config.KeyStore.Vault.AppRole.Retry.Value(),
 			},
 			K8S: vault.Kubernetes{
-				Engine: config.Vault.Kubernetes.EnginePath,
-				Role:   config.Vault.Kubernetes.Role,
-				JWT:    config.Vault.Kubernetes.JWT,
-				Retry:  time.Duration(config.Vault.Kubernetes.Retry),
+				Engine: config.KeyStore.Vault.Kubernetes.Engine.Value(),
+				Role:   config.KeyStore.Vault.Kubernetes.Role.Value(),
+				JWT:    config.KeyStore.Vault.Kubernetes.JWT.Value(),
+				Retry:  config.KeyStore.Vault.Kubernetes.Retry.Value(),
 			},
-			StatusPingAfter: time.Duration(config.Vault.Status.Ping),
+			StatusPingAfter: config.KeyStore.Vault.Status.Ping.Value(),
 			ErrorLog:        errorLog,
-			ClientKeyPath:   config.Vault.TLS.KeyPath,
-			ClientCertPath:  config.Vault.TLS.CertPath,
-			CAPath:          config.Vault.TLS.CAPath,
-		}
-
-		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", vaultStore.Addr)
-		quiet.Print(msg)
-		if err := vaultStore.Authenticate(context.Background()); err != nil {
+			ClientKeyPath:   config.KeyStore.Vault.TLS.PrivateKey.Value(),
+			ClientCertPath:  config.KeyStore.Vault.TLS.Certificate.Value(),
+			CAPath:          config.KeyStore.Vault.TLS.CAPath.Value(),
+		})
+		if err != nil {
 			return nil, fmt.Errorf("failed to connect to Vault: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		return vaultStore, nil
-	case config.Fortanix.SDKMS.Endpoint != "":
+	case config.KeyStore.Fortanix.SDKMS.Endpoint.Value() != "":
 		fortanixStore := &fortanix.KeyStore{
-			Endpoint: config.Fortanix.SDKMS.Endpoint,
-			GroupID:  config.Fortanix.SDKMS.GroupID,
-			APIKey:   fortanix.APIKey(config.Fortanix.SDKMS.Login.APIKey),
+			Endpoint: config.KeyStore.Fortanix.SDKMS.Endpoint.Value(),
+			GroupID:  config.KeyStore.Fortanix.SDKMS.GroupID.Value(),
+			APIKey:   fortanix.APIKey(config.KeyStore.Fortanix.SDKMS.Login.APIKey.Value()),
 			ErrorLog: errorLog,
-			CAPath:   config.Fortanix.SDKMS.TLS.CAPath,
+			CAPath:   config.KeyStore.Fortanix.SDKMS.TLS.CAPath.Value(),
 		}
 		msg := fmt.Sprintf("Authenticating to Fortanix SDKMS '%s' ... ", fortanixStore.Endpoint)
 		quiet.Print(msg)
@@ -574,16 +113,16 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 		}
 		quiet.ClearMessage(msg)
 		return fortanixStore, nil
-	case config.Aws.SecretsManager.Endpoint != "":
+	case config.KeyStore.Aws.SecretsManager.Endpoint.Value() != "":
 		awsStore := &aws.SecretsManager{
-			Addr:     config.Aws.SecretsManager.Endpoint,
-			Region:   config.Aws.SecretsManager.Region,
-			KMSKeyID: config.Aws.SecretsManager.KmsKey,
+			Addr:     config.KeyStore.Aws.SecretsManager.Endpoint.Value(),
+			Region:   config.KeyStore.Aws.SecretsManager.Region.Value(),
+			KMSKeyID: config.KeyStore.Aws.SecretsManager.KmsKey.Value(),
 			ErrorLog: errorLog,
 			Login: aws.Credentials{
-				AccessKey:    config.Aws.SecretsManager.Login.AccessKey,
-				SecretKey:    config.Aws.SecretsManager.Login.SecretKey,
-				SessionToken: config.Aws.SecretsManager.Login.SessionToken,
+				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey.Value(),
+				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey.Value(),
+				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken.Value(),
 			},
 		}
 
@@ -594,46 +133,45 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 		}
 		quiet.ClearMessage(msg)
 		return awsStore, nil
-	case config.GCP.SecretManager.ProjectID != "":
-		gcpStore := &gcp.SecretManager{
-			Endpoint:  config.GCP.SecretManager.Endpoint,
-			ProjectID: config.GCP.SecretManager.ProjectID,
-			ErrorLog:  errorLog,
-		}
-
-		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", gcpStore.ProjectID)
+	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
+		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", config.KeyStore.GCP.SecretManager.ProjectID.Value())
 		quiet.Print(msg)
-		err := gcpStore.Authenticate(gcp.Credentials{
-			ClientID: config.GCP.SecretManager.Credentials.ClientID,
-			Client:   config.GCP.SecretManager.Credentials.Client,
-			KeyID:    config.GCP.SecretManager.Credentials.KeyID,
-			Key:      config.GCP.SecretManager.Credentials.Key,
+		gcpStore, err := gcp.Connect(context.Background(), &gcp.Config{
+			Endpoint:  config.KeyStore.GCP.SecretManager.Endpoint.Value(),
+			ProjectID: config.KeyStore.GCP.SecretManager.ProjectID.Value(),
+			Credentials: gcp.Credentials{
+				ClientID: config.KeyStore.GCP.SecretManager.Credentials.ClientID.Value(),
+				Client:   config.KeyStore.GCP.SecretManager.Credentials.Client.Value(),
+				KeyID:    config.KeyStore.GCP.SecretManager.Credentials.KeyID.Value(),
+				Key:      config.KeyStore.GCP.SecretManager.Credentials.Key.Value(),
+			},
+			ErrorLog: errorLog,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to GCP SecretManager: %v", err)
 		}
 		quiet.ClearMessage(msg)
 		return gcpStore, nil
-	case config.Azure.KeyVault.Endpoint != "":
+	case config.KeyStore.Azure.KeyVault.Endpoint.Value() != "":
 		azureStore := &azure.KeyVault{
-			Endpoint: config.Azure.KeyVault.Endpoint,
+			Endpoint: config.KeyStore.Azure.KeyVault.Endpoint.Value(),
 			ErrorLog: errorLog,
 		}
-		msg := fmt.Sprintf("Authenticating to Azure KeyVault '%s' ... ", config.Azure.KeyVault.Endpoint)
+		msg := fmt.Sprintf("Authenticating to Azure KeyVault '%s' ... ", config.KeyStore.Azure.KeyVault.Endpoint)
 		quiet.Print(msg)
-		switch c := config.Azure.KeyVault.Credentials; {
-		case c.TenantID != "" || c.ClientID != "" || c.Secret != "":
+		switch c := config.KeyStore.Azure.KeyVault.Credentials; {
+		case c.TenantID.Value() != "" || c.ClientID.Value() != "" || c.Secret.Value() != "":
 			var err = azureStore.AuthenticateWithCredentials(azure.Credentials{
-				TenantID: config.Azure.KeyVault.Credentials.TenantID,
-				ClientID: config.Azure.KeyVault.Credentials.ClientID,
-				Secret:   config.Azure.KeyVault.Credentials.Secret,
+				TenantID: config.KeyStore.Azure.KeyVault.Credentials.TenantID.Value(),
+				ClientID: config.KeyStore.Azure.KeyVault.Credentials.ClientID.Value(),
+				Secret:   config.KeyStore.Azure.KeyVault.Credentials.Secret.Value(),
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
 			}
-		case config.Azure.KeyVault.ManagedIdentity.ClientID != "":
+		case config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value() != "":
 			var err = azureStore.AuthenticateWithIdentity(azure.ManagedIdentity{
-				ClientID: config.Azure.KeyVault.ManagedIdentity.ClientID,
+				ClientID: config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value(),
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
@@ -643,15 +181,15 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 		}
 		quiet.ClearMessage(msg)
 		return azureStore, nil
-	case config.Gemalto.KeySecure.Endpoint != "":
+	case config.KeyStore.Gemalto.KeySecure.Endpoint.Value() != "":
 		gemaltoStore := &gemalto.KeySecure{
-			Endpoint: config.Gemalto.KeySecure.Endpoint,
-			CAPath:   config.Gemalto.KeySecure.TLS.CAPath,
+			Endpoint: config.KeyStore.Gemalto.KeySecure.Endpoint.Value(),
+			CAPath:   config.KeyStore.Gemalto.KeySecure.TLS.CAPath.Value(),
 			ErrorLog: errorLog,
 			Login: gemalto.Credentials{
-				Token:  config.Gemalto.KeySecure.Login.Token,
-				Domain: config.Gemalto.KeySecure.Login.Domain,
-				Retry:  time.Duration(config.Gemalto.KeySecure.Login.Retry),
+				Token:  config.KeyStore.Gemalto.KeySecure.Login.Token.Value(),
+				Domain: config.KeyStore.Gemalto.KeySecure.Login.Domain.Value(),
+				Retry:  config.KeyStore.Gemalto.KeySecure.Login.Retry.Value(),
 			},
 		}
 
@@ -667,38 +205,34 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 	}
 }
 
-func (config *kmsServerConfig) Description() (kind, endpoint string, err error) {
-	if err = config.Verify(); err != nil {
-		return "", "", err
-	}
-
+func description(config *yml.ServerConfig) (kind, endpoint string, err error) {
 	switch {
-	case config.Fs.Path != "":
+	case config.KeyStore.Fs.Path.Value() != "":
 		kind = "Filesystem"
-		if endpoint, err = filepath.Abs(config.Fs.Path); err != nil {
-			endpoint = config.Fs.Path
+		if endpoint, err = filepath.Abs(config.KeyStore.Fs.Path.Value()); err != nil {
+			endpoint = config.KeyStore.Fs.Path.Value()
 		}
-	case config.Generic.Endpoint != "":
+	case config.KeyStore.Generic.Endpoint.Value() != "":
 		kind = "Generic"
-		endpoint = config.Generic.Endpoint
-	case config.Vault.Endpoint != "":
+		endpoint = config.KeyStore.Generic.Endpoint.Value()
+	case config.KeyStore.Vault.Endpoint.Value() != "":
 		kind = "Hashicorp Vault"
-		endpoint = config.Vault.Endpoint
-	case config.Fortanix.SDKMS.Endpoint != "":
+		endpoint = config.KeyStore.Vault.Endpoint.Value()
+	case config.KeyStore.Fortanix.SDKMS.Endpoint.Value() != "":
 		kind = "Fortanix SDKMS"
-		endpoint = config.Fortanix.SDKMS.Endpoint
-	case config.Aws.SecretsManager.Endpoint != "":
+		endpoint = config.KeyStore.Fortanix.SDKMS.Endpoint.Value()
+	case config.KeyStore.Aws.SecretsManager.Endpoint.Value() != "":
 		kind = "AWS SecretsManager"
-		endpoint = config.Aws.SecretsManager.Endpoint
-	case config.Gemalto.KeySecure.Endpoint != "":
+		endpoint = config.KeyStore.Aws.SecretsManager.Endpoint.Value()
+	case config.KeyStore.Gemalto.KeySecure.Endpoint.Value() != "":
 		kind = "Gemalto KeySecure"
-		endpoint = config.Gemalto.KeySecure.Endpoint
-	case config.GCP.SecretManager.ProjectID != "":
+		endpoint = config.KeyStore.Gemalto.KeySecure.Endpoint.Value()
+	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
 		kind = "GCP SecretManager"
-		endpoint = config.GCP.SecretManager.Endpoint + " | Project: " + config.GCP.SecretManager.ProjectID
-	case config.Azure.KeyVault.Endpoint != "":
+		endpoint = config.KeyStore.GCP.SecretManager.Endpoint.Value() + " | Project: " + config.KeyStore.GCP.SecretManager.ProjectID.Value()
+	case config.KeyStore.Azure.KeyVault.Endpoint.Value() != "":
 		kind = "Azure KeyVault"
-		endpoint = config.Azure.KeyVault.Endpoint
+		endpoint = config.KeyStore.Azure.KeyVault.Endpoint.Value()
 	default:
 		kind = "In-Memory"
 		endpoint = "non-persistent"

@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
@@ -29,142 +28,61 @@ import (
 	"github.com/minio/kes/internal/key"
 )
 
-// AppRole holds the Vault AppRole
-// authentication credentials and
-// a duration after which the
-// authentication should be retried
-// whenever it fails.
-type AppRole struct {
-	Engine string // The AppRole engine path
-	ID     string // The AppRole ID
-	Secret string // The Approle secret ID
-	Retry  time.Duration
-}
-
-type Kubernetes struct {
-	Engine string // The Kubernetes auth engine path
-	Role   string // The Kubernetes JWT role
-	JWT    string // The Kubernetes JWT
-	Retry  time.Duration
-}
-
-// Store is a key-value store that saves key-value
-// pairs as entries on Vault's K/V secret backend.
-type Store struct {
-	// Addr is the HTTP address of the Vault server.
-	Addr string
-
-	// Engine is the path of the K/V engine to use.
-	//
-	// Vault allows multiple engines of the same type
-	// mounted at the same time and/or engines mounted
-	// at arbitrary paths.
-	Engine string
-
-	// EngineVersion is the API version of the K/V engine.
-	//
-	// It has to be set to "v1" for the K/V v1 engine (unversioned)
-	// or to "v2" for the K/V v2 engine (versioned).
-	//
-	// For more information about the K/V engine differences, see:
-	// https://www.vaultproject.io/docs/secrets/kv
-	EngineVersion string
-
-	// Location is the location on Vault's K/V store
-	// where this KeyStore will save secret keys.
-	//
-	// It can be used to assign an unique or shared
-	// prefix. For instance one or more KeyStore can
-	// store secret keys under /keys/my-app/. In this
-	// case you may set KeyStore.Location = "key/my-app".
-	Location string
-
-	// AppRole contains the Vault AppRole authentication
-	// credentials.
-	AppRole AppRole
-
-	// K8S contains the Vault Kubernetes authentication
-	// credentials.
-	K8S Kubernetes
-
-	// StatusPingAfter is the duration after which
-	// the KeyStore will check the status of the Vault
-	// server. Particularly, this status information
-	// is used to determine whether the Vault server
-	// has been sealed resp. unsealed again.
-	StatusPingAfter time.Duration
-
-	// ErrorLog specifies an optional logger for errors
-	// when K/V pairs cannot be stored, fetched, deleted
-	// or contain invalid content.
-	// If nil, logging is done via the log package's
-	// standard logger.
-	ErrorLog *log.Logger
-
-	// Path to the mTLS client private key to authenticate to
-	// the Vault server.
-	ClientKeyPath string
-
-	// Path to the mTLS client certificate to authenticate to
-	// the Vault server.
-	ClientCertPath string
-
-	// Path to the root CA certificate(s) used to verify the
-	// TLS certificate of the Vault server. If empty, the
-	// host's root CA set is used.
-	CAPath string
-
-	// The Vault namespace used to separate and isolate different
-	// organizations / tenants at the same Vault instance. If
-	// non-empty, the Vault client will send the
-	//   X-Vault-Namespace: Namespace
-	// HTTP header on each request. For more information see:
-	// https://www.vaultproject.io/docs/enterprise/namespaces/index.html
-	Namespace string
-
+// KeyStore is a Hashicorp Vault K/V client.
+//
+// It creates, deletes, stores and fetches key
+// value pairs using the Hashicorp Vault K/V
+// secret engine.
+type KeyStore struct {
 	client *client
+	config *Config
 }
 
-var _ key.Store = (*Store)(nil)
-
-// Authenticate tries to establish a connection to
-// a Vault server using the approle credentials.
-// It returns an error if no connection could be
-// established - for instance because of invalid
-// authentication credentials.
-func (s *Store) Authenticate(context context.Context) error {
-	tlsConfig := &vaultapi.TLSConfig{
-		ClientKey:  s.ClientKeyPath,
-		ClientCert: s.ClientCertPath,
+// Connect connects and authenticates to a Hashicorp
+// Vault server.
+func Connect(ctx context.Context, c *Config) (*KeyStore, error) {
+	c = c.Clone()
+	if c == nil {
+		c = &Config{}
 	}
-	if s.CAPath != "" {
-		stat, err := os.Stat(s.CAPath)
+	c.setDefaults()
+
+	if c.APIVersion != APIv1 && c.APIVersion != APIv2 {
+		return nil, fmt.Errorf("vault: invalid engine API version %q", c.APIVersion)
+	}
+
+	var tlsConfig = &vaultapi.TLSConfig{
+		ClientKey:  c.ClientKeyPath,
+		ClientCert: c.ClientCertPath,
+	}
+	if c.CAPath != "" {
+		stat, err := os.Stat(c.CAPath)
 		if err != nil {
-			return fmt.Errorf("Failed to open %q: %v", s.CAPath, err)
+			return nil, fmt.Errorf("vault: failed to open %q: %v", c.CAPath, err)
 		}
 		if stat.IsDir() {
-			tlsConfig.CAPath = s.CAPath
+			tlsConfig.CAPath = c.CAPath
 		} else {
-			tlsConfig.CACert = s.CAPath
+			tlsConfig.CACert = c.CAPath
 		}
 	}
 
-	config := vaultapi.DefaultConfig()
-	config.Address = s.Addr
+	var config = vaultapi.DefaultConfig()
+	config.Address = c.Endpoint
 	config.ConfigureTLS(tlsConfig)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	s.client = &client{
+	var client = &client{
 		Client: vaultClient,
 	}
-	if s.Namespace != "" {
+	if c.Namespace != "" {
 		// We must only set the namespace if it is not
 		// empty. If namespace == "" the vault client
 		// will send an empty namespace HTTP header -
 		// which is not what we want.
-		s.client.SetNamespace(s.Namespace)
+		client.SetNamespace(c.Namespace)
 	}
 
 	var (
@@ -172,30 +90,35 @@ func (s *Store) Authenticate(context context.Context) error {
 		retry        time.Duration
 	)
 	switch {
-	case s.AppRole.ID != "" || s.AppRole.Secret != "":
-		if s.K8S.Role != "" || s.K8S.JWT != "" {
-			return errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
+	case c.AppRole.ID != "" || c.AppRole.Secret != "":
+		if c.K8S.Role != "" || c.K8S.JWT != "" {
+			return nil, errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
 		}
-		authenticate = s.client.AuthenticateWithAppRole(s.AppRole)
-	case s.K8S.Role != "" || s.K8S.JWT != "":
-		if s.AppRole.ID != "" || s.AppRole.Secret != "" {
-			return errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
+		authenticate = client.AuthenticateWithAppRole(c.AppRole)
+	case c.K8S.Role != "" || c.K8S.JWT != "":
+		if c.AppRole.ID != "" || c.AppRole.Secret != "" {
+			return nil, errors.New("vault: ambigious authentication: AppRole and K8S credentials specified at the same time")
 		}
-		authenticate = s.client.AuthenticateWithK8S(s.K8S)
+		authenticate = client.AuthenticateWithK8S(c.K8S)
 	default:
-		return errors.New("vault: no or empty authentication credentials specified")
+		return nil, errors.New("vault: no or empty authentication credentials specified")
 	}
 
 	token, ttl, err := authenticate()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	s.client.SetToken(token)
+	client.SetToken(token)
 
-	go s.client.CheckStatus(context, s.StatusPingAfter)
-	go s.client.RenewToken(context, authenticate, ttl, retry)
-	return nil
+	go client.CheckStatus(ctx, c.StatusPingAfter)
+	go client.RenewToken(ctx, authenticate, ttl, retry)
+	return &KeyStore{
+		config: c,
+		client: client,
+	}, nil
 }
+
+var _ key.Store = (*KeyStore)(nil)
 
 var (
 	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
@@ -206,22 +129,12 @@ var (
 	errSealed = errors.New("vault: key store is sealed")
 )
 
-const (
-	// EngineV1 is the Hashicorp Vault K/V secret engine version 1.
-	// This K/V secret store is not versioned.
-	EngineV1 = "v1"
-
-	// EngineV2 is the Hashicorp Vault K/V secret engine version 2.
-	// This K/V secret store is versioned.
-	EngineV2 = "v2"
-)
-
 // Create creates the given key-value pair at Vault if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
-func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
+func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 	if s.client == nil {
-		s.logf("vault: no connection to vault server: %q", s.Addr)
+		s.logf("vault: no connection to vault server: %q", s.config.Endpoint)
 		return errCreateKey
 	}
 	if s.client.Sealed() {
@@ -231,12 +144,12 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	// We try to check whether key exists on the K/V store.
 	// If so, we must not overwrite it.
 	var location string
-	if s.EngineVersion == EngineV2 {
+	if s.config.APIVersion == APIv2 {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#create-update-secret
-		location = path.Join(s.Engine, "data", s.Location, name) // /<engine>/data/<location>/<name>
+		location = path.Join(s.config.Engine, "data", s.config.Prefix, name) // /<engine>/data/<location>/<name>
 	} else {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#create-update-secret
-		location = path.Join(s.Engine, s.Location, name) // /<engine>/<location>/<name>
+		location = path.Join(s.config.Engine, s.config.Prefix, name) // /<engine>/<location>/<name>
 	}
 
 	// Vault will return nil for the secret as well as a nil-error
@@ -260,13 +173,13 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	// the entry does not exist but that some other error (e.g.
 	// network error) occurred.
 	switch secret, err := s.client.Logical().Read(location); {
-	case err == nil && secret != nil && s.EngineVersion != EngineV2:
+	case err == nil && secret != nil && s.config.APIVersion != APIv2:
 		if _, ok := secret.Data[name]; !ok {
 			s.logf("vault: entry exist but failed to read %q: invalid K/V v1 format", location)
 			return errors.New("vault: invalid K/V v1 format")
 		}
 		return kes.ErrKeyExists
-	case err == nil && secret != nil && s.EngineVersion == EngineV2 && len(secret.Data) > 0:
+	case err == nil && secret != nil && s.config.APIVersion == APIv2 && len(secret.Data) > 0:
 		var data = secret.Data
 		v, ok := data["data"]
 		if !ok || v == nil {
@@ -295,7 +208,7 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	// that whoever has the permission to create keys does that in
 	// a non-racy way.
 	var data map[string]interface{}
-	if s.EngineVersion == EngineV2 {
+	if s.config.APIVersion == APIv2 {
 		data = map[string]interface{}{
 			"options": map[string]interface{}{
 				"cas": 0, // We need to set CAS to 0 to ensure atomic creates / avoid any overwrite.
@@ -344,9 +257,9 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
+func (s *KeyStore) Get(_ context.Context, name string) (key.Key, error) {
 	if s.client == nil {
-		s.logf("vault: no connection to vault server: %q", s.Addr)
+		s.logf("vault: no connection to vault server: %q", s.config.Endpoint)
 		return key.Key{}, errGetKey
 	}
 	if s.client.Sealed() {
@@ -354,12 +267,12 @@ func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 	}
 
 	var location string
-	if s.EngineVersion == EngineV2 {
+	if s.config.APIVersion == APIv2 {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#read-secret-version
-		location = path.Join(s.Engine, "data", s.Location, name) // /<engine>/data/<location>/<name>
+		location = path.Join(s.config.Engine, "data", s.config.Prefix, name) // /<engine>/data/<location>/<name>
 	} else {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#read-secret
-		location = path.Join(s.Engine, s.Location, name) // /<engine>/<location>/<name>
+		location = path.Join(s.config.Engine, s.config.Prefix, name) // /<engine>/<location>/<name>
 	}
 	entry, err := s.client.Logical().Read(location)
 	if err != nil || entry == nil {
@@ -373,7 +286,7 @@ func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 	}
 
 	var data = entry.Data
-	if s.EngineVersion == EngineV2 { // See: https://www.vaultproject.io/api/secret/kv/kv-v2#sample-response-1 (differs from v1 format)
+	if s.config.APIVersion == APIv2 { // See: https://www.vaultproject.io/api/secret/kv/kv-v2#sample-response-1 (differs from v1 format)
 		v, ok := entry.Data["data"]
 		if !ok || v == nil {
 			s.logf("vault: failed to read %q: invalid K/V v2 format: missing 'data' entry", location)
@@ -407,9 +320,9 @@ func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 
 // Delete removes a the value associated with the given key
 // from Vault, if it exists.
-func (s *Store) Delete(ctx context.Context, name string) error {
+func (s *KeyStore) Delete(ctx context.Context, name string) error {
 	if s.client == nil {
-		s.logf("vault: no connection to vault server: %q", s.Addr)
+		s.logf("vault: no connection to vault server: %q", s.config.Endpoint)
 		return errDeleteKey
 	}
 	if s.client.Sealed() {
@@ -417,12 +330,12 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	}
 
 	var location string
-	if s.EngineVersion == EngineV2 {
+	if s.config.APIVersion == APIv2 {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#delete-metadata-and-all-versions
-		location = path.Join(s.Engine, "metadata", s.Location, name) // /<engine>/metadata/<location>/<name>
+		location = path.Join(s.config.Engine, "metadata", s.config.Prefix, name) // /<engine>/metadata/<location>/<name>
 	} else {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#delete-secret
-		location = path.Join(s.Engine, s.Location, name) // /<engine>/<location>/<name>
+		location = path.Join(s.config.Engine, s.config.Prefix, name) // /<engine>/<location>/<name>
 	}
 
 	// The Vault SDK may not return an error even if it hasn't deleted
@@ -432,7 +345,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	// We expect HTTP 204 (No Content) when a key got deleted successfully.
 	// So, we check that Vault response with 204. Otherwise, we return an
 	// error.
-	var req = s.client.Client.NewRequest("DELETE", "/v1/"+location)
+	var req = s.client.Client.NewRequest(http.MethodDelete, "/v1/"+location)
 	resp, err := s.client.Client.RawRequestWithContext(ctx, req)
 	if err != nil {
 		s.logf("vault: failed to delete %q: %v", location, err)
@@ -455,9 +368,9 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (key.Iterator, error) {
+func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
 	if s.client == nil {
-		s.logf("vault: no connection to vault server: %q", s.Addr)
+		s.logf("vault: no connection to vault server: %q", s.config.Endpoint)
 		return nil, errListKey
 	}
 	if s.client.Sealed() {
@@ -471,14 +384,15 @@ func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	// Therefore, we have to use low-level SDK functionality here.
 
 	var location string
-	if s.EngineVersion == EngineV2 {
+	if s.config.APIVersion == APIv2 {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#list-secrets
-		location = path.Join("/v1", s.Engine, "metadata", s.Location)
+		location = path.Join(s.config.Engine, "metadata", s.config.Prefix)
 	} else {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#list-secrets
-		location = path.Join("/v1", s.Engine, s.Location)
+		location = path.Join(s.config.Engine, s.config.Prefix)
 	}
-	r := s.client.NewRequest("LIST", location)
+
+	r := s.client.NewRequest("LIST", "/v1/"+location)
 	r.Params.Set("list", "true")
 
 	resp, err := s.client.RawRequestWithContext(ctx, r)
@@ -516,34 +430,10 @@ func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	}, nil
 }
 
-type iterator struct {
-	values []interface{}
-	last   string
-}
-
-var _ key.Iterator = (*iterator)(nil)
-
-func (i *iterator) Next() bool {
-	for len(i.values) > 0 {
-		v := fmt.Sprint(i.values[0])
-		i.values = i.values[1:]
-
-		if !strings.HasSuffix(v, "/") {
-			i.last = v
-			return true
-		}
-	}
-	return false
-}
-
-func (i *iterator) Name() string { return i.last }
-
-func (*iterator) Err() error { return nil }
-
-func (s *Store) logf(format string, v ...interface{}) {
-	if s.ErrorLog == nil {
+func (s *KeyStore) logf(format string, v ...interface{}) {
+	if s.config.ErrorLog == nil {
 		log.Printf(format, v...)
 	} else {
-		s.ErrorLog.Printf(format, v...)
+		s.config.ErrorLog.Printf(format, v...)
 	}
 }

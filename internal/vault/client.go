@@ -77,8 +77,7 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 // To renew the auth. token see: client.RenewToken(...).
 func (c *client) AuthenticateWithAppRole(login AppRole) authFunc {
 	return func() (token string, ttl time.Duration, err error) {
-		location := path.Join("auth", login.Engine, "login") // /auth/<engine>/login
-		secret, err := c.Logical().Write(location, map[string]interface{}{
+		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role_id":   login.ID,
 			"secret_id": login.Secret,
 		})
@@ -108,8 +107,7 @@ func (c *client) AuthenticateWithAppRole(login AppRole) authFunc {
 
 func (c *client) AuthenticateWithK8S(login Kubernetes) authFunc {
 	return func() (token string, ttl time.Duration, err error) {
-		location := path.Join("auth", login.Engine, "login")
-		secret, err := c.Logical().Write(location, map[string]interface{}{
+		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role": login.Role,
 			"jwt":  login.JWT,
 		})
