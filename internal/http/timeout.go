@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Timeout returns an HTTP handler that aborts f
+// timeout returns an HTTP handler that aborts f
 // after the given time limit.
 //
 // The request times out when it takes longer then
@@ -23,8 +23,8 @@ import (
 // Timeout will return 503 ServiceUnavailable to the
 // client.
 //
-// Timeout cancels the request context before aborting f.
-func Timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
+// timeout cancels the request context before aborting f.
+func timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
 	const Message = `{"message":"request timeout exceeded"}`
 	var handler = http.TimeoutHandler(f, after, Message)
 	return func(w http.ResponseWriter, r *http.Request) {

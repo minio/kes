@@ -10,7 +10,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 )
 
-// TLSProxy returns a handler function that checks if the
+// tlsProxy returns a handler function that checks if the
 // request has been forwarded by a TLS proxy and, if so,
 // verifies and adjusts the request such that handlers
 // further down the stack can treat it as sent by the
@@ -19,7 +19,7 @@ import (
 // Therefore, it replaces the proxy certificate in the
 // TLS connection state with the client certificate
 // forwarded by the proxy as part of the request headers.
-func TLSProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
+func tlsProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 	if proxy == nil {
 		return f
 	}

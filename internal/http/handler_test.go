@@ -50,7 +50,7 @@ func TestValidatePathHandler(t *testing.T) {
 		}
 
 		var resp dummyResponseWriter
-		ValidatePath(test.Pattern, f)(&resp, req)
+		validatePath(test.Pattern, f)(&resp, req)
 		if test.ShouldMatch && resp.StatusCode != http.StatusOK {
 			t.Fatalf("Test %d: path should have matched pattern: got %d - want %d", i, resp.StatusCode, http.StatusOK)
 		}
