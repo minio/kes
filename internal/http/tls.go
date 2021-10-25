@@ -18,8 +18,11 @@ import (
 	xlog "github.com/minio/kes/internal/log"
 )
 
-// LoadCertificate returns a X.509 TLS certificate from the
+// LoadCertificate returns a new Certificate from the
 // given certificate and private key files.
+//
+// The password is used to decrypt the private key if
+// it is encrypted.
 func LoadCertificate(certFile, keyFile, password string) (*Certificate, error) {
 	certBytes, err := readCertificate(certFile)
 	if err != nil {
@@ -45,6 +48,14 @@ func LoadCertificate(certFile, keyFile, password string) (*Certificate, error) {
 		keyFile:     keyFile,
 		password:    password,
 	}, nil
+}
+
+// NewCertificate returns a new Certificate from the
+// given TLS certificate.
+func NewCertificate(cert tls.Certificate) *Certificate {
+	return &Certificate{
+		certificate: cert,
+	}
 }
 
 // Certificate is a X.509 TLS certificate.
@@ -73,6 +84,10 @@ func (c *Certificate) GetCertificate(clientHello *tls.ClientHelloInfo) (*tls.Cer
 //
 // Once the ctx.Done() channel returns ReloadAfter exits.
 func (c *Certificate) ReloadAfter(ctx context.Context, interval time.Duration) {
+	if c.certFile == "" || c.keyFile == "" {
+		return
+	}
+
 	var lastReloadErr error
 	for {
 		timer := time.NewTimer(interval)

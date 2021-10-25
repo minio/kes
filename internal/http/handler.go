@@ -24,13 +24,13 @@ import (
 	"github.com/secure-io/sio-go/sioutil"
 )
 
-// RequireMethod returns an http.HandlerFunc that checks whether
+// requireMethod returns an http.HandlerFunc that checks whether
 // the method of a client request matches the expected method before
 // calling f.
 //
 // If the client request method does not match the given method
 // it returns an error and http.StatusMethodNotAllowed to the client.
-func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
+func requireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	var ErrMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -43,14 +43,14 @@ func RequireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ValidatePath returns an handler function that verifies that the
+// validatePath returns an handler function that verifies that the
 // request URL.Path matches apiPattern before calling f. If the
 // path does not match the apiPattern it returns the bad request status
 // code (400) to the client.
 //
-// ValidatePath uses the standard library path glob matching for pattern
+// validatePath uses the standard library path glob matching for pattern
 // matching.
-func ValidatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
+func validatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
 	var ErrPatternMismatch = kes.NewError(http.StatusBadRequest, fmt.Sprintf("request URL path does not match API pattern: %s", apiPattern))
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -66,25 +66,25 @@ func ValidatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// LimitRequestBody returns an http.HandlerFunc that limits the
+// limitRequestBody returns an http.HandlerFunc that limits the
 // body of incoming requests to n bytes before calling f.
 //
 // It should be used to limit the amount of data a client can send
 // to prevent flooding/DoS attacks.
-func LimitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
+func limitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, n)
 		f(w, r)
 	}
 }
 
-// EnforcePolicies returns an http.Handler that verifies the
+// enforcePolicies returns an http.Handler that verifies the
 // request using policy/role based identity authentication before
 // calling f.
 //
 // If the request is not authorized it will return an error to the
 // client and does not call f.
-func EnforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
+func enforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := roles.Verify(r); err != nil {
 			Error(w, err)
@@ -94,10 +94,10 @@ func EnforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// AuditLog returns a handler function that wraps f and logs the
+// audit returns a handler function that wraps f and logs the
 // HTTP request and response before sending the response status code
 // back to the client.
-func AuditLog(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
+func audit(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w = &AuditResponseWriter{
 			ResponseWriter: w,
@@ -111,23 +111,23 @@ func AuditLog(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.Ha
 	}
 }
 
-// HandleVersion returns a handler function that returns the
+// handleVersion returns a handler function that returns the
 // given version as JSON. In particular, it returns a JSON
 // object:
 //  {
 //    "version": "<version>"
 //  }
-func HandleVersion(version string) http.HandlerFunc {
+func handleVersion(version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, `{"version":"%s"}`, version) }
 }
 
-// HandleStatus returns a handler function that returns status
+// handleStatus returns a handler function that returns status
 // information, like server version and server up-time, as JSON
 // object to the client.
 //
 // The handler function should not return any internal data - like
 // keystore backend, cache expiry, etc.
-func HandleStatus(version string, certificate *Certificate, log *xlog.Target) http.HandlerFunc {
+func handleStatus(version string, certificate *Certificate, log *xlog.Target) http.HandlerFunc {
 	type Status struct {
 		Version string        `json:"version"`
 		UpTime  time.Duration `json:"uptime"`
@@ -160,14 +160,14 @@ func HandleStatus(version string, certificate *Certificate, log *xlog.Target) ht
 	}
 }
 
-// HandleCreateKey returns a handler function that generates a new
+// handleCreateKey returns a handler function that generates a new
 // random Secret and stores in the Store under the request name, if
 // it doesn't exist.
 //
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleCreateKey(manager *key.Manager) http.HandlerFunc {
+func handleCreateKey(manager *key.Manager) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -190,14 +190,14 @@ func HandleCreateKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-// HandleImportKey returns a handler function that reads a secret
+// handleImportKey returns a handler function that reads a secret
 // value from the request body and stores in the Store under the
 // request name, if it doesn't exist.
 //
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func HandleImportKey(manager *key.Manager) http.HandlerFunc {
+func handleImportKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -233,7 +233,7 @@ func HandleImportKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-func HandleDeleteKey(manager *key.Manager) http.HandlerFunc {
+func handleDeleteKey(manager *key.Manager) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -250,19 +250,19 @@ func HandleDeleteKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-// HandleGenerateKey returns an http.HandlerFunc that generates
+// handleGenerateKey returns an http.HandlerFunc that generates
 // a data encryption key (DEK) at random and returns the plaintext
 // and ciphertext version of the DEK to the client. The DEK ciphertext
 // is the DEK plaintext encrypted with the secret key from the store.
 //
-// HandleGenerateKey behaves as HandleEncryptKey where the plaintext is
+// handleGenerateKey behaves as handleEncryptKey where the plaintext is
 // a randomly generated key.
 //
 // If the client provides an optional context value the
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func HandleGenerateKey(manager *key.Manager) http.HandlerFunc {
+func handleGenerateKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -309,7 +309,7 @@ func HandleGenerateKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-// HandleEncryptKey returns an http.HandlerFunc that encrypts
+// handleEncryptKey returns an http.HandlerFunc that encrypts
 // and authenticates a plaintext message sent by the client.
 //
 // It should be used to encrypt small amounts of data - like
@@ -321,7 +321,7 @@ func HandleGenerateKey(manager *key.Manager) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func HandleEncryptKey(manager *key.Manager) http.HandlerFunc {
+func handleEncryptKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -361,14 +361,14 @@ func HandleEncryptKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-// HandleDecryptKey returns an http.HandlerFunc that decrypts
+// handleDecryptKey returns an http.HandlerFunc that decrypts
 // and verifies a ciphertext sent by the client produced by
-// HandleEncryptKey or HandleGenerateKey.
+// handleEncryptKey or handleGenerateKey.
 //
 // If the client has provided a context value during
 // encryption / key generation then the client has to provide
 // the same context value again.
-func HandleDecryptKey(manager *key.Manager) http.HandlerFunc {
+func handleDecryptKey(manager *key.Manager) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -408,7 +408,7 @@ func HandleDecryptKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-// HandleListKeys returns an http.HandlerFunc that lists
+// handleListKeys returns an http.HandlerFunc that lists
 // all keys stored by the secret.Store that match the
 // glob pattern specified by the client.
 //
@@ -418,7 +418,7 @@ func HandleDecryptKey(manager *key.Manager) http.HandlerFunc {
 // The client is expected to check for an error trailer
 // and only consider the listing complete if it receives
 // no such trailer.
-func HandleListKeys(manager *key.Manager) http.HandlerFunc {
+func handleListKeys(manager *key.Manager) http.HandlerFunc {
 	type Response struct {
 		Name string
 	}
@@ -479,7 +479,7 @@ func HandleListKeys(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-func HandleWritePolicy(roles *auth.Roles) http.HandlerFunc {
+func handleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 	var (
 		ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
 		ErrInvalidJSON       = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -501,7 +501,7 @@ func HandleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleReadPolicy(roles *auth.Roles) http.HandlerFunc {
+func handleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 	var (
 		ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
 	)
@@ -521,7 +521,7 @@ func HandleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleListPolicies(roles *auth.Roles) http.HandlerFunc {
+func handleListPolicies(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var policies = []string{}
 		pattern := pathBase(r.URL.Path)
@@ -534,7 +534,7 @@ func HandleListPolicies(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
+func handleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
 	var ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -548,7 +548,7 @@ func HandleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
+func handleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 	var (
 		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
 		ErrIdentityRoot    = kes.NewError(http.StatusBadRequest, "identity is root")
@@ -578,7 +578,7 @@ func HandleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleListIdentities(roles *auth.Roles) http.HandlerFunc {
+func handleListIdentities(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type Response struct {
 			Identity kes.Identity `json:"identity"`
@@ -626,7 +626,7 @@ func HandleListIdentities(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func HandleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
+func handleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
 	var (
 		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
 		ErrIdentityRoot    = kes.NewError(http.StatusBadRequest, "identity is root")
@@ -646,7 +646,7 @@ func HandleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-// HandleTraceAuditLog returns an HTTP handler that adds
+// handleTraceAuditLog returns an HTTP handler that adds
 // the client as a log target. The client will then receive
 // all audit events.
 //
@@ -654,7 +654,7 @@ func HandleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
 // that will wait for the client to close the connection
 // resp. until the request context is done.
 // Therefore, it will not work properly with (write) timeouts.
-func HandleTraceAuditLog(target *xlog.Target) http.HandlerFunc {
+func handleTraceAuditLog(target *xlog.Target) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		out := NewFlushWriter(w)
 		target.Add(out)
@@ -667,7 +667,7 @@ func HandleTraceAuditLog(target *xlog.Target) http.HandlerFunc {
 	}
 }
 
-// HandleTraceErrorLog returns an HTTP handler that adds
+// handleTraceErrorLog returns an HTTP handler that adds
 // the client as a log target. The client will then receive
 // all error events.
 //
@@ -676,13 +676,13 @@ func HandleTraceAuditLog(target *xlog.Target) http.HandlerFunc {
 // resp. until the request context is done.
 // Therefore, it will not work properly with (write) timeouts.
 //
-// In contrast to HandleTraceAuditLog, HandleTraceErrorLog
+// In contrast to handleTraceAuditLog, handleTraceErrorLog
 // wraps the http.ResponseWriter such that whatever log logs
 // gets converted to the JSON:
 //  {
 //    "message":"<log-output>",
 //  }
-func HandleTraceErrorLog(target *xlog.Target) http.HandlerFunc {
+func handleTraceErrorLog(target *xlog.Target) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// We provide a JSON API. Therefore, our error log
 		// must also be converted to JSON / nd-JSON.
@@ -699,7 +699,7 @@ func HandleTraceErrorLog(target *xlog.Target) http.HandlerFunc {
 
 // HandleMetrics returns an HTTP handler that collects all outstanding
 // metrics information and writes them to the client.
-func HandleMetrics(metrics *metric.Metrics) http.HandlerFunc {
+func handleMetrics(metrics *metric.Metrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// We encode the metrics depending upon what encoding
 		// formats are accepted/supported by the client.
