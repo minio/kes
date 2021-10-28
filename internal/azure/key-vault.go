@@ -28,6 +28,15 @@ type Credentials struct {
 	Secret   string // The secret value of the Azure client
 }
 
+// ManagedIdentity is an Azure managed identity.
+//
+// It allows applications running inside Azure to authenticate
+// to Azure services via a managed identity object containing
+// the access credentials.
+type ManagedIdentity struct {
+	ClientID string // The Azure managed identity client ID
+}
+
 // KeyVault is a secret store that uses Azure KeyVault for storing secrets.
 type KeyVault struct {
 	Endpoint string // The Azure KeyVault Endpoint
@@ -312,20 +321,43 @@ func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
 	return iterator, nil
 }
 
-// Authenticate tries to establish a connecttion to a Azure KeyVault
-// instance.
+// AuthenticateWithCredentials tries to establish a connection to a Azure KeyVault
+// instance using Azure client credentials.
 //
 // It retruns an error if no connection could be
 // established - for instance because of invalid
 // credentials.
-func (kv *KeyVault) Authenticate(creds Credentials) error {
+func (kv *KeyVault) AuthenticateWithCredentials(creds Credentials) error {
 	const Scope = "https://vault.azure.net"
 
-	c := auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
+	var c = auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
 	c.Resource = Scope
 	token, err := c.ServicePrincipalToken()
 	if err != nil {
 		return fmt.Errorf("azure: failed to obtain ServicePrincipalToken from client credentials: %v", err)
+	}
+	kv.client = client{
+		Endpoint:   kv.Endpoint,
+		Authorizer: autorest.NewBearerAuthorizer(token),
+	}
+	return nil
+}
+
+// AuthenticateWithIdentity tries to establish a connection to a Azure KeyVault
+// instance using an Azure managed identity.
+//
+// It retruns an error if no connection could be
+// established - for instance because of invalid
+// credentials.
+func (kv *KeyVault) AuthenticateWithIdentity(msi ManagedIdentity) error {
+	const Scope = "https://vault.azure.net"
+
+	var c = auth.NewMSIConfig()
+	c.Resource = Scope
+	c.ClientID = msi.ClientID
+	token, err := c.ServicePrincipalToken()
+	if err != nil {
+		return fmt.Errorf("azure: failed to obtain ServicePrincipalToken from managed identity: %v", err)
 	}
 	kv.client = client{
 		Endpoint:   kv.Endpoint,

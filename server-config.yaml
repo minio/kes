@@ -266,4 +266,9 @@ keystore:
         tenant_id: ""      # The ID of the tenant the client belongs to - i.e. a UUID.
         client_id: ""      # The ID of the client - i.e. a UUID.
         client_secret: ""  # The value of the client secret.
+      # Azure managed identity used to
+      # authenticate to Azure KeyVault
+      # with Azure managed credentials.
+      managed_identity:
+        client_id: ""      # The Azure managed identity of the client - i.e. a UUID.
 
