@@ -364,7 +364,10 @@ type kmsServerConfig struct {
 				TenantID string `yaml:"tenant_id"`
 				ClientID string `yaml:"client_id"`
 				Secret   string `yaml:"client_secret"`
-			}
+			} `yaml:"credentials"`
+			ManagedIdentity struct {
+				ClientID string `yaml:"client_id"`
+			} `yaml:"managed_identity"`
 		} `yaml:"keyvault"`
 	} `yaml:"azure"`
 
@@ -618,13 +621,25 @@ func (config *kmsServerConfig) Connect(quiet quiet, errorLog *stdlog.Logger) (ke
 		}
 		msg := fmt.Sprintf("Authenticating to Azure KeyVault '%s' ... ", config.Azure.KeyVault.Endpoint)
 		quiet.Print(msg)
-		err := azureStore.Authenticate(azure.Credentials{
-			TenantID: config.Azure.KeyVault.Credentials.TenantID,
-			ClientID: config.Azure.KeyVault.Credentials.ClientID,
-			Secret:   config.Azure.KeyVault.Credentials.Secret,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
+		switch c := config.Azure.KeyVault.Credentials; {
+		case c.TenantID != "" || c.ClientID != "" || c.Secret != "":
+			var err = azureStore.AuthenticateWithCredentials(azure.Credentials{
+				TenantID: config.Azure.KeyVault.Credentials.TenantID,
+				ClientID: config.Azure.KeyVault.Credentials.ClientID,
+				Secret:   config.Azure.KeyVault.Credentials.Secret,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
+			}
+		case config.Azure.KeyVault.ManagedIdentity.ClientID != "":
+			var err = azureStore.AuthenticateWithIdentity(azure.ManagedIdentity{
+				ClientID: config.Azure.KeyVault.ManagedIdentity.ClientID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
+			}
+		default:
+			return nil, errors.New("failed to connect to Azure KeyVault: no client credentials or managed identity")
 		}
 		quiet.ClearMessage(msg)
 		return azureStore, nil
