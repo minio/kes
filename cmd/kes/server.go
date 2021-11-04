@@ -342,7 +342,7 @@ func server(args []string) {
 	quietFlag.Println()
 
 	if r, err := hex.DecodeString(config.Admin.Identity.Value().String()); err == nil && len(r) == sha256.Size {
-		quietFlag.Println(blue.Sprint("Admin:   "), config.Admin.Identity)
+		quietFlag.Println(blue.Sprint("Admin:   "), config.Admin.Identity.Value())
 	} else {
 		quietFlag.Println(blue.Sprint("Admin:   "), "_     [ disabled ]")
 	}
