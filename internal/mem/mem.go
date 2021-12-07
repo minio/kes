@@ -22,6 +22,15 @@ type Store struct {
 
 var _ key.Store = (*Store)(nil)
 
+// Status returns the state of the in-memory key store which is
+// always healthy.
+func (s *Store) Status(_ context.Context) (key.StoreState, error) {
+	return key.StoreState{
+		State:   key.StoreAvailable,
+		Latency: 0,
+	}, nil
+}
+
 // Create adds the given key to the store if and only if
 // no entry for the given name exists. If an entry already
 // exists it returns kes.ErrKeyExists.

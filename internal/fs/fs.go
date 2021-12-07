@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/key"
@@ -37,6 +38,23 @@ type Store struct {
 }
 
 var _ key.Store = (*Store)(nil)
+
+// Status returns the current state of the FS key store.
+func (s *Store) Status(_ context.Context) (key.StoreState, error) {
+	var (
+		start   = time.Now()
+		_, err  = os.Stat(s.Dir)
+		latency = time.Since(start)
+		state   = key.StoreAvailable
+	)
+	if err != nil {
+		state = key.StoreUnreachable
+	}
+	return key.StoreState{
+		State:   state,
+		Latency: latency,
+	}, nil
+}
 
 // Create stores the key in a new file in the KeyStore
 // directory if and only if no file with the given name

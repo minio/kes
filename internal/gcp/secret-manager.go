@@ -88,6 +88,19 @@ func Connect(ctx context.Context, c *Config) (*SecretManager, error) {
 	}, nil
 }
 
+// Status returns the current state of the GCP SecretManager instance.
+// In particular, whether it is reachable and the network latency.
+func (s *SecretManager) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, s.config.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreReachable {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+}
+
 // Create stores the given key-value pair at GCP secret manager
 // if and only if it doesn't exists. If such an entry already exists
 // it returns kes.ErrKeyExists.

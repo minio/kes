@@ -58,6 +58,19 @@ var (
 	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
+// Status returns the current state of the generic KeyStore instance.
+// In particular, whether it is reachable and the network latency.
+func (s *Store) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, s.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreReachable {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+}
+
 // Create creates the given key-value pair at the generic KeyStore if
 // and only if the given key does not exist. If such an entry already
 // exists it returns kes.ErrKeyExists.

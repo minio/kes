@@ -171,6 +171,19 @@ func (s *KeyStore) Authenticate(ctx context.Context) error {
 	return nil
 }
 
+// Status returns the current state of the Fortanix SDKMS instance.
+// In particular, whether it is reachable and the network latency.
+func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, s.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreReachable {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+}
+
 // Create stors the given key at the Fortanix SDKMS if and only
 // if no entry with the given name exists.
 //
