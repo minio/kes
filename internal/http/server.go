@@ -21,9 +21,6 @@ type ServerConfig struct {
 	// If empty, it defaults to v0.0.0-dev.
 	Version string
 
-	// Certificate is TLS server certificate.
-	Certificate *Certificate
-
 	// Manager is the key manager that fetches
 	// keys from a key store and stores them
 	// in a local in-memory cache.
@@ -62,14 +59,13 @@ type ServerConfig struct {
 // HTTP API.
 func NewServerMux(config *ServerConfig) *http.ServeMux {
 	var (
-		version     = config.Version
-		certificate = config.Certificate
-		manager     = config.Manager
-		roles       = config.Roles
-		proxy       = config.Proxy
-		auditLog    = config.AuditLog
-		errorLog    = config.ErrorLog
-		metrics     = config.Metrics
+		version  = config.Version
+		manager  = config.Manager
+		roles    = config.Roles
+		proxy    = config.Proxy
+		auditLog = config.AuditLog
+		errorLog = config.ErrorLog
+		metrics  = config.Metrics
 	)
 	if version == "" {
 		version = "v0.0.0-dev"
@@ -97,7 +93,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	mux.Handle("/v1/log/audit/trace", metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/log/audit/trace", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleTraceAuditLog(auditLog))))))))))
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/log/error/trace", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleTraceErrorLog(errorLog))))))))))
 
-	mux.Handle("/v1/status", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/status", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleStatus(version, certificate, errorLog)))))))))))
+	mux.Handle("/v1/status", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/status", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleStatus(version, manager, errorLog)))))))))))
 
 	// Scrapping /v1/metrics should not change the metrics itself.
 	// Further, scrapping /v1/metrics should, by default, not produce

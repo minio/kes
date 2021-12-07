@@ -129,6 +129,19 @@ func (s *KeySecure) Authenticate() (err error) {
 	return nil
 }
 
+// Status returns the current state of the Gemalto KeySecure instance.
+// In particular, whether it is reachable and the network latency.
+func (s *KeySecure) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, s.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreReachable {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+}
+
 // Create creates the given key-value pair at Gemalto if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.

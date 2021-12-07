@@ -60,6 +60,19 @@ var (
 	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
 )
 
+// Status returns the current state of the Azure KeyVault instance.
+// In particular, whether it is reachable and the network latency.
+func (kv *KeyVault) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, kv.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreReachable {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+}
+
 // Create creates the given key-value pair as KeyVault secret.
 //
 // Since KeyVault does not support an atomic create resp.

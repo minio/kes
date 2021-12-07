@@ -236,14 +236,13 @@ func server(args []string) {
 	var server = http.Server{
 		Addr: config.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
-			Version:     version,
-			Certificate: certificate,
-			Manager:     manager,
-			Roles:       roles,
-			Proxy:       proxy,
-			AuditLog:    auditLog,
-			ErrorLog:    errorLog,
-			Metrics:     metrics,
+			Version:  version,
+			Manager:  manager,
+			Roles:    roles,
+			Proxy:    proxy,
+			AuditLog: auditLog,
+			ErrorLog: errorLog,
+			Metrics:  metrics,
 		}),
 		TLSConfig: &tls.Config{
 			MinVersion:     tls.VersionTLS12,

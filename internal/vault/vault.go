@@ -129,6 +129,54 @@ var (
 	errSealed = errors.New("vault: key store is sealed")
 )
 
+// Status returns the current state of the Hashicorp Vault instance.
+// In particular, whether it is reachable and the network latency.
+func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
+	state, err := key.DialStore(ctx, s.config.Endpoint)
+	if err != nil {
+		return key.StoreState{}, err
+	}
+	if state.State == key.StoreUnreachable {
+		return state, nil
+	}
+
+	// Vault is reachable over the network. Now, we fetch Vault health
+	// information to check whether it can serve requests.
+	// We use a custom version of the Client.Sys().Health() SDK function
+	// since we cannot pass our context.
+
+	var req = s.client.NewRequest(http.MethodGet, "/v1/sys/health")
+	// If the code is 400 or above it will automatically turn into an error,
+	// but the sys/health API defaults to returning 5xx when not sealed or
+	// initialized, so we force this code to be something else so we parse correctly
+	req.Params.Add("uninitcode", "299")
+	req.Params.Add("sealedcode", "299")
+	req.Params.Add("standbycode", "299")
+	req.Params.Add("drsecondarycode", "299")
+	req.Params.Add("performancestandbycode", "299")
+
+	resp, err := s.client.RawRequestWithContext(ctx, req)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return state, nil
+	}
+	if err != nil {
+		s.logf("vault: failed to fetch health status information: %v", err)
+		return state, nil
+	}
+	defer resp.Body.Close()
+
+	var response vaultapi.HealthResponse
+	if err = resp.DecodeJSON(&response); err != nil {
+		s.logf("vault: failed to fetch health status information: %v", err)
+		return state, nil
+	}
+	if response.Initialized && !response.Sealed {
+		state.State = key.StoreAvailable
+	}
+	return state, nil
+
+}
+
 // Create creates the given key-value pair at Vault if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
