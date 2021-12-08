@@ -27,8 +27,9 @@ type serverConfigV0170 struct {
 
 	Cache struct {
 		Expiry struct {
-			Any    Duration `yaml:"any"`
-			Unused Duration `yaml:"unused"`
+			Any     Duration `yaml:"any"`
+			Unused  Duration `yaml:"unused"`
+			Offline Duration `yaml:"offline"`
 		} `yaml:"expiry"`
 	} `yaml:"cache"`
 

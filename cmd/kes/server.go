@@ -207,9 +207,10 @@ func server(args []string) {
 		stdlog.Fatalf("Error: %v", err)
 	}
 	manager := &key.Manager{
-		CacheExpiryAny:    config.Cache.Expiry.Any.Value(),
-		CacheExpiryUnused: config.Cache.Expiry.Unused.Value(),
-		Store:             store,
+		CacheExpiryAny:     config.Cache.Expiry.Any.Value(),
+		CacheExpiryUnused:  config.Cache.Expiry.Unused.Value(),
+		CacheExpiryOffline: config.Cache.Expiry.Offline.Value(),
+		Store:              store,
 	}
 
 	for _, k := range config.Keys {
@@ -302,6 +303,7 @@ func server(args []string) {
 		}
 	}()
 	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
+	go key.LogStoreStatus(ctx, manager.Store, 1*time.Minute, errorLog.Log())
 
 	// The following code prints a server startup message similar to:
 	//

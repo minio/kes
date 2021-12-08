@@ -99,6 +99,17 @@ cache:
     #
     # If not set, KES will default to an expiry of 30 seconds.
     unused: 20s
+    # Period after which any cache entries in the offline cache
+    # are discarded.
+    # It determines how long the KES server can serve stateless
+    # requests when the KMS key store has become unavailable -
+    # e.g. due to a network outage.
+    #
+    # If not set, KES will disable the offline cache.
+    #
+    # Offline caching should only be enabled when trying to
+    # reduce the impact of the KMS key store being unavailable.
+    offline: 0s
 
 # The console logging configuration. In general, the KES server
 # distinguishes between (operational) errors and audit events.

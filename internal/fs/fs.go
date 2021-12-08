@@ -41,12 +41,11 @@ var _ key.Store = (*Store)(nil)
 
 // Status returns the current state of the FS key store.
 func (s *Store) Status(_ context.Context) (key.StoreState, error) {
-	var (
-		start   = time.Now()
-		_, err  = os.Stat(s.Dir)
-		latency = time.Since(start)
-		state   = key.StoreAvailable
-	)
+	state := key.StoreAvailable
+
+	start := time.Now()
+	_, err := os.Stat(s.Dir)
+	latency := time.Since(start)
 	if err != nil {
 		state = key.StoreUnreachable
 	}

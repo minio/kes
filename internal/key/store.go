@@ -3,6 +3,7 @@ package key
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"net/url"
 	"time"
@@ -13,6 +14,16 @@ import (
 type Store interface {
 	// Status returns the current state of the
 	// Store.
+	//
+	// If Status fails to reach the Store - e.g.
+	// due to a network error - it should return
+	// a StoreState with StoreUnreachable and no
+	// error.
+	//
+	// Status should return an error whenever it
+	// fails to reach the Store but StoreUnreachable
+	// is not appropriate to describe the error
+	// condition.
 	Status(context.Context) (StoreState, error)
 
 	// Create stores the given key at the key store if
@@ -166,4 +177,34 @@ func DialStore(ctx context.Context, endpoint string) (StoreState, error) {
 		State:   StoreReachable,
 		Latency: latency,
 	}, nil
+}
+
+// LogStoreStatus periodically fetches the Store status
+// and writes a log message whenever the Store is not
+// available.
+//
+// It stops whenever the given Context.Done() channel
+// returns.
+func LogStoreStatus(ctx context.Context, store Store, interval time.Duration, out *log.Logger) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var lastAvailable time.Time
+	for {
+		state, err := store.Status(ctx)
+		switch {
+		case err != nil:
+			out.Printf("key: failed to fetch KMS key store status information: %v", err)
+		case state.State != StoreAvailable:
+			out.Printf("key: KMS key store is %s for %v", state.State, time.Since(lastAvailable).Round(time.Second))
+		default:
+			lastAvailable = time.Now().UTC()
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/kes"
@@ -47,13 +48,33 @@ type Manager struct {
 	// marked as used again and remains in the cache.
 	CacheExpiryUnused time.Duration
 
+	// CacheExpiryOffline is the time keys remain in the
+	// offline cache.
+	//
+	// The offline cache is only used when the Store is
+	// not available and CacheExpiryOffline > 0.
+	//
+	// The offline cache, if used, gets cleared whenever
+	// the Store becomes available again.
+	CacheExpiryOffline time.Duration
+
 	// CacheContext is the context that controls the cache
 	// garbage collection. Once its Done() channel returns,
 	// the garbage collection stops.
 	CacheContext context.Context
 
-	once  sync.Once // Start the GC only once
-	cache cache
+	once         sync.Once // Start the GC only once
+	cache        cache
+	offlineCache cache
+
+	// Controls whether the offline cache is used:
+	//  - 0: Offline cache is disabled
+	//  - 1: Offline cache is enabled
+	//
+	// Concurrently modified when checking the Store
+	// status.
+	// By default, don't use the offline cache
+	useOfflineCache uint32
 }
 
 // Create stores the given key at the key store.
@@ -84,6 +105,11 @@ func (m *Manager) Get(ctx context.Context, name string) (Key, error) {
 	if key, ok := m.cache.Get(name); ok {
 		return key, nil
 	}
+	if atomic.LoadUint32(&m.useOfflineCache) == 1 {
+		if key, ok := m.offlineCache.Get(name); ok {
+			return key, nil
+		}
+	}
 	switch key, err := m.Store.Get(ctx, name); {
 	case err == nil:
 		return m.cache.CompareAndSwap(name, key), nil
@@ -102,6 +128,7 @@ func (m *Manager) Get(ctx context.Context, name string) (Key, error) {
 func (m *Manager) Delete(ctx context.Context, name string) error {
 	m.once.Do(m.startGC)
 	m.cache.Delete(name)
+	m.offlineCache.Delete(name)
 
 	switch err := m.Store.Delete(ctx, name); {
 	case err == nil:
@@ -140,4 +167,54 @@ func (m *Manager) startGC() {
 	// However, that can only happen if CacheExpiryUnused is 1ns - which is
 	// anyway an unreasonable value for the expiry.
 	m.cache.StartUnusedGC(ctx, m.CacheExpiryUnused/2)
+
+	m.offlineCache.StartGC(ctx, m.CacheExpiryOffline)
+	m.watchStatus(ctx, 10*time.Second)
+}
+
+func (m *Manager) watchStatus(ctx context.Context, t time.Duration) {
+	if t == 0 {
+		return
+	}
+
+	const (
+		Online  = 0
+		Offline = 1
+	)
+	go func() {
+		ticker := time.NewTicker(t)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// When the Store status changes from available to
+				// unreachable, we load the general cache into the
+				// offline cache.
+				// Once the Store becomes available again, we clear
+				// both caches and start with a clean state.
+				state, err := m.Store.Status(ctx)
+				if err != nil || state.State != StoreAvailable {
+					if atomic.CompareAndSwapUint32(&m.useOfflineCache, Online, Offline) {
+						m.cache.lock.Lock()
+						m.offlineCache.lock.Lock()
+
+						m.offlineCache.store, m.cache.store = m.cache.store, map[string]*entry{}
+
+						m.cache.lock.Unlock()
+						m.offlineCache.lock.Unlock()
+					}
+				} else if atomic.CompareAndSwapUint32(&m.useOfflineCache, Offline, Online) {
+					m.cache.lock.Lock()
+					m.offlineCache.lock.Lock()
+
+					m.offlineCache.store, m.cache.store = map[string]*entry{}, map[string]*entry{}
+
+					m.cache.lock.Unlock()
+					m.offlineCache.lock.Unlock()
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
