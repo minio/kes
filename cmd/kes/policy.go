@@ -87,7 +87,7 @@ func addPolicy(args []string) {
 	}
 
 	var (
-		name  = args[0]
+		name  = cli.Arg(0)
 		input = os.Stdin
 	)
 	if cli.NArg() == 2 && cli.Arg(1) != "-" {
