@@ -163,6 +163,7 @@ func (c *Config) Clone() *Config {
 		Engine:          c.Engine,
 		APIVersion:      c.APIVersion,
 		Namespace:       c.Namespace,
+		Prefix:          c.Prefix,
 		AppRole:         c.AppRole,
 		K8S:             c.K8S,
 		ErrorLog:        c.ErrorLog,
