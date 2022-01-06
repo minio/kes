@@ -22,7 +22,7 @@ type serverConfigV0170 struct {
 	Policies map[string]struct {
 		Allow      []string   `yaml:"allow"` // Use 'string' type; We don't replace API allow patterns with env. vars
 		Deny       []string   `yaml:"deny"`  // Use 'string' type; We don't replace API deny patterns with env. vars
-		Identities []Identity `yaml:"identity"`
+		Identities []Identity `yaml:"identities"`
 	} `yaml:"policy"`
 
 	Cache struct {
