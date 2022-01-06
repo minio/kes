@@ -174,12 +174,12 @@ func (c *serverConfigV0135) migrate() *ServerConfig {
 	type Policy struct {
 		Allow      []string   `yaml:"allow"`
 		Deny       []string   `yaml:"deny"`
-		Identities []Identity `yaml:"identity"`
+		Identities []Identity `yaml:"identities"`
 	}
 	config.Policies = make(map[string]struct {
 		Allow      []string   `yaml:"allow"`
 		Deny       []string   `yaml:"deny"`
-		Identities []Identity `yaml:"identity"`
+		Identities []Identity `yaml:"identities"`
 	}, len(c.Policies))
 	for name, policy := range c.Policies {
 		config.Policies[name] = Policy{
