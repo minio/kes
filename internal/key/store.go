@@ -1,3 +1,7 @@
+// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package key
 
 import (
@@ -29,7 +33,7 @@ type Store interface {
 	// Create stores the given key at the key store if
 	// and only if no entry with the given name exists.
 	//
-	// If no such entry exists, Create returns kes.ErrKeyExists.
+	// If such entry exists, Create returns kes.ErrKeyExists.
 	Create(ctx context.Context, name string, key Key) error
 
 	// Delete deletes the key associated with the given name

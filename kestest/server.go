@@ -116,11 +116,10 @@ func (s *Server) start() {
 	var serverCert = issueCertificate("kestest: server", s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageServerAuth)
 	s.server = httptest.NewUnstartedServer(xhttp.NewServerMux(&xhttp.ServerConfig{
 		Version: "v0.0.0-dev",
-		Manager: &key.Manager{
-			CacheExpiryAny:    30 * time.Second,
-			CacheExpiryUnused: 5 * time.Second,
-			Store:             &mem.Store{},
-		},
+		Store: key.NewCache(&mem.Store{}, &key.CacheConfig{
+			Expiry:       30 * time.Second,
+			ExpiryUnused: 5 * time.Second,
+		}),
 		Roles:    s.policies.roles,
 		Proxy:    nil,
 		AuditLog: auditLog,
