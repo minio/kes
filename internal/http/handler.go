@@ -123,7 +123,7 @@ func handleVersion(version string) http.HandlerFunc {
 // handleStatus returns a handler function that returns status
 // information, like server version and server up-time, as JSON
 // object to the client.
-func handleStatus(version string, manager *key.Manager, log *xlog.Target) http.HandlerFunc {
+func handleStatus(version string, store key.Store, log *xlog.Target) http.HandlerFunc {
 	type Status struct {
 		Version string        `json:"version"`
 		UpTime  time.Duration `json:"uptime"`
@@ -135,7 +135,7 @@ func handleStatus(version string, manager *key.Manager, log *xlog.Target) http.H
 	}
 	var startTime = time.Now()
 	return func(w http.ResponseWriter, r *http.Request) {
-		kmsState, err := manager.Store.Status(r.Context())
+		kmsState, err := store.Status(r.Context())
 		if err != nil {
 			kmsState = key.StoreState{
 				State: key.StoreUnreachable,
@@ -162,7 +162,7 @@ func handleStatus(version string, manager *key.Manager, log *xlog.Target) http.H
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func handleCreateKey(manager *key.Manager) http.HandlerFunc {
+func handleCreateKey(store key.Store) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +178,7 @@ func handleCreateKey(manager *key.Manager) http.HandlerFunc {
 			return
 		}
 
-		if err := manager.Create(r.Context(), name, key.New(bytes)); err != nil {
+		if err := store.Create(r.Context(), name, key.New(bytes)); err != nil {
 			Error(w, err)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -192,7 +192,7 @@ func handleCreateKey(manager *key.Manager) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func handleImportKey(manager *key.Manager) http.HandlerFunc {
+func handleImportKey(store key.Store) http.HandlerFunc {
 	var (
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -220,7 +220,7 @@ func handleImportKey(manager *key.Manager) http.HandlerFunc {
 			return
 		}
 
-		if err := manager.Create(r.Context(), name, key.New(req.Bytes)); err != nil {
+		if err := store.Create(r.Context(), name, key.New(req.Bytes)); err != nil {
 			Error(w, err)
 			return
 		}
@@ -228,7 +228,7 @@ func handleImportKey(manager *key.Manager) http.HandlerFunc {
 	}
 }
 
-func handleDeleteKey(manager *key.Manager) http.HandlerFunc {
+func handleDeleteKey(store key.Store) http.HandlerFunc {
 	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +237,7 @@ func handleDeleteKey(manager *key.Manager) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		if err := manager.Delete(r.Context(), name); err != nil {
+		if err := store.Delete(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -257,7 +257,7 @@ func handleDeleteKey(manager *key.Manager) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func handleGenerateKey(manager *key.Manager) http.HandlerFunc {
+func handleGenerateKey(store key.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -281,7 +281,7 @@ func handleGenerateKey(manager *key.Manager) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := manager.Get(r.Context(), name)
+		secret, err := store.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -316,7 +316,7 @@ func handleGenerateKey(manager *key.Manager) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func handleEncryptKey(manager *key.Manager) http.HandlerFunc {
+func handleEncryptKey(store key.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -340,7 +340,7 @@ func handleEncryptKey(manager *key.Manager) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := manager.Get(r.Context(), name)
+		secret, err := store.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -363,7 +363,7 @@ func handleEncryptKey(manager *key.Manager) http.HandlerFunc {
 // If the client has provided a context value during
 // encryption / key generation then the client has to provide
 // the same context value again.
-func handleDecryptKey(manager *key.Manager) http.HandlerFunc {
+func handleDecryptKey(store key.Store) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -387,7 +387,7 @@ func handleDecryptKey(manager *key.Manager) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := manager.Get(r.Context(), name)
+		secret, err := store.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -413,14 +413,14 @@ func handleDecryptKey(manager *key.Manager) http.HandlerFunc {
 // The client is expected to check for an error trailer
 // and only consider the listing complete if it receives
 // no such trailer.
-func handleListKeys(manager *key.Manager) http.HandlerFunc {
+func handleListKeys(store key.Store) http.HandlerFunc {
 	type Response struct {
 		Name string
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Trailer", "Status,Error")
 
-		iterator, err := manager.List(r.Context())
+		iterator, err := store.List(r.Context())
 		if err != nil {
 			Error(w, err)
 			return

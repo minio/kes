@@ -21,10 +21,9 @@ type ServerConfig struct {
 	// If empty, it defaults to v0.0.0-dev.
 	Version string
 
-	// Manager is the key manager that fetches
-	// keys from a key store and stores them
-	// in a local in-memory cache.
-	Manager *key.Manager
+	// Store is the key store holding the cryptographic
+	// keys.
+	Store key.Store
 
 	// Roles is the authorization system that
 	// contains identities and the associated
@@ -60,7 +59,7 @@ type ServerConfig struct {
 func NewServerMux(config *ServerConfig) *http.ServeMux {
 	var (
 		version  = config.Version
-		manager  = config.Manager
+		store    = config.Store
 		roles    = config.Roles
 		proxy    = config.Proxy
 		auditLog = config.AuditLog
@@ -73,13 +72,13 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 
 	const MaxBody = 1 << 20
 	var mux = http.NewServeMux()
-	mux.Handle("/v1/key/create/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/create/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleCreateKey(manager)))))))))))
-	mux.Handle("/v1/key/import/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/import/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleImportKey(manager)))))))))))
-	mux.Handle("/v1/key/delete/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodDelete, validatePath("/v1/key/delete/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleDeleteKey(manager)))))))))))
-	mux.Handle("/v1/key/generate/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/generate/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleGenerateKey(manager)))))))))))
-	mux.Handle("/v1/key/encrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/encrypt/*", limitRequestBody(MaxBody/2, tlsProxy(proxy, enforcePolicies(roles, handleEncryptKey(manager)))))))))))
-	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/decrypt/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleDecryptKey(manager)))))))))))
-	mux.Handle("/v1/key/list/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/key/list/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleListKeys(manager)))))))))))
+	mux.Handle("/v1/key/create/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/create/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleCreateKey(store)))))))))))
+	mux.Handle("/v1/key/import/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/import/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleImportKey(store)))))))))))
+	mux.Handle("/v1/key/delete/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodDelete, validatePath("/v1/key/delete/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleDeleteKey(store)))))))))))
+	mux.Handle("/v1/key/generate/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/generate/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleGenerateKey(store)))))))))))
+	mux.Handle("/v1/key/encrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/encrypt/*", limitRequestBody(MaxBody/2, tlsProxy(proxy, enforcePolicies(roles, handleEncryptKey(store)))))))))))
+	mux.Handle("/v1/key/decrypt/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/decrypt/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleDecryptKey(store)))))))))))
+	mux.Handle("/v1/key/list/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/key/list/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleListKeys(store)))))))))))
 
 	mux.Handle("/v1/policy/write/", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/policy/write/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleWritePolicy(roles)))))))))))
 	mux.Handle("/v1/policy/read/", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/policy/read/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleReadPolicy(roles)))))))))))
@@ -93,7 +92,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	mux.Handle("/v1/log/audit/trace", metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/log/audit/trace", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleTraceAuditLog(auditLog))))))))))
 	mux.Handle("/v1/log/error/trace", metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/log/error/trace", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleTraceErrorLog(errorLog))))))))))
 
-	mux.Handle("/v1/status", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/status", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleStatus(version, manager, errorLog)))))))))))
+	mux.Handle("/v1/status", timeout(10*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodGet, validatePath("/v1/status", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleStatus(version, store, errorLog)))))))))))
 
 	// Scrapping /v1/metrics should not change the metrics itself.
 	// Further, scrapping /v1/metrics should, by default, not produce

@@ -206,12 +206,12 @@ func server(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	manager := &key.Manager{
-		CacheExpiryAny:     config.Cache.Expiry.Any.Value(),
-		CacheExpiryUnused:  config.Cache.Expiry.Unused.Value(),
-		CacheExpiryOffline: config.Cache.Expiry.Offline.Value(),
-		Store:              store,
-	}
+	var cache = key.NewCache(store, &key.CacheConfig{
+		Expiry:        config.Cache.Expiry.Any.Value(),
+		ExpiryUnused:  config.Cache.Expiry.Unused.Value(),
+		ExpiryOffline: config.Cache.Expiry.Offline.Value(),
+	})
+	defer cache.Stop()
 
 	for _, k := range config.Keys {
 		bytes, err := sioutil.Random(key.Size)
@@ -238,7 +238,7 @@ func server(args []string) {
 		Addr: config.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
 			Version:  version,
-			Manager:  manager,
+			Store:    cache,
 			Roles:    roles,
 			Proxy:    proxy,
 			AuditLog: auditLog,
@@ -303,7 +303,7 @@ func server(args []string) {
 		}
 	}()
 	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
-	go key.LogStoreStatus(ctx, manager.Store, 1*time.Minute, errorLog.Log())
+	go key.LogStoreStatus(ctx, cache, 1*time.Minute, errorLog.Log())
 
 	// The following code prints a server startup message similar to:
 	//
