@@ -5,248 +5,129 @@
 package auth
 
 import (
-	"crypto"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/hex"
-	"errors"
+	"context"
 	"net/http"
-	"sync"
+	"path"
+	"time"
 
 	"github.com/minio/kes"
 )
 
-// IdentityFunc maps a X.509 certificate to an
-// Identity. This mapping should be deterministic
-// and unique in the sense that:
-//  1. The same certificate always gets mapped to same identity.
-//  2. There is only one (valid / non-expired) certificate that
-//     gets mapped to a particular (known) identity.
-//
-// If no certificate is provided or an identity
-// cannot be computed - e.g. because the certificate
-// does not contain enough information - the IdentityFunc
-// should return IdentityUnknown.
-type IdentityFunc func(*x509.Certificate) kes.Identity
+// A PolicySet is a set of policies.
+type PolicySet interface {
+	// Set creates or replaces the policy at the given name.
+	Set(ctx context.Context, name string, policy *Policy) error
 
-// HashPublicKey returns an IdentityFunc that
-// computes an identity as the cryptographic
-// hash of the certificate's public key.
-//
-// If the hash function is not available
-// it uses crypto.SHA256.
-func HashPublicKey(hash crypto.Hash) IdentityFunc {
-	if !hash.Available() {
-		hash = crypto.SHA256
-	}
-	return func(cert *x509.Certificate) kes.Identity {
-		if cert == nil {
-			return kes.IdentityUnknown
-		}
-		h := hash.New()
-		h.Write(cert.RawSubjectPublicKeyInfo)
-		return kes.Identity(hex.EncodeToString(h.Sum(nil)))
-	}
-}
-
-type Roles struct {
-	Root     kes.Identity
-	Identify IdentityFunc
-
-	lock           sync.RWMutex
-	roles          map[string]*kes.Policy  // all available roles
-	effectiveRoles map[kes.Identity]string // identities for which a mapping to a policy name exists
-}
-
-func (r *Roles) Set(name string, policy *kes.Policy) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	if r.roles == nil {
-		r.roles = map[string]*kes.Policy{}
-	}
-	r.roles[name] = policy
-}
-
-func (r *Roles) Get(name string) (*kes.Policy, bool) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	if r.roles == nil {
-		return nil, false
-	}
-	policy, ok := r.roles[name]
-	return policy, ok
-}
-
-func (r *Roles) Delete(name string) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	delete(r.roles, name)
-	if r.effectiveRoles != nil { // Remove all assigned identities
-		for id, policy := range r.effectiveRoles {
-			if name == policy {
-				delete(r.effectiveRoles, id)
-			}
-		}
-	}
-}
-
-func (r *Roles) Policies() (names []string) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	names = make([]string, 0, len(r.roles))
-	for name := range r.roles {
-		names = append(names, name)
-	}
-	return
-}
-
-func (r *Roles) Assign(name string, id kes.Identity) error {
-	if id == r.Root {
-		return errors.New("key: identity is root")
-	}
-
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	if r.roles == nil {
-		r.roles = map[string]*kes.Policy{}
-	}
-	_, ok := r.roles[name]
-	if !ok {
-		return kes.ErrPolicyNotFound
-	}
-	if r.effectiveRoles == nil {
-		r.effectiveRoles = map[kes.Identity]string{}
-	}
-	r.effectiveRoles[id] = name
-	return nil
-}
-
-func (r *Roles) IsAssigned(id kes.Identity) bool {
-	if id == r.Root {
-		return true
-	}
-
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	if r.effectiveRoles != nil {
-		if name, ok := r.effectiveRoles[id]; ok {
-			_, ok = r.roles[name]
-			return ok
-		}
-	}
-	return false
-}
-
-func (r *Roles) Identities() map[kes.Identity]string {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	identities := make(map[kes.Identity]string, len(r.effectiveRoles))
-	for id, policy := range r.effectiveRoles {
-		identities[id] = policy
-	}
-	return identities
-}
-
-func (r *Roles) Forget(id kes.Identity) {
-	r.lock.Lock()
-	delete(r.effectiveRoles, id)
-	r.lock.Unlock()
-}
-
-func (r *Roles) Verify(req *http.Request) error {
-	if req.TLS == nil {
-		// This can only happen if the server accepts non-TLS
-		// connections - which violates our fundamental security
-		// assumption.
-		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
-	}
-
-	// A client may send none, one or multiple peer certificates
-	// as part of the TLS handshake. However, expect exactly
-	// one client certificate to map it to a policy.
+	// Get returns the policy with the given name.
 	//
-	// In particular, clients may send multiple certificates - for
-	// example their client certificate as well as intermediate or
-	// root CA certificates.
-	// Therefore, we filter all CA certificates and only
-	// process the remaining leaf certificate(s).
-	peerCertificates := make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
-	for _, cert := range req.TLS.PeerCertificates {
-		if cert.IsCA {
-			continue
-		}
-		peerCertificates = append(peerCertificates, cert)
-	}
+	// It returns ErrPolicyNotFound if no policy with
+	// the given name exists.
+	Get(ctx context.Context, name string) (*Policy, error)
 
-	if len(peerCertificates) == 0 {
-		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
-	}
-	if len(peerCertificates) > 1 {
-		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
-	}
-	req.TLS.PeerCertificates = peerCertificates
+	// Delete deletes the policy with the given name.
+	//
+	// It returns ErrPolicyNotFound if no policy with
+	// the given name exists.
+	Delete(ctx context.Context, name string) error
 
-	identity := Identify(req, r.Identify)
-	if identity.IsUnknown() {
-		return kes.ErrNotAllowed
-	}
-	if identity == r.Root {
-		return nil
-	}
-
-	var policy *kes.Policy
-	r.lock.RLock()
-	if r.roles != nil && r.effectiveRoles != nil {
-		if name, ok := r.effectiveRoles[identity]; ok {
-			policy = r.roles[name]
-		}
-	}
-	r.lock.RUnlock()
-
-	if policy == nil {
-		return kes.ErrNotAllowed
-	}
-	return policy.Verify(req)
+	// List returns an iterator over all policies.
+	List(ctx context.Context) (PolicyIterator, error)
 }
 
-// Identify computes the identity of the X.509
-// certificate presented by the peer who sent
-// the request.
+// A PolicyIterator iterates over a list of policies.
+//   for iterator.Next() {
+//       _ = iterator.Name() // Get the next policy
+//   }
+//   if err := iterator.Close(); err != nil {
+//   }
 //
-// It returns IdentityUnknown if no TLS connection
-// state is present, more than one certificate
-// is present or when f returns IdentityUnknown.
-func Identify(req *http.Request, f IdentityFunc) kes.Identity {
-	if req.TLS == nil {
-		return kes.IdentityUnknown
-	}
-	if len(req.TLS.PeerCertificates) > 1 {
-		return kes.IdentityUnknown
-	}
+// Once done iterating, a PolicyIterator should be closed.
+//
+// In general, a PolicyIterator does not provide any
+// ordering guranatees. Concurrent changes to the
+// underlying source may not be reflected by the iterator.
+type PolicyIterator interface {
+	// Next moves the iterator to the subsequent policy, if any.
+	// This policy is available until Next is called again.
+	//
+	// It returns true if and only if there is another policy.
+	// Once an error occurs or once there are no more policies,
+	// Next returns false.
+	Next() bool
 
-	var cert *x509.Certificate
-	if len(req.TLS.PeerCertificates) > 0 {
-		cert = req.TLS.PeerCertificates[0]
-	}
-	if f == nil {
-		return defaultIdentify(cert)
-	}
-	return f(cert)
+	// Name returns the name of the current policy. Name can be
+	// called multiple times and returns the same value until
+	// Next is called again.
+	Name() string
+
+	// Close closes the iterator and releases resources. It
+	// returns any error encountered while iterating, if any.
+	// Otherwise, it returns any error that occurred while
+	// closing, if any.
+	Close() error
 }
 
-// defaultIdentify computes the SHA-256 of the
-// public key in cert and returns it as hex.
-func defaultIdentify(cert *x509.Certificate) kes.Identity {
-	if cert == nil {
-		return kes.IdentityUnknown
+// A Policy defines whether an HTTP request is allowed or
+// should be rejected.
+//
+// It contains a set of allow and deny rules that are
+// matched against the URL path.
+type Policy struct {
+	// Allow is a list of glob patterns that are matched
+	// against the URL path of incoming requests.
+	Allow []string
+
+	// Deny is a list of glob patterns that are matched
+	// against the URL path of incoming requests.
+	Deny []string
+
+	// CreatedAt is the point in time when the policy
+	// has been created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created the policy.
+	CreatedBy kes.Identity
+}
+
+// Verify reports whether the given HTTP request is allowed.
+// It returns no error if:
+//  (1) No deny pattern matches the URL path *AND*
+//  (2) At least one allow pattern matches the URL path.
+//
+// Otherwise, Verify returns ErrNotAllowed.
+func (p *Policy) Verify(r *http.Request) error {
+	for _, pattern := range p.Deny {
+		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
+			return kes.ErrNotAllowed
+		}
 	}
-	h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-	return kes.Identity(hex.EncodeToString(h[:]))
+	for _, pattern := range p.Allow {
+		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
+			return nil
+		}
+	}
+	return kes.ErrNotAllowed
+}
+
+// ROPolicySet wraps p and returns a readonly PolicySet.
+func ROPolicySet(p PolicySet) PolicySet { return roPolicySet{set: p} }
+
+type roPolicySet struct{ set PolicySet }
+
+var _ PolicySet = roPolicySet{} // compiler check
+
+func (r roPolicySet) Set(context.Context, string, *Policy) error {
+	return kes.NewError(http.StatusNotImplemented, "readonly policy-set: setting a policy is not supported")
+}
+
+func (r roPolicySet) Get(ctx context.Context, name string) (*Policy, error) {
+	return r.set.Get(ctx, name)
+}
+
+func (r roPolicySet) Delete(context.Context, string) error {
+	return kes.NewError(http.StatusNotImplemented, "readonly policy-set: deleting a policy is not supported")
+}
+
+func (r roPolicySet) List(ctx context.Context) (PolicyIterator, error) {
+	return r.set.List(ctx)
 }

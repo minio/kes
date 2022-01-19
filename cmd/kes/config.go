@@ -9,11 +9,14 @@ import (
 	"errors"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/minio/kes"
+	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/azure"
 	"github.com/minio/kes/internal/fortanix"
@@ -25,7 +28,6 @@ import (
 	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/vault"
 	"github.com/minio/kes/internal/yml"
-	"gopkg.in/yaml.v2"
 )
 
 // connect tries to establish a connection to the KMS specified in the ServerConfig
@@ -240,46 +242,200 @@ func description(config *yml.ServerConfig) (kind, endpoint string, err error) {
 	return kind, endpoint, nil
 }
 
-// expandEnv replaces s with a value from the environment if
-// s refers to an environment variable. If the referenced
-// environment variable does not exist s gets replaced with
-// the empty string.
-//
-// s refers to an environment variable if it has the following
-// form: ${<name>}.
-//
-// If s does not refer to an environment variable then s is
-// returned unmodified.
-func expandEnv(s string) string {
-	if t := strings.TrimSpace(s); strings.HasPrefix(t, "${") && strings.HasSuffix(t, "}") {
-		return os.ExpandEnv(t)
+// policySetFromConfig returns an in-memory PolicySet
+// from the given ServerConfig.
+func policySetFromConfig(config *yml.ServerConfig) (auth.PolicySet, error) {
+	policies := &policySet{
+		policies: make(map[string]*auth.Policy),
 	}
-	return s
+	for name, policy := range config.Policies {
+		if _, ok := policies.policies[name]; ok {
+			return nil, fmt.Errorf("policy %q already exists", name)
+		}
+
+		policies.policies[name] = &auth.Policy{
+			Allow:     policy.Allow,
+			Deny:      policy.Deny,
+			CreatedAt: time.Now().UTC(),
+			CreatedBy: config.Admin.Identity.Value(),
+		}
+	}
+	return policies, nil
 }
 
-// duration is an alias for time.Duration that
-// implements YAML unmarshaling by first replacing
-// any reference to an environment variable ${...}
-// with the referenced value.
-type duration time.Duration
+type policySet struct {
+	lock     sync.RWMutex
+	policies map[string]*auth.Policy
+}
 
-var (
-	_ yaml.Marshaler   = duration(0)
-	_ yaml.Unmarshaler = (*duration)(nil)
-)
+var _ auth.PolicySet = (*policySet)(nil) // compiler check
 
-func (d duration) MarshalYAML() (interface{}, error) { return time.Duration(d).String(), nil }
+func (p *policySet) Set(_ context.Context, name string, policy *auth.Policy) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-func (d *duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var s string
-	if err := unmarshal(&s); err != nil {
-		return err
-	}
-
-	v, err := time.ParseDuration(expandEnv(s))
-	if err != nil {
-		return err
-	}
-	*d = duration(v)
+	p.policies[name] = policy
 	return nil
 }
+
+func (p *policySet) Get(_ context.Context, name string) (*auth.Policy, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	policy, ok := p.policies[name]
+	if !ok {
+		return nil, kes.ErrPolicyNotFound
+	}
+	return policy, nil
+}
+
+func (p *policySet) Delete(_ context.Context, name string) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	delete(p.policies, name)
+	return nil
+}
+
+func (p *policySet) List(_ context.Context) (auth.PolicyIterator, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	names := make([]string, 0, len(p.policies))
+	for name := range p.policies {
+		names = append(names, name)
+	}
+	return &policyIterator{
+		values: names,
+	}, nil
+}
+
+type policyIterator struct {
+	values  []string
+	current string
+}
+
+var _ auth.PolicyIterator = (*policyIterator)(nil) // compiler check
+
+func (i *policyIterator) Next() bool {
+	next := len(i.values) > 0
+	if next {
+		i.current = i.values[0]
+	}
+	return next
+}
+
+func (i *policyIterator) Name() string { return i.current }
+
+func (i *policyIterator) Close() error { return nil }
+
+// identitySetFromConfig returns an in-memory IdentitySet
+// from the given ServerConfig.
+func identitySetFromConfig(config *yml.ServerConfig) (auth.IdentitySet, error) {
+	identities := &identitySet{
+		admin: config.Admin.Identity.Value(),
+		roles: map[kes.Identity]auth.IdentityInfo{},
+	}
+
+	for name, policy := range config.Policies {
+		for _, id := range policy.Identities {
+			if id.Value().IsUnknown() {
+				continue
+			}
+
+			if id.Value() == config.Admin.Identity.Value() {
+				return nil, fmt.Errorf("identity %q is already an admin identity", id.Value())
+			}
+			if _, ok := identities.roles[id.Value()]; ok {
+				return nil, fmt.Errorf("identity %q is already assigned", id.Value())
+			}
+			for _, proxyID := range config.TLS.Proxy.Identities {
+				if id.Value() == proxyID.Value() {
+					return nil, fmt.Errorf("identity %q is already a TLS proxy identity", id.Value())
+				}
+			}
+			identities.roles[id.Value()] = auth.IdentityInfo{
+				Policy:    name,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: config.Admin.Identity.Value(),
+			}
+		}
+	}
+	return identities, nil
+}
+
+type identitySet struct {
+	admin kes.Identity
+
+	lock  sync.RWMutex
+	roles map[kes.Identity]auth.IdentityInfo
+}
+
+var _ auth.IdentitySet = (*identitySet)(nil) // compiler check
+
+func (i *identitySet) Admin(ctx context.Context) (kes.Identity, error) { return i.admin, nil }
+
+func (i *identitySet) Assign(_ context.Context, policy string, identity kes.Identity) error {
+	if i.admin == identity {
+		return kes.NewError(http.StatusBadRequest, "identity is root")
+	}
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	i.roles[identity] = auth.IdentityInfo{
+		Policy:    policy,
+		CreatedAt: time.Now().UTC(),
+	}
+	return nil
+}
+
+func (i *identitySet) Get(_ context.Context, identity kes.Identity) (auth.IdentityInfo, error) {
+	i.lock.RLock()
+	defer i.lock.RUnlock()
+
+	policy, ok := i.roles[identity]
+	if !ok {
+		return auth.IdentityInfo{}, kes.ErrNotAllowed
+	}
+	return policy, nil
+}
+
+func (i *identitySet) Delete(_ context.Context, identity kes.Identity) error {
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	delete(i.roles, identity)
+	return nil
+}
+
+func (i *identitySet) List(_ context.Context) (auth.IdentityIterator, error) {
+	i.lock.RLock()
+	defer i.lock.RUnlock()
+
+	values := make([]kes.Identity, 0, len(i.roles))
+	for identity := range i.roles {
+		values = append(values, identity)
+	}
+	return &identityIterator{
+		values: values,
+	}, nil
+}
+
+type identityIterator struct {
+	values  []kes.Identity
+	current kes.Identity
+}
+
+var _ auth.IdentityIterator = (*identityIterator)(nil) // compiler check
+
+func (i *identityIterator) Next() bool {
+	next := len(i.values) > 0
+	if next {
+		i.current = i.values[0]
+	}
+	return next
+}
+
+func (i *identityIterator) Identity() kes.Identity { return i.current }
+
+func (i *identityIterator) Close() error { return nil }

@@ -32,6 +32,7 @@ import (
 	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/yml"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/ssh/terminal"
@@ -176,32 +177,16 @@ func server(args []string) {
 		}
 	}
 
-	roles := &auth.Roles{
-		Root: config.Admin.Identity.Value(),
+	policySet, err := policySetFromConfig(config)
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+		return
 	}
-	for name, policy := range config.Policies {
-		p, err := kes.NewPolicy(policy.Allow...)
-		if err != nil {
-			stdlog.Fatalf("Error: policy %q contains invalid allow pattern: %v", name, err)
-		}
-		if err = p.Deny(policy.Deny...); err != nil {
-			stdlog.Fatalf("Error: policy %q contains invalid deny pattern: %v", name, err)
-		}
-		roles.Set(name, p)
-
-		for _, identity := range policy.Identities {
-			if proxy != nil && proxy.Is(identity.Value()) {
-				stdlog.Fatalf("Error: cannot assign policy %q to TLS proxy %q", name, identity.Value())
-			}
-			if roles.IsAssigned(identity.Value()) {
-				stdlog.Fatalf("Error: cannot assign policy %q to identity %q: this identity already has a policy", name, identity.Value())
-			}
-			if !identity.Value().IsUnknown() {
-				roles.Assign(name, identity.Value())
-			}
-		}
+	identitySet, err := identitySetFromConfig(config)
+	if err != nil {
+		stdlog.Fatalf("Error: %v", err)
+		return
 	}
-
 	store, err := connect(config, quietFlag, errorLog.Log())
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
@@ -238,8 +223,7 @@ func server(args []string) {
 		Addr: config.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
 			Version:  version,
-			Store:    cache,
-			Roles:    roles,
+			Vault:    sys.NewStatelessVault(config.Admin.Identity.Value(), cache, policySet, identitySet),
 			Proxy:    proxy,
 			AuditLog: auditLog,
 			ErrorLog: errorLog,

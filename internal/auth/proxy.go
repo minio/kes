@@ -15,13 +15,6 @@ import (
 )
 
 type TLSProxy struct {
-	// Identify computes the identity from a X.509 certificate
-	// sent by the client or proxy.
-	//
-	// If it is nil a default IdentityFunc computing the
-	// SHA-256 of the certificate's public key will be used.
-	Identify IdentityFunc
-
 	// CertHeader is the HTTP header key used to extract the
 	// client certificate forwarded by a TLS proxy. The TLS
 	// proxy has to include the certificate of the actual
@@ -128,7 +121,7 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 	}
 	req.TLS.PeerCertificates = peerCertificates
 
-	identity := Identify(req, p.Identify)
+	identity := Identify(req)
 	if identity.IsUnknown() {
 		return kes.ErrNotAllowed
 	}
