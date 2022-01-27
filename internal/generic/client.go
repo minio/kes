@@ -216,7 +216,7 @@ func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 }
 
 func (s *Store) Authenticate() error {
-	var config = &tls.Config{
+	config := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 	}
 	if s.CertPath != "" || s.KeyPath != "" {
@@ -343,7 +343,7 @@ func parseErrorResponse(resp *http.Response) error {
 	defer resp.Body.Close()
 
 	const MaxBodySize = 1 << 20
-	var size = resp.ContentLength
+	size := resp.ContentLength
 	if size < 0 || size > MaxBodySize {
 		size = MaxBodySize
 	}
@@ -379,7 +379,7 @@ func parseErrorResponse(resp *http.Response) error {
 // It returns a non-nil error if one file is not a valid
 // PEM-encoded X.509 certificate.
 func loadCustomCAs(path string) (*x509.CertPool, error) {
-	var rootCAs = x509.NewCertPool()
+	rootCAs := x509.NewCertPool()
 
 	f, err := os.Open(path)
 	if err != nil {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
+//go:build fips && linux && amd64
 // +build fips,linux,amd64
 
 package fips

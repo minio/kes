@@ -343,7 +343,7 @@ func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
 func (kv *KeyVault) AuthenticateWithCredentials(creds Credentials) error {
 	const Scope = "https://vault.azure.net"
 
-	var c = auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
+	c := auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
 	c.Resource = Scope
 	token, err := c.ServicePrincipalToken()
 	if err != nil {
@@ -365,7 +365,7 @@ func (kv *KeyVault) AuthenticateWithCredentials(creds Credentials) error {
 func (kv *KeyVault) AuthenticateWithIdentity(msi ManagedIdentity) error {
 	const Scope = "https://vault.azure.net"
 
-	var c = auth.NewMSIConfig()
+	c := auth.NewMSIConfig()
 	c.Resource = Scope
 	c.ClientID = msi.ClientID
 	token, err := c.ServicePrincipalToken()

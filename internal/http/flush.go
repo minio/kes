@@ -31,9 +31,7 @@ type FlushWriter struct {
 	f http.Flusher
 }
 
-var (
-	_ http.Flusher = (*FlushWriter)(nil)
-)
+var _ http.Flusher = (*FlushWriter)(nil)
 
 // NewFlushWriter returns a new FlushWriter that
 // wraps w.

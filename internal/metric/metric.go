@@ -131,7 +131,7 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 		m.requestActive.Inc()
 		defer m.requestActive.Dec()
 
-		var rw = countResponseWriter{
+		rw := countResponseWriter{
 			ResponseWriter: w,
 			succeeded:      m.requestSucceeded,
 			errored:        m.requestErrored,
@@ -153,7 +153,7 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 // the application can handle.
 func (m *Metrics) Latency(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var rw = latencyResponseWriter{
+		rw := latencyResponseWriter{
 			ResponseWriter: w,
 			start:          time.Now(),
 			histogram:      m.requestLatency,

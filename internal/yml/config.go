@@ -100,7 +100,7 @@ func ReadServerConfig(filename string) (*ServerConfig, error) {
 		return nil, errors.New("yml: invalid error log configuration: allowed values are { on | off }")
 	}
 
-	var identitySet = map[kes.Identity]string{}
+	identitySet := map[kes.Identity]string{}
 	for name, policy := range c.Policies {
 		for _, identity := range policy.Identities {
 			if identity.Value().IsUnknown() {

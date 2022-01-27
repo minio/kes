@@ -128,7 +128,7 @@ func (t *Table) Draw() {
 	// Limit the number of rows to print such that we
 	// print the header + latest n rows depending on
 	// the window size.
-	var rows = t.rows
+	rows := t.rows
 	if height > 5 && len(rows) > height-5 {
 		rows = rows[len(rows)-(height-5):]
 	}

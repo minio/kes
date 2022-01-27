@@ -20,7 +20,7 @@ import (
 // If err is nil then Error will send the status code 500 and
 // an empty JSON response body - i.e. '{}'.
 func Error(w http.ResponseWriter, err error) error {
-	var status = http.StatusInternalServerError
+	status := http.StatusInternalServerError
 	if e, ok := err.(interface{ Status() int }); ok {
 		status = e.Status()
 	}
@@ -60,7 +60,7 @@ func Error(w http.ResponseWriter, err error) error {
 // If err is nil then ErrorTrailer will send the status
 // code 500 and an empty JSON error - i.e. '{}'.
 func ErrorTrailer(w http.ResponseWriter, err error) {
-	var status = http.StatusInternalServerError
+	status := http.StatusInternalServerError
 	if e, ok := err.(interface{ Status() int }); ok {
 		status = e.Status()
 	}

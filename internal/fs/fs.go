@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -68,8 +69,8 @@ func (s *Store) Create(_ context.Context, name string, key key.Key) error {
 
 	// We use os.O_CREATE and os.O_EXCL to enforce that the
 	// file must not have existed before.
-	var path = filepath.Join(s.Dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	path := filepath.Join(s.Dir, name)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return kes.ErrKeyExists
 	}
@@ -214,7 +215,10 @@ func (s *Store) logf(format string, v ...interface{}) {
 // malicious because they may be abused for directory traversal
 // attacks.
 func validatePath(name string) error {
-	if strings.ContainsRune(name, filepath.Separator) {
+	if strings.ContainsRune(name, '/') {
+		return errors.New("fs: key name contains path separator")
+	}
+	if runtime.GOOS == "windows" && strings.ContainsRune(name, '\\') {
 		return errors.New("fs: key name contains path separator")
 	}
 	return nil

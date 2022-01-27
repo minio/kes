@@ -42,7 +42,7 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *stdlog.Logger) (ke
 		if errors.Is(err, os.ErrNotExist) {
 			msg := fmt.Sprintf("Creating directory '%s' ... ", config.KeyStore.Fs.Path.Value())
 			quiet.Print(msg)
-			if err = os.MkdirAll(config.KeyStore.Fs.Path.Value(), 0700); err != nil {
+			if err = os.MkdirAll(config.KeyStore.Fs.Path.Value(), 0o700); err != nil {
 				return nil, fmt.Errorf("failed to create directory %q: %v", config.KeyStore.Fs.Path.Value(), err)
 			}
 			quiet.ClearMessage(msg)
@@ -161,7 +161,7 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *stdlog.Logger) (ke
 		quiet.Print(msg)
 		switch c := config.KeyStore.Azure.KeyVault.Credentials; {
 		case c.TenantID.Value() != "" || c.ClientID.Value() != "" || c.Secret.Value() != "":
-			var err = azureStore.AuthenticateWithCredentials(azure.Credentials{
+			err := azureStore.AuthenticateWithCredentials(azure.Credentials{
 				TenantID: config.KeyStore.Azure.KeyVault.Credentials.TenantID.Value(),
 				ClientID: config.KeyStore.Azure.KeyVault.Credentials.ClientID.Value(),
 				Secret:   config.KeyStore.Azure.KeyVault.Credentials.Secret.Value(),
@@ -170,7 +170,7 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *stdlog.Logger) (ke
 				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
 			}
 		case config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value() != "":
-			var err = azureStore.AuthenticateWithIdentity(azure.ManagedIdentity{
+			err := azureStore.AuthenticateWithIdentity(azure.ManagedIdentity{
 				ClientID: config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value(),
 			})
 			if err != nil {

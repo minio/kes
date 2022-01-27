@@ -19,7 +19,7 @@ func TestCloneConfig(t *testing.T) {
 }
 
 var cloneConfigTests = []*Config{
-	&Config{
+	{
 		Endpoint:   "https://vault.cluster.local:8200",
 		Engine:     "secrets",
 		APIVersion: APIv2,

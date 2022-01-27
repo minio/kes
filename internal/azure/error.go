@@ -25,7 +25,7 @@ type errorResponse struct {
 // KeyVault secrets API error response.
 func parseErrorResponse(resp *http.Response) (errorResponse, error) {
 	const MaxSize = 1 << 20
-	var limit = resp.ContentLength
+	limit := resp.ContentLength
 	if limit < 0 || limit > MaxSize {
 		limit = MaxSize
 	}

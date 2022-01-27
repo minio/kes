@@ -247,7 +247,7 @@ func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Durat
 		}
 	}()
 
-	var events = ui.PollEvents()
+	events := ui.PollEvents()
 	for {
 		select {
 		case event := <-events:
@@ -415,7 +415,7 @@ func traceErrorLogWithUI(stream *kes.ErrorStream) {
 
 // avgLatency computes the arithmetic mean latency o
 func avgLatency(histogram map[time.Duration]uint64) time.Duration {
-	var latencies = make([]time.Duration, 0, len(histogram))
+	latencies := make([]time.Duration, 0, len(histogram))
 	for l := range histogram {
 		latencies = append(latencies, l)
 	}

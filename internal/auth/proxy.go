@@ -112,7 +112,7 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 	// root CA certificates.
 	// Therefore, we filter all CA certificates and only
 	// process the remaining leaf certificate(s).
-	var peerCertificates = make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
+	peerCertificates := make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
 	for _, cert := range req.TLS.PeerCertificates {
 		if cert.IsCA {
 			continue

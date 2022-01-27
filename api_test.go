@@ -12,7 +12,7 @@ import (
 )
 
 func TestClient_CreateKey(t *testing.T) {
-	var server = kestest.NewServer()
+	server := kestest.NewServer()
 	defer server.Close()
 
 	const KeyName = "my-key"
@@ -22,7 +22,7 @@ func TestClient_CreateKey(t *testing.T) {
 }
 
 func TestClient_DeleteKey(t *testing.T) {
-	var server = kestest.NewServer()
+	server := kestest.NewServer()
 	defer server.Close()
 
 	const KeyName = "my-key"
@@ -33,5 +33,4 @@ func TestClient_DeleteKey(t *testing.T) {
 	if err := server.Client().DeleteKey(context.Background(), KeyName); err != nil {
 		t.Fatalf("Failed to delete key %q: %v", KeyName, err)
 	}
-
 }

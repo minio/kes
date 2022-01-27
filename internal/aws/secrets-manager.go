@@ -217,7 +217,6 @@ func (s *SecretsManager) List(ctx context.Context) (key.Iterator, error) {
 			// we return !lastPage which then is false.
 			return !lastPage
 		})
-
 		if err != nil {
 			s.logf("aws: failed to list keys: %v", err)
 			iterator.SetErr(errListKey)

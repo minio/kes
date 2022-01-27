@@ -179,13 +179,13 @@ type backend struct {
 
 func (c *ServerConfig) backends() []backend {
 	return []backend{
-		backend{Type: "FS", Endpoint: c.KeyStore.Fs.Path.Value()},
-		backend{Type: "Generic", Endpoint: c.KeyStore.Generic.Endpoint.Value()},
-		backend{Type: "Hashicorp Vault", Endpoint: c.KeyStore.Vault.Endpoint.Value()},
-		backend{Type: "Fortanix SDKMS", Endpoint: c.KeyStore.Fortanix.SDKMS.Endpoint.Value()},
-		backend{Type: "Gemalto KeySecure", Endpoint: c.KeyStore.Gemalto.KeySecure.Endpoint.Value()},
-		backend{Type: "AWS SecretsManager", Endpoint: c.KeyStore.Aws.SecretsManager.Endpoint.Value()},
-		backend{Type: "GCP SecretManager", Endpoint: c.KeyStore.GCP.SecretManager.ProjectID.Value()},
-		backend{Type: "Azure KeyVault", Endpoint: c.KeyStore.Azure.KeyVault.Endpoint.Value()},
+		{Type: "FS", Endpoint: c.KeyStore.Fs.Path.Value()},
+		{Type: "Generic", Endpoint: c.KeyStore.Generic.Endpoint.Value()},
+		{Type: "Hashicorp Vault", Endpoint: c.KeyStore.Vault.Endpoint.Value()},
+		{Type: "Fortanix SDKMS", Endpoint: c.KeyStore.Fortanix.SDKMS.Endpoint.Value()},
+		{Type: "Gemalto KeySecure", Endpoint: c.KeyStore.Gemalto.KeySecure.Endpoint.Value()},
+		{Type: "AWS SecretsManager", Endpoint: c.KeyStore.Aws.SecretsManager.Endpoint.Value()},
+		{Type: "GCP SecretManager", Endpoint: c.KeyStore.GCP.SecretManager.ProjectID.Value()},
+		{Type: "Azure KeyVault", Endpoint: c.KeyStore.Azure.KeyVault.Endpoint.Value()},
 	}
 }

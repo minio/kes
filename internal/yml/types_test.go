@@ -11,7 +11,7 @@ import (
 
 func TestReplace(t *testing.T) {
 	for i, test := range replaceTests {
-		var value = replace(test.Value, test.Mapping)
+		value := replace(test.Value, test.Mapping)
 		if value != test.Result {
 			t.Fatalf("Test %d: got %q - want %q", i, value, test.Result)
 		}

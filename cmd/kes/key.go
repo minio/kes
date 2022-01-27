@@ -295,7 +295,7 @@ func listKeys(args []string) {
 		stdlog.Fatal("Error: too many arguments")
 	}
 
-	var pattern = "*"
+	pattern := "*"
 	if cli.NArg() == 1 {
 		pattern = cli.Arg(0)
 	}

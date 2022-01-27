@@ -58,7 +58,7 @@ func (c *client) CreateSecret(ctx context.Context, name, value string) (status, 
 		return status{}, err
 	}
 
-	var uri = endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
+	uri := endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uri, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
 		return status{}, err
@@ -119,7 +119,7 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 		} `json:"attributes"`
 	}
 
-	var uri = endpoint(c.Endpoint, "secrets", name, version) + "?api-version=7.2"
+	uri := endpoint(c.Endpoint, "secrets", name, version) + "?api-version=7.2"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return "", status{}, err
@@ -145,7 +145,7 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 		}, nil
 	}
 
-	var limit = resp.ContentLength
+	limit := resp.ContentLength
 	if limit < 0 || limit > key.MaxSize {
 		limit = key.MaxSize
 	}
@@ -193,7 +193,7 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 // even if it returns 200 OK. Instead, the secret may be in
 // a transition state from "active" to (soft) deleted.
 func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) {
-	var uri = endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
+	uri := endpoint(c.Endpoint, "secrets", name) + "?api-version=7.2"
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return status{}, err
@@ -231,7 +231,7 @@ func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) 
 // recovered. Therefore, deleting a KeyVault secret permanently is
 // a two-step process.
 func (c *client) PurgeSecret(ctx context.Context, name string) (status, error) {
-	var uri = endpoint(c.Endpoint, "deletedsecrets", name) + "?api-version=7.2"
+	uri := endpoint(c.Endpoint, "deletedsecrets", name) + "?api-version=7.2"
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return status{}, err
@@ -282,7 +282,7 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 		NextLink string `json:"nextLink"`
 	}
 	// We only inspect 25 versions as some reasonable default limit.
-	var uri = endpoint(c.Endpoint, "secrets", name, "versions") + "?api-version=7.2&maxresults=25"
+	uri := endpoint(c.Endpoint, "secrets", name, "versions") + "?api-version=7.2&maxresults=25"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return "", status{}, err
@@ -309,7 +309,7 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 	}
 
 	const MaxSize = 10 * 1 << 20
-	var limit = resp.ContentLength
+	limit := resp.ContentLength
 	if limit < 0 || limit > MaxSize {
 		limit = MaxSize
 	}
@@ -357,9 +357,8 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, string, status, error) {
 	type Response struct {
 		Values []struct {
-			ID   string `json:"id"`
-			Attr struct {
-			} `json:"attributes"`
+			ID   string   `json:"id"`
+			Attr struct{} `json:"attributes"`
 		} `json:"value"`
 		NextLink string `json:"nextLink"`
 	}
@@ -393,7 +392,7 @@ func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, st
 	}
 
 	const MaxSize = 10 * (1 << 20)
-	var limit = resp.ContentLength
+	limit := resp.ContentLength
 	if limit < 0 || limit > MaxSize {
 		limit = MaxSize
 	}
@@ -401,7 +400,7 @@ func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, st
 	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, "", status{}, err
 	}
-	var secrets = make([]string, 0, len(response.Values))
+	secrets := make([]string, 0, len(response.Values))
 	for _, v := range response.Values {
 		secrets = append(secrets, path.Base(v.ID))
 	}

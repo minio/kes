@@ -26,7 +26,7 @@ import (
 // timeout cancels the request context before aborting f.
 func timeout(after time.Duration, f http.HandlerFunc) http.HandlerFunc {
 	const Message = `{"message":"request timeout exceeded"}`
-	var handler = http.TimeoutHandler(f, after, Message)
+	handler := http.TimeoutHandler(f, after, Message)
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	}

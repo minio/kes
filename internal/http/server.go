@@ -71,7 +71,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	}
 
 	const MaxBody = 1 << 20
-	var mux = http.NewServeMux()
+	mux := http.NewServeMux()
 	mux.Handle("/v1/key/create/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/create/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleCreateKey(store)))))))))))
 	mux.Handle("/v1/key/import/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodPost, validatePath("/v1/key/import/*", limitRequestBody(MaxBody, tlsProxy(proxy, enforcePolicies(roles, handleImportKey(store)))))))))))
 	mux.Handle("/v1/key/delete/", timeout(15*time.Second, metrics.Count(metrics.Latency(audit(auditLog.Log(), roles, requireMethod(http.MethodDelete, validatePath("/v1/key/delete/*", limitRequestBody(0, tlsProxy(proxy, enforcePolicies(roles, handleDeleteKey(store)))))))))))

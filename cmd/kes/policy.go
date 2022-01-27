@@ -199,7 +199,7 @@ func listPolicies(args []string) {
 	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
 	cli.Parse(args[1:])
 
-	var pattern = "*"
+	pattern := "*"
 	if cli.NArg() == 1 {
 		pattern = cli.Arg(0)
 	}

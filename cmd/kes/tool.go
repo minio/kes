@@ -152,7 +152,7 @@ func newIdentityCmd(args []string) {
 	if cli.NArg() > 1 {
 		stdlog.Fatal("Error: too many arguments")
 	}
-	var commonName = ""
+	commonName := ""
 	if cli.NArg() == 1 {
 		commonName = cli.Arg(0)
 	}
@@ -188,7 +188,7 @@ func newIdentityCmd(args []string) {
 		extKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}
 
-	var ipAddrs = make([]net.IP, 0, len(ipFlag))
+	ipAddrs := make([]net.IP, 0, len(ipFlag))
 	for _, ipAddr := range ipFlag {
 		ip := net.ParseIP(ipAddr)
 		if ip == nil {
@@ -232,7 +232,7 @@ func newIdentityCmd(args []string) {
 		keyFile  *os.File
 		certFile *os.File
 	)
-	keyFile, err = os.OpenFile(keyPath, fileFlags, 0600)
+	keyFile, err = os.OpenFile(keyPath, fileFlags, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			stdlog.Fatalf("Error: private key %q already exists: Use --force to overwrite it", keyPath)
@@ -241,7 +241,7 @@ func newIdentityCmd(args []string) {
 	}
 	defer keyFile.Close()
 
-	certFile, err = os.OpenFile(certPath, fileFlags, 0600)
+	certFile, err = os.OpenFile(certPath, fileFlags, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			stdlog.Fatalf("Error: certificate %q already exists: Use --force to overwrite it", certPath)
@@ -315,7 +315,7 @@ func identityOfCmd(args []string) {
 		stdlog.Fatalf("Error: invalid --hash: %q", hashFunc)
 	}
 
-	var input = os.Stdin
+	input := os.Stdin
 	if cli.NArg() == 1 && cli.Arg(0) != "-" {
 		f, err := os.Open(cli.Arg(0))
 		if err != nil {
@@ -402,7 +402,7 @@ func migrate(args []string) {
 		stdlog.Fatal("Error: -f or --force cannot be used together with --merge. They are mutually exclusive")
 	}
 
-	var pattern = cli.Arg(0)
+	pattern := cli.Arg(0)
 	if pattern == "" {
 		pattern = "*"
 	}

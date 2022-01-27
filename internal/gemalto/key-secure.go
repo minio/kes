@@ -423,7 +423,7 @@ type errResponse struct {
 
 func parseServerError(resp *http.Response) (errResponse, error) {
 	const MaxSize = 1 << 20 // max. 1 MiB
-	var size = resp.ContentLength
+	size := resp.ContentLength
 	if size < 0 || size > MaxSize {
 		size = MaxSize
 	}
@@ -472,7 +472,7 @@ func parseServerError(resp *http.Response) (errResponse, error) {
 // It returns a non-nil error if one file is not a valid
 // PEM-encoded X.509 certificate.
 func loadCustomCAs(path string) (*x509.CertPool, error) {
-	var rootCAs = x509.NewCertPool()
+	rootCAs := x509.NewCertPool()
 
 	f, err := os.Open(path)
 	if err != nil {
