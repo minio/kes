@@ -118,7 +118,7 @@ func (p *Policy) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	var deny = make([]string, 0, len(policyJSON.Deny))
+	deny := make([]string, 0, len(policyJSON.Deny))
 	for _, pattern := range policyJSON.Deny {
 		if pattern == "" {
 			continue
@@ -128,7 +128,7 @@ func (p *Policy) UnmarshalJSON(b []byte) error {
 		}
 		deny = append(deny, pattern)
 	}
-	var allow = make([]string, 0, len(policyJSON.Allow))
+	allow := make([]string, 0, len(policyJSON.Allow))
 	for _, pattern := range policyJSON.Allow {
 		if pattern == "" {
 			continue

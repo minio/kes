@@ -2,6 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
+//go:build ignore
 // +build ignore
 
 // go run server.go --endpoint <endpoint> --key <path> --cert <path>
@@ -139,7 +140,7 @@ func (s *KeyStore) CreateKey(w http.ResponseWriter, r *http.Request) {
 	if s.store == nil {
 		s.store = map[string][]byte{}
 	}
-	var key = strings.TrimPrefix(r.URL.Path, "/v1/key/")
+	key := strings.TrimPrefix(r.URL.Path, "/v1/key/")
 	if _, ok := s.store[key]; ok {
 		xhttp.Error(w, kes.ErrKeyExists)
 		return
@@ -154,7 +155,7 @@ func (s *KeyStore) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	if s.store == nil {
 		s.store = map[string][]byte{}
 	}
-	var key = strings.TrimPrefix(r.URL.Path, "/v1/key/")
+	key := strings.TrimPrefix(r.URL.Path, "/v1/key/")
 	delete(s.store, key)
 	w.WriteHeader(http.StatusOK)
 }
@@ -166,7 +167,7 @@ func (s *KeyStore) GetKey(w http.ResponseWriter, r *http.Request) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var key = strings.TrimPrefix(r.URL.Path, "/v1/key/")
+	key := strings.TrimPrefix(r.URL.Path, "/v1/key/")
 	v, ok := s.store[key]
 	if !ok {
 		xhttp.Error(w, kes.ErrKeyNotFound)

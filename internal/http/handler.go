@@ -30,7 +30,7 @@ import (
 // If the client request method does not match the given method
 // it returns an error and http.StatusMethodNotAllowed to the client.
 func requireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
-	var ErrMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+	ErrMethodNotAllowed := kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if method != r.Method {
@@ -50,7 +50,7 @@ func requireMethod(method string, f http.HandlerFunc) http.HandlerFunc {
 // validatePath uses the standard library path glob matching for pattern
 // matching.
 func validatePath(apiPattern string, f http.HandlerFunc) http.HandlerFunc {
-	var ErrPatternMismatch = kes.NewError(http.StatusBadRequest, fmt.Sprintf("request URL path does not match API pattern: %s", apiPattern))
+	ErrPatternMismatch := kes.NewError(http.StatusBadRequest, fmt.Sprintf("request URL path does not match API pattern: %s", apiPattern))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, `/`) {
@@ -133,7 +133,7 @@ func handleStatus(version string, store key.Store, log *xlog.Target) http.Handle
 			Latency time.Duration `json:"latency,omitempty"`
 		} `json:"kms"`
 	}
-	var startTime = time.Now()
+	startTime := time.Now()
 	return func(w http.ResponseWriter, r *http.Request) {
 		kmsState, err := store.Status(r.Context())
 		if err != nil {
@@ -143,7 +143,7 @@ func handleStatus(version string, store key.Store, log *xlog.Target) http.Handle
 			log.Log().Printf("http: failed to connect to key store: %v", err)
 		}
 
-		var status = Status{
+		status := Status{
 			Version: version,
 			UpTime:  time.Since(startTime).Round(time.Second),
 		}
@@ -163,7 +163,7 @@ func handleStatus(version string, store key.Store, log *xlog.Target) http.Handle
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
 func handleCreateKey(store key.Store) http.HandlerFunc {
-	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
+	ErrInvalidKeyName := kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
@@ -229,7 +229,7 @@ func handleImportKey(store key.Store) http.HandlerFunc {
 }
 
 func handleDeleteKey(store key.Store) http.HandlerFunc {
-	var ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
+	ErrInvalidKeyName := kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
@@ -497,9 +497,7 @@ func handleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 }
 
 func handleReadPolicy(roles *auth.Roles) http.HandlerFunc {
-	var (
-		ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
-	)
+	ErrInvalidPolicyName := kes.NewError(http.StatusBadRequest, "invalid policy name")
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -518,7 +516,7 @@ func handleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 
 func handleListPolicies(roles *auth.Roles) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var policies = []string{}
+		policies := []string{}
 		pattern := pathBase(r.URL.Path)
 		for _, policy := range roles.Policies() {
 			if ok, err := path.Match(pattern, policy); ok && err == nil {
@@ -530,7 +528,7 @@ func handleListPolicies(roles *auth.Roles) http.HandlerFunc {
 }
 
 func handleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
-	var ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
+	ErrInvalidPolicyName := kes.NewError(http.StatusBadRequest, "invalid policy name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)

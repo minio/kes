@@ -37,7 +37,7 @@ func Connect(ctx context.Context, c *Config) (*SecretManager, error) {
 	}
 	c.setDefaults()
 
-	var options = []option.ClientOption{
+	options := []option.ClientOption{
 		option.WithEndpoint(c.Endpoint),
 	}
 	// We only pass credentials to the GCP client if they
@@ -45,7 +45,7 @@ func Connect(ctx context.Context, c *Config) (*SecretManager, error) {
 	// then the GCP credentials are provided by the environment and
 	// the GCP SDK will pick them up automatically. In this case
 	// the user does not have to provide login credentials at all.
-	var empty = Credentials{}
+	empty := Credentials{}
 	if c.Credentials != empty {
 		// We do a sanity check here to ensure that the user
 		// actually provided some login credentials. However,
@@ -195,7 +195,7 @@ func (s *SecretManager) Delete(ctx context.Context, name string) error {
 // List returns a new Iterator over the names of
 // all stored keys.
 func (s *SecretManager) List(ctx context.Context) (key.Iterator, error) {
-	var location = path.Join("projects", s.config.ProjectID, "*")
+	location := path.Join("projects", s.config.ProjectID, "*")
 	return &iterator{
 		src: s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
 			Parent: location,

@@ -100,7 +100,7 @@ func parseErrorResponse(resp *http.Response) error {
 	defer resp.Body.Close()
 
 	const MaxBodySize = 1 << 20
-	var size = resp.ContentLength
+	size := resp.ContentLength
 	if size < 0 || size > MaxBodySize {
 		size = MaxBodySize
 	}

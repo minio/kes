@@ -51,7 +51,7 @@ func Connect(ctx context.Context, c *Config) (*KeyStore, error) {
 		return nil, fmt.Errorf("vault: invalid engine API version %q", c.APIVersion)
 	}
 
-	var tlsConfig = &vaultapi.TLSConfig{
+	tlsConfig := &vaultapi.TLSConfig{
 		ClientKey:  c.ClientKeyPath,
 		ClientCert: c.ClientCertPath,
 	}
@@ -67,14 +67,14 @@ func Connect(ctx context.Context, c *Config) (*KeyStore, error) {
 		}
 	}
 
-	var config = vaultapi.DefaultConfig()
+	config := vaultapi.DefaultConfig()
 	config.Address = c.Endpoint
 	config.ConfigureTLS(tlsConfig)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
 		return nil, err
 	}
-	var client = &client{
+	client := &client{
 		Client: vaultClient,
 	}
 	if c.Namespace != "" {
@@ -145,7 +145,7 @@ func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
 	// We use a custom version of the Client.Sys().Health() SDK function
 	// since we cannot pass our context.
 
-	var req = s.client.NewRequest(http.MethodGet, "/v1/sys/health")
+	req := s.client.NewRequest(http.MethodGet, "/v1/sys/health")
 	// If the code is 400 or above it will automatically turn into an error,
 	// but the sys/health API defaults to returning 5xx when not sealed or
 	// initialized, so we force this code to be something else so we parse correctly
@@ -174,7 +174,6 @@ func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
 		state.State = key.StoreAvailable
 	}
 	return state, nil
-
 }
 
 // Create creates the given key-value pair at Vault if and only
@@ -228,7 +227,7 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 		}
 		return kes.ErrKeyExists
 	case err == nil && secret != nil && s.config.APIVersion == APIv2 && len(secret.Data) > 0:
-		var data = secret.Data
+		data := secret.Data
 		v, ok := data["data"]
 		if !ok || v == nil {
 			s.logf("vault: entry exists but failed to read %q: invalid K/V v2 format: missing 'data' entry", location)
@@ -278,7 +277,7 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 	// We expect HTTP 204 (No Content) when a key got created successfully.
 	// So, we check that Vault response with 204. Otherwise, we return an
 	// error.
-	var req = s.client.Client.NewRequest(http.MethodPut, "/v1/"+location)
+	req := s.client.Client.NewRequest(http.MethodPut, "/v1/"+location)
 	if err := req.SetJSONBody(data); err != nil {
 		s.logf("vault: failed to create %q: %v", location, err)
 		return err
@@ -333,7 +332,7 @@ func (s *KeyStore) Get(_ context.Context, name string) (key.Key, error) {
 		return key.Key{}, errGetKey
 	}
 
-	var data = entry.Data
+	data := entry.Data
 	if s.config.APIVersion == APIv2 { // See: https://www.vaultproject.io/api/secret/kv/kv-v2#sample-response-1 (differs from v1 format)
 		v, ok := entry.Data["data"]
 		if !ok || v == nil {
@@ -393,7 +392,7 @@ func (s *KeyStore) Delete(ctx context.Context, name string) error {
 	// We expect HTTP 204 (No Content) when a key got deleted successfully.
 	// So, we check that Vault response with 204. Otherwise, we return an
 	// error.
-	var req = s.client.Client.NewRequest(http.MethodDelete, "/v1/"+location)
+	req := s.client.Client.NewRequest(http.MethodDelete, "/v1/"+location)
 	resp, err := s.client.Client.RawRequestWithContext(ctx, req)
 	if err != nil {
 		s.logf("vault: failed to delete %q: %v", location, err)

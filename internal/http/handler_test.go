@@ -41,7 +41,7 @@ var validatePathHandlerTests = []struct {
 
 func TestValidatePathHandler(t *testing.T) {
 	const baseURL = "https://localhost:7373"
-	var f = func(w http.ResponseWriter, req *http.Request) { w.WriteHeader(http.StatusOK) }
+	f := func(w http.ResponseWriter, req *http.Request) { w.WriteHeader(http.StatusOK) }
 
 	for i, test := range validatePathHandlerTests {
 		req, err := http.NewRequest(http.MethodGet, baseURL+test.Path, nil)

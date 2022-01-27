@@ -101,7 +101,7 @@ func server(args []string) {
 	if cli.NArg() > 0 {
 		stdlog.Fatal("Error: too many arguments")
 	}
-	var ctx, cancelCtx = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelCtx()
 
 	if mlockFlag {
@@ -206,7 +206,7 @@ func server(args []string) {
 	if err != nil {
 		stdlog.Fatalf("Error: %v", err)
 	}
-	var cache = key.NewCache(store, &key.CacheConfig{
+	cache := key.NewCache(store, &key.CacheConfig{
 		Expiry:        config.Cache.Expiry.Any.Value(),
 		ExpiryUnused:  config.Cache.Expiry.Unused.Value(),
 		ExpiryOffline: config.Cache.Expiry.Offline.Value(),
@@ -234,7 +234,7 @@ func server(args []string) {
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
 
-	var server = http.Server{
+	server := http.Server{
 		Addr: config.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
 			Version:  version,

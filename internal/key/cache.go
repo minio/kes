@@ -57,9 +57,9 @@ type CacheConfig struct {
 // A Cache removes cache entries when they expiry.
 // Stop the cache to release associated resources.
 func NewCache(store Store, config *CacheConfig) *Cache {
-	var ctx, cancel = context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
-	var c = &Cache{
+	c := &Cache{
 		Store:        store,
 		cache:        map[string]*cacheEntry{},
 		offlineCache: map[string]*cacheEntry{},

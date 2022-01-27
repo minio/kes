@@ -103,7 +103,7 @@ func (s *KeyStore) Authenticate(ctx context.Context) error {
 	}
 
 	// Check if the Fortanix SDKMS endpoint is reachable
-	var url = endpoint(s.Endpoint, "/sys/v1/health")
+	url := endpoint(s.Endpoint, "/sys/v1/health")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -214,7 +214,7 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 		return err
 	}
 
-	var url = endpoint(s.Endpoint, "/crypto/v1/keys")
+	url := endpoint(s.Endpoint, "/crypto/v1/keys")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		s.logf("fortanix: failed to create key %q: %v", name, err)
@@ -263,7 +263,7 @@ func (s *KeyStore) Delete(ctx context.Context, name string) error {
 		return err
 	}
 
-	var url = endpoint(s.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(s.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		s.logf("fortanix: failed to delete %q: %v", name, err)
@@ -344,7 +344,7 @@ func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
 		return key.Key{}, err
 	}
 
-	var url = endpoint(s.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(s.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		s.logf("fortanix: failed to fetch %q: %v", name, err)
@@ -418,7 +418,7 @@ func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
 
 		var start string
 		for {
-			var reqURL = endpoint(s.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
+			reqURL := endpoint(s.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
 			if start != "" {
 				reqURL += "&start=" + start
 			}
@@ -550,7 +550,7 @@ func parseErrorResponse(resp *http.Response) error {
 	defer resp.Body.Close()
 
 	const MaxSize = 1 << 20
-	var size = resp.ContentLength
+	size := resp.ContentLength
 	if size < 0 || size > MaxSize {
 		size = MaxSize
 	}
@@ -585,7 +585,7 @@ func parseErrorResponse(resp *http.Response) error {
 // It returns a non-nil error if one file is not a valid
 // PEM-encoded X.509 certificate.
 func loadCustomCAs(path string) (*x509.CertPool, error) {
-	var rootCAs = x509.NewCertPool()
+	rootCAs := x509.NewCertPool()
 
 	f, err := os.Open(path)
 	if err != nil {

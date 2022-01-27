@@ -15,7 +15,7 @@ import (
 )
 
 func ExampleServer() {
-	var server = kestest.NewServer()
+	server := kestest.NewServer()
 	defer server.Close()
 
 	version, err := server.Client().Version(context.Background())
@@ -29,7 +29,7 @@ func ExampleServer() {
 }
 
 func ExampleServer_IssueClientCertificate() {
-	var server = kestest.NewServer()
+	server := kestest.NewServer()
 	defer server.Close()
 
 	server.Policy().Allow("test-policy",

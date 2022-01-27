@@ -164,7 +164,7 @@ type serverConfigV0170 struct {
 }
 
 func (c *serverConfigV0170) migrate() *ServerConfig {
-	var config = &ServerConfig{
+	config := &ServerConfig{
 		Address:  c.Addr,
 		Policies: c.Policies,
 		Cache:    c.Cache,
@@ -178,5 +178,4 @@ func (c *serverConfigV0170) migrate() *ServerConfig {
 	config.TLS.Certificate = c.TLS.Certificate
 	config.TLS.Proxy = c.TLS.Proxy
 	return config
-
 }

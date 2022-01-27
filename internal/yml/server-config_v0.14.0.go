@@ -163,7 +163,7 @@ type serverConfigV0140 struct {
 }
 
 func (c *serverConfigV0140) migrate() *ServerConfig {
-	var config = &ServerConfig{
+	config := &ServerConfig{
 		Address:  c.Addr,
 		Cache:    c.Cache,
 		Log:      c.Log,

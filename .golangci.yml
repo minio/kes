@@ -20,12 +20,13 @@ linters:
     - structcheck
     - prealloc
     - unconvert
+    - gofumpt
 
 issues:
   exclude-use-default: false
   exclude:
-      - should have a package comment
       - error strings should not be capitalized or end with punctuation or a newline
       - should have comment           # TODO(aead): Remove once all exported ident. have comments!
+
 service:
-  golangci-lint-version: 1.40.0 # use the fixed version to not introduce new linters unexpectedly
+  golangci-lint-version: 1.43.0 # use the fixed version to not introduce new linters unexpectedly

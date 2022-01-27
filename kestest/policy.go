@@ -35,7 +35,7 @@ func (p *PolicySet) Add(name string, policy *kes.Policy) { p.roles.Set(name, pol
 // Allow is a shorthand for first creating a KES Policy
 // and then adding it to the PolicySet.
 func (p *PolicySet) Allow(name string, patterns ...string) {
-	var policy, err = kes.NewPolicy(patterns...)
+	policy, err := kes.NewPolicy(patterns...)
 	if err != nil {
 		panic(fmt.Sprintf("kestest: failed to create policy: %v", err))
 	}
@@ -69,6 +69,6 @@ func Identify(cert *tls.Certificate) kes.Identity {
 		}
 	}
 
-	var id = sha256.Sum256(cert.Leaf.RawSubjectPublicKeyInfo)
+	id := sha256.Sum256(cert.Leaf.RawSubjectPublicKeyInfo)
 	return kes.Identity(hex.EncodeToString(id[:]))
 }

@@ -34,7 +34,7 @@ import (
 // The caller should call Close when finished,
 // to shut it down.
 func NewServer() *Server {
-	var s = &Server{}
+	s := &Server{}
 	s.start()
 	return s
 }
@@ -85,7 +85,7 @@ func (s *Server) CAs() *x509.CertPool {
 		s.caPrivateKey, s.caCertificate = newCA()
 	}
 
-	var certpool = x509.NewCertPool()
+	certpool := x509.NewCertPool()
 	certpool.AddCert(s.caCertificate)
 	return certpool
 }
@@ -95,7 +95,7 @@ func (s *Server) start() {
 		s.caPrivateKey, s.caCertificate = newCA()
 	}
 
-	var rootCAs = x509.NewCertPool()
+	rootCAs := x509.NewCertPool()
 	rootCAs.AddCert(s.caCertificate)
 
 	var (
@@ -113,7 +113,7 @@ func (s *Server) start() {
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
 
-	var serverCert = issueCertificate("kestest: server", s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageServerAuth)
+	serverCert := issueCertificate("kestest: server", s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageServerAuth)
 	s.server = httptest.NewUnstartedServer(xhttp.NewServerMux(&xhttp.ServerConfig{
 		Version: "v0.0.0-dev",
 		Store: key.NewCache(&mem.Store{}, &key.CacheConfig{
@@ -152,7 +152,7 @@ func newCA() (crypto.PrivateKey, *x509.Certificate) {
 		panic(fmt.Sprintf("kestest: failed to generate CA certificate serial number: %v", err))
 	}
 
-	var template = x509.Certificate{
+	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName: "kestest Root CA",
@@ -185,7 +185,7 @@ func issueCertificate(name string, caCert *x509.Certificate, caKey crypto.Privat
 		panic(fmt.Sprintf("kestest: failed to generate certificate serial number: %v", err))
 	}
 
-	var template = x509.Certificate{
+	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName: name,
