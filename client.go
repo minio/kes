@@ -5,18 +5,14 @@
 package kes
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -120,172 +116,6 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 	}
 }
 
-// DEK is a data encryption key. It has a plaintext
-// and a ciphertext representation.
-//
-// Applications should use the plaintext for cryptographic
-// operations and store the ciphertext at a durable
-// location.
-//
-// If the DEK is used to e.g. encrypt some data then it's
-// safe to store the DEK's ciphertext representation next
-// to the encrypted data. The ciphertext representation
-// does not need to stay secret.
-//
-// DEK implements binary as well as text marshaling.
-// However, only the ciphertext representation gets
-// encoded. The plaintext should never be stored
-// anywhere.
-// Therefore, after un-marshaling there will be no
-// plaintext representation. To obtain it the
-// ciphertext must be decrypted.
-type DEK struct {
-	Plaintext  []byte
-	Ciphertext []byte
-}
-
-var (
-	_ encoding.BinaryMarshaler   = (*DEK)(nil)
-	_ encoding.TextMarshaler     = (*DEK)(nil)
-	_ encoding.BinaryUnmarshaler = (*DEK)(nil)
-	_ encoding.TextUnmarshaler   = (*DEK)(nil)
-)
-
-// MarshalText encodes the DEK's ciphertext into
-// a base64-encoded text and returns the result.
-//
-// It never returns an error.
-func (d DEK) MarshalText() ([]byte, error) {
-	ciphertext := make([]byte, base64.StdEncoding.EncodedLen(len(d.Ciphertext)))
-	base64.StdEncoding.Encode(ciphertext, d.Ciphertext)
-	return ciphertext, nil
-}
-
-// UnmarshalText tries to decode a base64-encoded text
-// and sets DEK's ciphertext to the decoded data.
-//
-// It returns an error if text is not base64-encoded.
-//
-// UnmarshalText sets DEK's plaintext to nil.
-func (d *DEK) UnmarshalText(text []byte) (err error) {
-	n := base64.StdEncoding.DecodedLen(len(text))
-	if len(d.Ciphertext) < n {
-		if cap(d.Ciphertext) >= n {
-			d.Ciphertext = d.Ciphertext[:n]
-		} else {
-			d.Ciphertext = make([]byte, n)
-		}
-	}
-
-	d.Plaintext = nil // Forget any previous plaintext
-	n, err = base64.StdEncoding.Decode(d.Ciphertext, text)
-	d.Ciphertext = d.Ciphertext[:n]
-	return err
-}
-
-// MarshalBinary returns DEK's ciphertext representation.
-// It never returns an error.
-func (d DEK) MarshalBinary() ([]byte, error) { return d.Ciphertext, nil }
-
-// UnmarshalBinary sets DEK's ciphertext to the given data.
-// It never returns an error and DEK's plaintext will be nil.
-func (d *DEK) UnmarshalBinary(data []byte) error {
-	n := len(data)
-	if len(d.Ciphertext) < n {
-		if cap(d.Ciphertext) >= n {
-			d.Ciphertext = d.Ciphertext[:n]
-		} else {
-			d.Ciphertext = make([]byte, n)
-		}
-	}
-
-	d.Plaintext = nil // Forget any previous plaintext
-	copy(d.Ciphertext, data)
-	return nil
-}
-
-// KeyIterator iterates over list of KeyDescription objects.
-//   for iterator.Next() {
-//       _ = iterator.Value() // Use the KeyDescription
-//   }
-//   if err := iterator.Err(); err != nil {
-//   }
-//   if err := iterator.Close(); err != nil {
-//   }
-//
-// Once done with iterating over the list of KeyDescription
-// objects, an iterator should be closed using the Close
-// method.
-//
-// In general, a KeyIterator does not provide any guarantees
-// about ordering or the when its underlying source is modified
-// concurrently.
-// Particularly, if a key is created or deleted at the KES server
-// the KeyIterator may or may not be affected by this change.
-type KeyIterator struct {
-	response *http.Response
-	decoder  *json.Decoder
-
-	last     KeyDescription
-	nextErr  error // error encountered in Next()
-	closeErr error // error encountered in Close()
-	closed   bool
-}
-
-// KeyDescription describes a cryptographic key at a KES server.
-type KeyDescription struct {
-	// Name is the name of the cryptographic key.
-	Name string `json:"name"`
-}
-
-// Next returns true if there is another KeyDescription.
-// This KeyDescription can be retrieved via the Value method.
-//
-// It returns false once there is no more KeyDescription
-// or if the KeyIterator encountered an error. The error,
-// if any, can be retrieved via the Err method.
-func (i *KeyIterator) Next() bool {
-	if i.closed || i.nextErr != nil {
-		return false
-	}
-	if err := i.decoder.Decode(&i.last); err != nil {
-		if err == io.EOF {
-			i.nextErr = i.Close()
-		} else {
-			i.nextErr = err
-		}
-		return false
-	}
-	return true
-}
-
-// Value returns the current KeyDescription. It returns
-// the same KeyDescription until Next is called again.
-//
-// If KeyIterator has been closed or if Next has not been
-// called once resp. once Next returns false then the
-// behavior of Value is undefined.
-func (i *KeyIterator) Value() KeyDescription { return i.last }
-
-// Err returns the first error encountered by the KeyIterator,
-// if any.
-func (i *KeyIterator) Err() error { return i.nextErr }
-
-// Close closes the underlying connection to the KES server
-// and returns any encountered error.
-func (i *KeyIterator) Close() error {
-	if !i.closed {
-		i.closed = true
-		if err := i.response.Body.Close(); err != nil {
-			i.closeErr = err
-		}
-		if err := parseErrorTrailer(i.response.Trailer); err != nil && i.closeErr == nil {
-			i.closeErr = err
-		}
-	}
-	return i.closeErr
-}
-
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version(ctx context.Context) (string, error) {
@@ -309,371 +139,193 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	return response.Version, nil
 }
 
-// CreateKey tries to create a new cryptographic key with
-// the specified name.
+// CreateKey creates a new cryptographic key. The key will
+// be generated by the KES server.
 //
-// The key will be generated by the server. The client
-// application does not have the cryptographic key at
-// any point in time.
+// It returns ErrKeyExists if a key with the same key already
+// exists.
 func (c *Client) CreateKey(ctx context.Context, name string) error {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/create", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.CreateKey(ctx, name)
 }
 
-// ImportKey tries to import the given key as cryptographic
-// key with the specified name.
-//
-// In contrast to CreateKey, the client specifies, and
-// therefore, knows the value of the cryptographic key.
+// ImportKey imports the given key into a KES server. It
+// returns ErrKeyExists if a key with the same key already
+// exists.
 func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
-	type Request struct {
-		Bytes []byte `json:"bytes"`
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	body, err := json.Marshal(Request{
-		Bytes: key,
-	})
-	if err != nil {
-		return err
-	}
-
-	client := retry(c.HTTPClient)
-
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/import", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.ImportKey(ctx, name, key)
 }
 
-// DeleteKey deletes the given key. Once a key has been deleted
-// all data, that has been encrypted with it, cannot be decrypted
-// anymore.
+// DeleteKey deletes the key from a KES server. It returns
+// ErrKeyNotFound if no such key exists.
 func (c *Client) DeleteKey(ctx context.Context, name string) error {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/key/delete", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.DeleteKey(ctx, name)
 }
 
-// GenerateKey generates a new data encryption key (DEK).
-// The context is cryptographically bound to the DEK.
+// GenerateKey returns a new generated data encryption key (DEK).
+// A DEK has a plaintext and ciphertext representation.
 //
-// A DEK has a plaintext and a ciphertext representation.
-// The plaintext should be used to perform a cryptographic
-// operation - for example: encrypt some data.
+// The former should be used for cryptographic operations, like
+// encrypting some data.
 //
-// The ciphertext is the result of encrypting the plaintext
-// with the given key. It should be stored at a durable location
-// but does not need to stay secret. The ciphertext can only
-// be decrypted with the given key at the server.
+// The later is the result of encrypting the plaintext with the named
+// key at the KES server. It should be stored at a durable location but
+// does not need to stay secret. The ciphertext can only be decrypted
+// with the named key at the KES server.
 //
-// Whenever an application needs the DEK's plaintext representation
-// it should send the ciphertext to the server via the Decrypt method.
+// The context is cryptographically bound to the ciphertext and the
+// same context value must be provided when decrypting the ciphertext
+// via Decrypt. Therefore, an application must either remember the
+// context or must be able to re-generate it.
 //
-// The context is cryptographically bound to the ciphertext and
-// the same context value must be provided whenever the
-// ciphertext should be decrypted. An application either must
-// remember the context or must be able to re-generate it.
-//
-// If an application does not wish to specify a context
-// value it can set it to nil.
+// GenerateKey returns ErrKeyNotFound if no key with the given name
+// exists.
 func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (DEK, error) {
-	type Request struct {
-		Context []byte `json:"context,omitempty"` // A context is optional
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	body, err := json.Marshal(Request{
-		Context: context,
-	})
-	if err != nil {
-		return DEK{}, err
-	}
-
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/generate", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
-	if err != nil {
-		return DEK{}, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return DEK{}, parseErrorResponse(resp)
-	}
-	defer resp.Body.Close()
-
-	type Response struct {
-		Plaintext  []byte `json:"plaintext"`
-		Ciphertext []byte `json:"ciphertext"`
-	}
-	const limit = 1 << 20
-	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
-		return DEK{}, err
-	}
-	return DEK(response), nil
+	return enclave.GenerateKey(ctx, name, context)
 }
 
-// Encrypt encrypts and authenticates the given plaintext
-// with the specified key and returns the corresponding
-// ciphertext on success.
+// Encrypt encrypts the given plaintext with the named key at the
+// KES server. The optional context is cryptographically bound to
+// the returned ciphertext. The exact same context must be provided
+// when decrypting the ciphertext again.
 //
-// An optional context value gets authenticated but is not
-// encrypted. Therefore, the same context value must be provided
-// for decryption. Clients should remember or be able to
-// re-generate the context value.
+// Encrypt returns ErrKeyNotFound if no such key exists at the KES
+// server.
 func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []byte) ([]byte, error) {
-	type Request struct {
-		Plaintext []byte `json:"plaintext"`
-		Context   []byte `json:"context,omitempty"` // A context is optional
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	body, err := json.Marshal(Request{
-		Plaintext: plaintext,
-		Context:   context,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/encrypt", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	defer resp.Body.Close()
-
-	type Response struct {
-		Ciphertext []byte `json:"ciphertext"`
-	}
-	const limit = 1 << 20
-	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
-		return nil, err
-	}
-	return response.Ciphertext, nil
+	return enclave.Encrypt(ctx, name, plaintext, context)
 }
 
-// Decrypt tries to decrypt the given ciphertext with the
-// specified key and returns plaintext on success.
+// Decrypt decrypts the ciphertext with the named key at the KES
+// server. The exact same context, used during Encrypt, must be
+// provided.
 //
-// The context value must match the context used when
-// the ciphertext was produced. If no context was used
-// the context value should be set to nil.
+// Decrypt returns ErrKeyNotFound if no such key exists. It returns
+// ErrDecrypt when the ciphertext has been modified or a different
+// context value is provided.
 func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context []byte) ([]byte, error) {
-	type Request struct {
-		Ciphertext []byte `json:"ciphertext"`
-		Context    []byte `json:"context,omitempty"` // A context is optional
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	body, err := json.Marshal(Request{
-		Ciphertext: ciphertext,
-		Context:    context,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/key/decrypt", url.PathEscape(name)), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	defer resp.Body.Close()
-
-	type Response struct {
-		Plaintext []byte `json:"plaintext"`
-	}
-	const limit = 1 << 20
-	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
-		return nil, err
-	}
-	return response.Plaintext, nil
+	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
 
-// ListKeys returns a new KeyIterator that iterates over all keys
-// matching the given glob pattern.
+// ListKeys lists all names of cryptographic keys that match the given
+// pattern. It returns a KeyIterator that iterates over all matched key
+// names.
 //
-// The KeyIterator will stop once the given context.Done() completes,
-// an error occurs while iterating or once there are no more
-// KeyDescription objects - whatever happens first.
-//
-// If the pattern is empty it defaults to "*".
+// The pattern matching happens on the server side. If pattern is empty
+// the KeyIterator iterates over all key names.
 func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, error) {
-	if pattern == "" { // The empty pattern never matches anything
-		pattern = "*" // => default to: list all keys
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/key/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	return &KeyIterator{
-		response: resp,
-		decoder:  json.NewDecoder(resp.Body),
-	}, nil
+	return enclave.ListKeys(ctx, pattern)
 }
 
-// SetPolicy adds the given policy to the set of policies.
-// There can be just one policy with one particular name at
-// one point in time.
-//
-// If there is already a policy with the given name then SetPolicy
-// overwrites the existing policy with the given one.
-//
-// If there are identities assigned to an existing policy then
-// SetPolicy will not remove those identities before overwriting
-// the policy. Instead, it will just updated the policy entry such
-// that the given policy automatically applies to those identities.
+// SetPolicy creates the given policy. If a policy with the same
+// name already exists, SetPolicy overwrites the existing policy
+// with the given one. Any existing identites will be assigned to
+// the given policy.
 func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) error {
-	content, err := json.Marshal(policy)
-	if err != nil {
-		return err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/policy/write", url.PathEscape(name)), bytes.NewReader(content), withHeader("Content-Type", "application/json"))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.SetPolicy(ctx, name, policy)
 }
 
-// GetPolicy returns the policy with the given name. If no such
-// policy exists then GetPolicy returns ErrPolicyNotFound.
+// GetPolicy returns the policy with the given name.
+// It returns ErrPolicyNotFound if no such policy
+// exists.
 func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/policy/read", url.PathEscape(name)), nil)
-	if err != nil {
-		return nil, err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	defer resp.Body.Close()
-
-	const limit = 32 * 1024 * 1024 // A policy might be large
-	decoder := json.NewDecoder(io.LimitReader(resp.Body, limit))
-	decoder.DisallowUnknownFields()
-	var policy Policy
-	if err = decoder.Decode(&policy); err != nil {
-		return nil, err
-	}
-	return &policy, nil
+	return enclave.GetPolicy(ctx, name)
 }
 
-// ListPolicies returns a list of policies with names that
-// match the given glob pattern. For example
-//   policies, err := client.ListPolicies("*") // '*' matches any
-// returns the names of all existing policies.
+// DeletePolicy deletes the policy with the given name. Any
+// assigned identities will be removed as well.
 //
-// If no / an empty pattern is provided then ListPolicies uses
-// the pattern '*' as default.
-func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, error) {
-	if pattern == "" { // The empty pattern never matches anything
-		pattern = "*" // => default to: list "all" policies
-	}
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/policy/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	defer resp.Body.Close()
-
-	const limit = 64 * 1024 * 1024 // There might be many policies
-	var policies []string
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&policies); err != nil {
-		return nil, err
-	}
-	return policies, nil
-}
-
-// DeletePolicy removes the policy with the given name. It will not
-// return an error if no policy exists.
-//
-// If there are identities assigned to the deleted policies then these
-// identities will be removed as well.
-//
-// Therefore, setting an empty policy and deleting a policy have
-// slightly different implications. The former will revoke any
-// access permission for all identities assigned to the policy.
-// The later will remove the policy as well as all identities
-// assigned to it.
+// It returns ErrPolicyNotFound if no such policy exists.
 func (c *Client) DeletePolicy(ctx context.Context, name string) error {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/policy/delete", url.PathEscape(name)), nil)
-	if err != nil {
-		return err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.DeletePolicy(ctx, name)
 }
 
-func (c *Client) AssignIdentity(ctx context.Context, policy string, id Identity) error {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodPost, c.Endpoints, path.Join("/v1/identity/assign", url.PathEscape(policy), url.PathEscape(id.String())), nil)
-	if err != nil {
-		return err
+// ListPolicies lists all policy names that match the given pattern.
+//
+// The pattern matching happens on the server side. If pattern is empty
+// ListPolicies returns all policy names.
+func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, error) {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.ListPolicies(ctx, pattern)
 }
 
+// AssignIdentity assigns the policy to the identity.
+// The KES admin identity cannot be assigned to any
+// policy.
+//
+// AssignIdentity returns PolicyNotFound if no such policy exists.
+func (c *Client) AssignIdentity(ctx context.Context, policy string, identity Identity) error {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.AssignIdentity(ctx, policy, identity)
+}
+
+// ForgetIdentity removes the identity such that no policy
+// applies to the given identity. Once removed, any operation
+// issued by this identity will fail with ErrNotAllowed.
+//
+// The KES admin identity cannot be removed.
+func (c *Client) ForgetIdentity(ctx context.Context, identity Identity) error {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.ForgetIdentity(ctx, identity)
+}
+
+// ListIdentities lists all identites that match the given pattern.
+//
+// The pattern matching happens on the server side. If pattern is empty
+// ListIdentities returns all identities.
 func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityIterator, error) {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, path.Join("/v1/identity/list", url.PathEscape(pattern)), nil)
-	if err != nil {
-		return nil, err
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	return &IdentityIterator{
-		response: resp,
-		decoder:  json.NewDecoder(resp.Body),
-	}, nil
-}
-
-func (c *Client) ForgetIdentity(ctx context.Context, id Identity) error {
-	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodDelete, c.Endpoints, path.Join("/v1/identity/forget", url.PathEscape(id.String())), nil)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
+	return enclave.ListIdentities(ctx, pattern)
 }
 
 // AuditLog returns a stream of audit events produced by the
