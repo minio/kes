@@ -19,6 +19,7 @@ import (
 	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/sys"
 	"github.com/prometheus/common/expfmt"
 	"github.com/secure-io/sio-go/sioutil"
 )
@@ -83,9 +84,14 @@ func limitRequestBody(n int64, f http.HandlerFunc) http.HandlerFunc {
 //
 // If the request is not authorized it will return an error to the
 // client and does not call f.
-func enforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
+func enforcePolicies(config *ServerConfig, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := roles.Verify(r); err != nil {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		if err = enclave.VerifyRequest(r); err != nil {
 			Error(w, err)
 			return
 		}
@@ -96,14 +102,14 @@ func enforcePolicies(roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
 // audit returns a handler function that wraps f and logs the
 // HTTP request and response before sending the response status code
 // back to the client.
-func audit(logger *log.Logger, roles *auth.Roles, f http.HandlerFunc) http.HandlerFunc {
+func audit(logger *log.Logger, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w = &AuditResponseWriter{
 			ResponseWriter: w,
 			Logger:         logger,
 
 			URL:      *r.URL,
-			Identity: auth.Identify(r, roles.Identify),
+			Identity: auth.Identify(r),
 			Time:     time.Now(),
 		}
 		f(w, r)
@@ -123,7 +129,7 @@ func handleVersion(version string) http.HandlerFunc {
 // handleStatus returns a handler function that returns status
 // information, like server version and server up-time, as JSON
 // object to the client.
-func handleStatus(version string, store key.Store, log *xlog.Target) http.HandlerFunc {
+func handleStatus(config *ServerConfig) http.HandlerFunc {
 	type Status struct {
 		Version string        `json:"version"`
 		UpTime  time.Duration `json:"uptime"`
@@ -135,16 +141,21 @@ func handleStatus(version string, store key.Store, log *xlog.Target) http.Handle
 	}
 	startTime := time.Now()
 	return func(w http.ResponseWriter, r *http.Request) {
-		kmsState, err := store.Status(r.Context())
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		kmsState, err := enclave.Status(r.Context())
 		if err != nil {
 			kmsState = key.StoreState{
 				State: key.StoreUnreachable,
 			}
-			log.Log().Printf("http: failed to connect to key store: %v", err)
+			config.ErrorLog.Log().Printf("http: failed to connect to key store: %v", err)
 		}
 
 		status := Status{
-			Version: version,
+			Version: config.Version,
 			UpTime:  time.Since(startTime).Round(time.Second),
 		}
 		status.KMS.State = kmsState.State.String()
@@ -162,10 +173,16 @@ func handleStatus(version string, store key.Store, log *xlog.Target) http.Handle
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func handleCreateKey(store key.Store) http.HandlerFunc {
+func handleCreateKey(config *ServerConfig) http.HandlerFunc {
 	ErrInvalidKeyName := kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
 		name := pathBase(r.URL.Path)
 		if name == "" {
 			Error(w, ErrInvalidKeyName)
@@ -178,7 +195,7 @@ func handleCreateKey(store key.Store) http.HandlerFunc {
 			return
 		}
 
-		if err := store.Create(r.Context(), name, key.New(bytes)); err != nil {
+		if err := enclave.CreateKey(r.Context(), name, key.New(bytes)); err != nil {
 			Error(w, err)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -192,15 +209,20 @@ func handleCreateKey(store key.Store) http.HandlerFunc {
 // It infers the name of the new Secret from the request URL - in
 // particular from the URL's path base.
 // See: https://golang.org/pkg/path/#Base
-func handleImportKey(store key.Store) http.HandlerFunc {
+func handleImportKey(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKey     = kes.NewError(http.StatusBadRequest, "invalid key")
 	)
+	type Request struct {
+		Bytes []byte `json:"bytes"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		type request struct {
-			Bytes []byte `json:"bytes"`
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
 		}
 
 		name := pathBase(r.URL.Path)
@@ -209,7 +231,7 @@ func handleImportKey(store key.Store) http.HandlerFunc {
 			return
 		}
 
-		var req request
+		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, ErrInvalidJSON)
 			return
@@ -220,7 +242,7 @@ func handleImportKey(store key.Store) http.HandlerFunc {
 			return
 		}
 
-		if err := store.Create(r.Context(), name, key.New(req.Bytes)); err != nil {
+		if err := enclave.CreateKey(r.Context(), name, key.New(req.Bytes)); err != nil {
 			Error(w, err)
 			return
 		}
@@ -228,16 +250,22 @@ func handleImportKey(store key.Store) http.HandlerFunc {
 	}
 }
 
-func handleDeleteKey(store key.Store) http.HandlerFunc {
+func handleDeleteKey(config *ServerConfig) http.HandlerFunc {
 	ErrInvalidKeyName := kes.NewError(http.StatusBadRequest, "invalid key name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
 		name := pathBase(r.URL.Path)
 		if name == "" {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		if err := store.Delete(r.Context(), name); err != nil {
+		if err := enclave.DeleteKey(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -257,7 +285,7 @@ func handleDeleteKey(store key.Store) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func handleGenerateKey(store key.Store) http.HandlerFunc {
+func handleGenerateKey(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -270,6 +298,12 @@ func handleGenerateKey(store key.Store) http.HandlerFunc {
 		Ciphertext []byte `json:"ciphertext"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, ErrInvalidJSON)
@@ -281,7 +315,7 @@ func handleGenerateKey(store key.Store) http.HandlerFunc {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(r.Context(), name)
+		secret, err := enclave.GetKey(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -316,7 +350,7 @@ func handleGenerateKey(store key.Store) http.HandlerFunc {
 // returned http.HandlerFunc will authenticate but not encrypt
 // the context value. The client has to provide the same
 // context value again for decryption.
-func handleEncryptKey(store key.Store) http.HandlerFunc {
+func handleEncryptKey(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -335,12 +369,17 @@ func handleEncryptKey(store key.Store) http.HandlerFunc {
 			return
 		}
 
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
 		name := pathBase(r.URL.Path)
 		if name == "" {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(r.Context(), name)
+		secret, err := enclave.GetKey(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -363,7 +402,7 @@ func handleEncryptKey(store key.Store) http.HandlerFunc {
 // If the client has provided a context value during
 // encryption / key generation then the client has to provide
 // the same context value again.
-func handleDecryptKey(store key.Store) http.HandlerFunc {
+func handleDecryptKey(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrInvalidJSON    = kes.NewError(http.StatusBadRequest, "invalid json")
 		ErrInvalidKeyName = kes.NewError(http.StatusBadRequest, "invalid key name")
@@ -382,12 +421,17 @@ func handleDecryptKey(store key.Store) http.HandlerFunc {
 			return
 		}
 
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
 		name := pathBase(r.URL.Path)
 		if name == "" {
 			Error(w, ErrInvalidKeyName)
 			return
 		}
-		secret, err := store.Get(r.Context(), name)
+		secret, err := enclave.GetKey(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -413,18 +457,22 @@ func handleDecryptKey(store key.Store) http.HandlerFunc {
 // The client is expected to check for an error trailer
 // and only consider the listing complete if it receives
 // no such trailer.
-func handleListKeys(store key.Store) http.HandlerFunc {
+func handleListKeys(config *ServerConfig) http.HandlerFunc {
 	type Response struct {
 		Name string
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Trailer", "Status,Error")
-
-		iterator, err := store.List(r.Context())
+		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
 			Error(w, err)
 			return
 		}
+		iterator, err := enclave.ListKeys(r.Context())
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		w.Header().Set("Trailer", "Status,Error")
 
 		var (
 			pattern    = pathBase(r.URL.Path)
@@ -474,7 +522,7 @@ func handleListKeys(store key.Store) http.HandlerFunc {
 	}
 }
 
-func handleWritePolicy(roles *auth.Roles) http.HandlerFunc {
+func handleWritePolicy(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrInvalidPolicyName = kes.NewError(http.StatusBadRequest, "invalid policy name")
 		ErrInvalidJSON       = kes.NewError(http.StatusBadRequest, "invalid json")
@@ -485,19 +533,31 @@ func handleWritePolicy(roles *auth.Roles) http.HandlerFunc {
 			Error(w, ErrInvalidPolicyName)
 			return
 		}
-
-		var policy kes.Policy
+		var policy auth.Policy
 		if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
 			Error(w, ErrInvalidJSON)
 			return
 		}
-		roles.Set(name, &policy)
+
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		if err = enclave.SetPolicy(r.Context(), name, &policy); err != nil {
+			Error(w, err)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func handleReadPolicy(roles *auth.Roles) http.HandlerFunc {
+func handleReadPolicy(config *ServerConfig) http.HandlerFunc {
 	ErrInvalidPolicyName := kes.NewError(http.StatusBadRequest, "invalid policy name")
+	type Response struct {
+		Allow []string `json:"allow"`
+		Deny  []string `json:"deny"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := pathBase(r.URL.Path)
 		if name == "" {
@@ -505,92 +565,142 @@ func handleReadPolicy(roles *auth.Roles) http.HandlerFunc {
 			return
 		}
 
-		policy, ok := roles.Get(name)
-		if !ok {
-			Error(w, kes.ErrPolicyNotFound)
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
 			return
 		}
-		json.NewEncoder(w).Encode(policy)
+		policy, err := enclave.GetPolicy(r.Context(), name)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		json.NewEncoder(w).Encode(&Response{
+			Allow: policy.Allow,
+			Deny:  policy.Deny,
+		})
 	}
 }
 
-func handleListPolicies(roles *auth.Roles) http.HandlerFunc {
+func handleListPolicies(config *ServerConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		policies := []string{}
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		iterator, err := enclave.ListPolicies(r.Context())
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		var policies []string
 		pattern := pathBase(r.URL.Path)
-		for _, policy := range roles.Policies() {
-			if ok, err := path.Match(pattern, policy); ok && err == nil {
-				policies = append(policies, policy)
+		for iterator.Next() {
+			if ok, err := path.Match(pattern, iterator.Name()); ok && err == nil {
+				policies = append(policies, iterator.Name())
 			}
 		}
 		json.NewEncoder(w).Encode(policies)
 	}
 }
 
-func handleDeletePolicy(roles *auth.Roles) http.HandlerFunc {
+func handleDeletePolicy(config *ServerConfig) http.HandlerFunc {
 	ErrInvalidPolicyName := kes.NewError(http.StatusBadRequest, "invalid policy name")
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
 		name := pathBase(r.URL.Path)
 		if name == "" {
 			Error(w, ErrInvalidPolicyName)
 			return
 		}
-		roles.Delete(name)
+		if err = enclave.DeleteKey(r.Context(), name); err != nil {
+			Error(w, err)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func handleAssignIdentity(roles *auth.Roles) http.HandlerFunc {
+func handleAssignIdentity(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
-		ErrIdentityRoot    = kes.NewError(http.StatusBadRequest, "identity is root")
 		ErrSelfAssign      = kes.NewError(http.StatusForbidden, "identity cannot assign policy to itself")
 	)
 	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
 		identity := kes.Identity(pathBase(r.URL.Path))
 		if identity.IsUnknown() {
 			Error(w, ErrIdentityUnknown)
 			return
 		}
-		if identity == roles.Root {
-			Error(w, ErrIdentityRoot)
-			return
-		}
-		if identity == auth.Identify(r, roles.Identify) {
+		if self := auth.Identify(r); self == identity {
 			Error(w, ErrSelfAssign)
 			return
 		}
 
 		policy := pathBase(strings.TrimSuffix(r.URL.Path, identity.String()))
-		if err := roles.Assign(policy, identity); err != nil {
-			Error(w, kes.ErrPolicyNotFound)
+		if err = enclave.AssignIdentity(r.Context(), policy, identity); err != nil {
+			Error(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func handleListIdentities(roles *auth.Roles) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		type Response struct {
-			Identity kes.Identity `json:"identity"`
-			Policy   string       `json:"policy"`
-		}
-		w.Header().Set("Trailer", "Status,Error")
+func handleListIdentities(config *ServerConfig) http.HandlerFunc {
+	type Response struct {
+		Identity kes.Identity `json:"identity"`
+		Policy   string       `json:"policy"`
+	}
 
+	return func(w http.ResponseWriter, r *http.Request) {
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		iterator, err := enclave.ListIdentities(r.Context())
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		w.Header().Set("Trailer", "Status,Error")
 		var (
 			pattern    = pathBase(r.URL.Path)
 			encoder    = json.NewEncoder(w)
 			hasWritten bool
 		)
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		for identity, policy := range roles.Identities() {
-			if ok, err := path.Match(pattern, identity.String()); ok && err == nil {
+		for iterator.Next() {
+			if ok, err := path.Match(pattern, iterator.Identity().String()); ok && err == nil {
+				info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
+				if err != nil {
+					if !hasWritten {
+						Error(w, err)
+					} else {
+						ErrorTrailer(w, err)
+					}
+					return
+				}
+
 				hasWritten = true
 				err = encoder.Encode(Response{
-					Identity: identity,
-					Policy:   policy,
+					Identity: iterator.Identity(),
+					Policy:   info.Policy,
 				})
 
 				// Once we encounter ErrHandlerTimeout the client connection
@@ -619,22 +729,17 @@ func handleListIdentities(roles *auth.Roles) http.HandlerFunc {
 	}
 }
 
-func handleForgetIdentity(roles *auth.Roles) http.HandlerFunc {
-	var (
-		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
-		ErrIdentityRoot    = kes.NewError(http.StatusBadRequest, "identity is root")
-	)
+func handleForgetIdentity(config *ServerConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		identity := kes.Identity(pathBase(r.URL.Path))
-		if identity.IsUnknown() {
-			Error(w, ErrIdentityUnknown)
+		enclave, err := getEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
 			return
 		}
-		if identity == roles.Root {
-			Error(w, ErrIdentityRoot)
+		if err = enclave.DeleteIdentity(r.Context(), kes.Identity(pathBase(r.URL.Path))); err != nil {
+			Error(w, err)
 			return
 		}
-		roles.Forget(identity)
 		w.WriteHeader(http.StatusOK)
 	}
 }
@@ -706,3 +811,7 @@ func handleMetrics(metrics *metric.Metrics) http.HandlerFunc {
 }
 
 func pathBase(p string) string { return path.Base(p) }
+
+func getEnclave(vault sys.Vault, r *http.Request) (*sys.Enclave, error) {
+	return vault.GetEnclave(r.Context(), r.URL.Query().Get("enclave"))
+}

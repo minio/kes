@@ -41,7 +41,7 @@ func tlsProxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 			// Update the audit log identity such that
 			// the audit log shows the actual client and
 			// not the TLS proxy.
-			aw.Identity = auth.Identify(r, proxy.Identify)
+			aw.Identity = auth.Identify(r)
 		}
 		f(w, r)
 	}

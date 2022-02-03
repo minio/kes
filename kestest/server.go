@@ -28,6 +28,7 @@ import (
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/sys"
 )
 
 // NewServer starts and returns a new Server.
@@ -105,22 +106,22 @@ func (s *Server) start() {
 		adminCert = s.IssueClientCertificate("kestest: admin")
 	)
 	s.policies = &PolicySet{
-		roles: &auth.Roles{
-			Root: Identify(&adminCert),
-		},
+		admin:      Identify(&adminCert),
+		policies:   make(map[string]*auth.Policy),
+		identities: make(map[kes.Identity]auth.IdentityInfo),
 	}
 
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
+	store := key.NewCache(&mem.Store{}, &key.CacheConfig{
+		Expiry:       30 * time.Second,
+		ExpiryUnused: 5 * time.Second,
+	})
 
 	serverCert := issueCertificate("kestest: server", s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageServerAuth)
 	s.server = httptest.NewUnstartedServer(xhttp.NewServerMux(&xhttp.ServerConfig{
-		Version: "v0.0.0-dev",
-		Store: key.NewCache(&mem.Store{}, &key.CacheConfig{
-			Expiry:       30 * time.Second,
-			ExpiryUnused: 5 * time.Second,
-		}),
-		Roles:    s.policies.roles,
+		Version:  "v0.0.0-dev",
+		Vault:    sys.NewStatelessVault(Identify(&adminCert), store, s.policies.policySet(), s.policies.identitySet()),
 		Proxy:    nil,
 		AuditLog: auditLog,
 		ErrorLog: errorLog,
