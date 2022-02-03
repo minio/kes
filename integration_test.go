@@ -68,6 +68,24 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestStatus(t *testing.T) {
+	if !*IsIntegrationTest {
+		t.SkipNow()
+	}
+
+	client, err := newClient()
+	if err != nil {
+		t.Fatalf("Failed to create KES client: %v", err)
+	}
+	state, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to fetch KES server state: %v", err)
+	}
+	if state.UpTime == 0 {
+		t.Fatal("The KES server up time cannot be 0")
+	}
+}
+
 func TestCreateKey(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
