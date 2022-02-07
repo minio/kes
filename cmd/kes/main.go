@@ -5,7 +5,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
@@ -105,7 +109,43 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 		stdlog.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_KEY' is empty")
 	}
 
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	certPem, err := os.ReadFile(certPath)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to load TLS certificate: %v", err)
+	}
+	keyPem, err := os.ReadFile(keyPath)
+	if err != nil {
+		stdlog.Fatalf("Error: failed to load TLS private key: %v", err)
+	}
+
+	// Check whether the private key is encrypted. If so, ask the user
+	// to enter the password on the CLI.
+	privateKey, rest := pem.Decode(bytes.TrimSpace(keyPem))
+	if len(rest) > 0 {
+		stdlog.Fatal("Error: failed to load TLS private key: PEM block contains additional unknown data")
+	}
+	if privateKey.Type != "PRIVATE KEY" && !strings.HasSuffix(privateKey.Type, " PRIVATE KEY") {
+		stdlog.Fatalf("Error: failed to load TLS private key: invalid type %q", privateKey.Type)
+	}
+	if len(privateKey.Headers) > 0 && x509.IsEncryptedPEMBlock(privateKey) {
+		fmt.Print("Enter password for private key: ")
+		password, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			stdlog.Fatalf("Error: failed to read private key password: %v", err)
+		}
+		fmt.Println() // Add the newline again
+
+		decPrivateKey, err := x509.DecryptPEMBlock(privateKey, password)
+		if err != nil {
+			if errors.Is(err, x509.IncorrectPasswordError) {
+				stdlog.Fatalf("Error: incorrect password")
+			}
+			stdlog.Fatalf("Error: failed to decrypt private key: %v", err)
+		}
+		keyPem = pem.EncodeToMemory(&pem.Block{Type: privateKey.Type, Bytes: decPrivateKey})
+	}
+
+	cert, err := tls.X509KeyPair(certPem, keyPem)
 	if err != nil {
 		stdlog.Fatalf("Error: failed to load TLS private key or certificate: %v", err)
 	}
