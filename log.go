@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"time"
 )
 
@@ -256,6 +257,7 @@ func (a *AuditEvent) String() string {
 // In particular, it contains the identity of the
 // client and other audit-related information.
 type AuditEventRequest struct {
+	IP       net.IP `json:"ip"`
 	Path     string `json:"path"`
 	Identity string `json:"identity"`
 }
@@ -263,8 +265,12 @@ type AuditEventRequest struct {
 // String returns the AuditEventRequest's string representation
 // which is valid JSON.
 func (a *AuditEventRequest) String() string {
-	const format = `{"path":"%s","identity":"%s"}`
-	return fmt.Sprintf(format, a.Path, a.Identity)
+	if len(a.IP) == 0 {
+		const format = `{"path":"%s","identity":"%s"}`
+		return fmt.Sprintf(format, a.Path, a.Identity)
+	}
+	const format = `{"ip":"%s","path":"%s","identity":"%s"}`
+	return fmt.Sprintf(format, a.IP.String(), a.Path, a.Identity)
 }
 
 // AuditEventResponse contains the audit information

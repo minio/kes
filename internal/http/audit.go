@@ -6,6 +6,7 @@ package http
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -23,7 +24,9 @@ type AuditResponseWriter struct {
 	// on the first invocation of Write resp. WriteHeader.
 	Logger *log.Logger
 
-	URL      url.URL      // The request URL
+	URL url.URL // The request URL
+	IP  net.IP  // The client IP address
+
 	Identity kes.Identity // The client's X.509 identity
 	Time     time.Time    // The time when we receive the request
 
@@ -49,6 +52,7 @@ func (w *AuditResponseWriter) WriteHeader(statusCode int) {
 		event := kes.AuditEvent{
 			Time: w.Time,
 			Request: kes.AuditEventRequest{
+				IP:       w.IP,
 				Path:     w.URL.Path,
 				Identity: w.Identity.String(),
 			},
