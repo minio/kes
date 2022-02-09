@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"path"
 	"strconv"
@@ -104,7 +105,7 @@ func enforcePolicies(config *ServerConfig, f http.HandlerFunc) http.HandlerFunc 
 // back to the client.
 func audit(logger *log.Logger, f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w = &AuditResponseWriter{
+		aw := &AuditResponseWriter{
 			ResponseWriter: w,
 			Logger:         logger,
 
@@ -112,7 +113,12 @@ func audit(logger *log.Logger, f http.HandlerFunc) http.HandlerFunc {
 			Identity: auth.Identify(r),
 			Time:     time.Now(),
 		}
-		f(w, r)
+		if ip := auth.ForwardedIPFromContext(r.Context()); ip != nil {
+			aw.IP = ip
+		} else if addr, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			aw.IP = net.ParseIP(addr)
+		}
+		f(aw, r)
 	}
 }
 

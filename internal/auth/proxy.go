@@ -5,10 +5,13 @@
 package auth
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/minio/kes"
@@ -131,8 +134,9 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 	// modify the TLS connection state such that for handlers
 	// further down the stack it looks like the request has
 	// been made by the KES client itself.
-	// They can consume the TLS connection state as usual without
-	// having to care about a TLS proxy.
+	// HTTP handlers can consume the TLS connection state and
+	// remote address as usual withou  having to care about a
+	// TLS proxy.
 	if p.Is(identity) {
 		cert, err := p.getClientCertificate(req.Header)
 		if err != nil {
@@ -151,8 +155,51 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 				return kes.NewError(http.StatusForbidden, "")
 			}
 		}
+
+		// We also propagate the client remote address if the proxy
+		// sends a well-formed RFC 7239 X-Forward-For header.
+		if fwd := req.Header.Get("X-Forwarded-For"); fwd != "" && fwd != "unknown" { // RFC 7239 (Sec. 5.2) specifies this identifier for unknown sources
+			// RFC 7239 defines that, in case of a chain of proxy servers,
+			// the first address is the client address.
+			if n := strings.IndexRune(fwd, ','); n >= 0 {
+				fwd = fwd[:n]
+			}
+
+			// According to RFC 7239 a proxy may send the client
+			// IP with an optional port number. So we first try
+			// to split the 'address:port' and then try to parse
+			// the address as IP.
+			addr, _, err := net.SplitHostPort(fwd)
+			if err != nil {
+				addr = fwd // There may be no port causing SplitHostPort to fail.
+			}
+
+			// Since cloning the request is relatively expensive,
+			// we only add a new context with the forwarded IP
+			// if we parsed the forwarded value successfully.
+			if ip := net.ParseIP(addr); ip != nil {
+				ctx := context.WithValue(req.Context(), forwardedIPContextKey{}, ip)
+				*req = *req.Clone(ctx)
+			}
+		}
 	}
 	return nil
+}
+
+type forwardedIPContextKey struct{}
+
+// ForwardedIPFromContext returns the client IP forwarded
+// by an HTTP proxy or nil if ctx does not contain a
+// forwarded client IP.
+func ForwardedIPFromContext(ctx context.Context) net.IP {
+	if ctx == nil {
+		return nil
+	}
+	v := ctx.Value(forwardedIPContextKey{})
+	if v == nil {
+		return nil
+	}
+	return v.(net.IP)
 }
 
 // getClientCertificate tries to extract an URL-escaped and ANS.1-encoded
