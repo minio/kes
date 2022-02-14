@@ -440,17 +440,10 @@ func TestReadWritePolicy(t *testing.T) {
 
 	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
 	for i, test := range readWritePolicyTests {
-		policy, err := kes.NewPolicy()
-		if err != nil {
-			t.Fatalf("Test %d: Failed to create new policy: %v", i, err)
+		policy := &kes.Policy{
+			Allow: test.Allow,
+			Deny:  test.Deny,
 		}
-		if err = policy.Allow(test.Allow...); err != nil {
-			t.Fatalf("Test %d: Failed to add allow rules: %v", i, err)
-		}
-		if err = policy.Deny(test.Deny...); err != nil {
-			t.Fatalf("Test %d: Failed to add deny rules: %v", i, err)
-		}
-
 		if err := client.SetPolicy(context.Background(), name, policy); err != nil {
 			t.Fatalf("Test %d: Failed to create policy '%s': %v", i, name, err)
 		}
@@ -540,11 +533,7 @@ func newClient() (*kes.Client, error) {
 }
 
 func newPolicy(patterns ...string) *kes.Policy {
-	policy, err := kes.NewPolicy(patterns...)
-	if err != nil {
-		panic(err)
-	}
-	return policy
+	return &kes.Policy{Allow: patterns}
 }
 
 func mustDecodeB64(s string) []byte {

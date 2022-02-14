@@ -353,12 +353,11 @@ func (e *Enclave) DeletePolicy(ctx context.Context, name string) error {
 //
 // The pattern matching happens on the server side. If pattern is empty
 // ListPolicies returns all policy names.
-func (e *Enclave) ListPolicies(ctx context.Context, pattern string) ([]string, error) {
+func (e *Enclave) ListPolicies(ctx context.Context, pattern string) (*PolicyIterator, error) {
 	const (
-		APIPath         = "/v1/policy/list"
-		Method          = http.MethodGet
-		StatusOK        = http.StatusOK
-		MaxResponseSize = 64 * 1 << 20
+		APIPath  = "/v1/policy/list"
+		Method   = http.MethodGet
+		StatusOK = http.StatusOK
 	)
 
 	if pattern == "" { // The empty pattern never matches anything
@@ -373,13 +372,10 @@ func (e *Enclave) ListPolicies(ctx context.Context, pattern string) ([]string, e
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
-
-	var policies []string
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&policies); err != nil {
-		return nil, err
-	}
-	return policies, nil
+	return &PolicyIterator{
+		decoder: json.NewDecoder(resp.Body),
+		closer:  resp.Body,
+	}, nil
 }
 
 // AssignIdentity assigns the policy to the identity.

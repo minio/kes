@@ -544,6 +544,8 @@ func handleWritePolicy(config *ServerConfig) http.HandlerFunc {
 			Error(w, ErrInvalidJSON)
 			return
 		}
+		policy.CreatedAt = time.Now().UTC()
+		policy.CreatedBy = auth.Identify(r)
 
 		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
@@ -589,6 +591,13 @@ func handleReadPolicy(config *ServerConfig) http.HandlerFunc {
 }
 
 func handleListPolicies(config *ServerConfig) http.HandlerFunc {
+	type Response struct {
+		Name      string       `json:"name"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+
+		Err string `json:"error,omitempty"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
@@ -600,15 +609,39 @@ func handleListPolicies(config *ServerConfig) http.HandlerFunc {
 			Error(w, err)
 			return
 		}
+		defer iterator.Close()
 
-		var policies []string
+		var hasWritten bool
 		pattern := pathBase(r.URL.Path)
+		encoder := json.NewEncoder(w)
+		w.Header().Set("Content-Type", "application/x-ndjson")
 		for iterator.Next() {
-			if ok, err := path.Match(pattern, iterator.Name()); ok && err == nil {
-				policies = append(policies, iterator.Name())
+			if ok, _ := path.Match(pattern, iterator.Name()); !ok {
+				continue
 			}
+
+			policy, err := enclave.GetPolicy(r.Context(), iterator.Name())
+			if err != nil {
+				encoder.Encode(Response{Err: err.Error()})
+				return
+			}
+			err = encoder.Encode(Response{
+				Name:      iterator.Name(),
+				CreatedAt: policy.CreatedAt,
+				CreatedBy: policy.CreatedBy,
+			})
+			if err != nil {
+				return
+			}
+			hasWritten = true
 		}
-		json.NewEncoder(w).Encode(policies)
+		if err = iterator.Close(); err != nil {
+			encoder.Encode(Response{Err: err.Error()})
+			return
+		}
+		if !hasWritten {
+			w.WriteHeader(http.StatusOK)
+		}
 	}
 }
 

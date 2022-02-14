@@ -13,7 +13,6 @@ import (
 	stdlog "log"
 	"os"
 	"os/signal"
-	"sort"
 
 	"github.com/minio/kes"
 )
@@ -214,15 +213,20 @@ func listPolicies(args []string) {
 		}
 		stdlog.Fatalf("Error: failed to list policies matching %q: %v", pattern, err)
 	}
-	sort.Strings(policies)
+	defer policies.Close()
+
 	if isTerm(os.Stdout) {
-		fmt.Println("[")
-		for _, p := range policies {
-			fmt.Printf("  %s\n", p)
+		for policies.Next() {
+			fmt.Println(policies.Name())
 		}
-		fmt.Println("]")
 	} else {
-		json.NewEncoder(os.Stdout).Encode(policies)
+		encoder := json.NewEncoder(os.Stdout)
+		for policies.Next() {
+			encoder.Encode(policies.Value())
+		}
+	}
+	if err = policies.Close(); err != nil {
+		stdlog.Fatalf("Error: failed to list policies matching %q: %v", pattern, err)
 	}
 }
 

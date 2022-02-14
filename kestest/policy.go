@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -35,22 +34,9 @@ func (p *PolicySet) Admin() kes.Identity { return p.admin }
 // Add adds the given KES policy to the PolicySet.
 // Any existing policy with the same name is replaced.
 func (p *PolicySet) Add(name string, policy *kes.Policy) {
-	type Policy struct {
-		Allow []string `json:"allow"`
-		Deny  []string `json:"deny"`
-	}
-	b, err := json.Marshal(policy)
-	if err != nil {
-		panic(err)
-	}
-
-	var jsonPolicy Policy
-	if err = json.Unmarshal(b, &jsonPolicy); err != nil {
-		panic(err)
-	}
 	p.policies[name] = &auth.Policy{
-		Allow: jsonPolicy.Allow,
-		Deny:  jsonPolicy.Deny,
+		Allow: policy.Allow,
+		Deny:  policy.Deny,
 	}
 }
 
@@ -60,11 +46,7 @@ func (p *PolicySet) Add(name string, policy *kes.Policy) {
 // Allow is a shorthand for first creating a KES Policy
 // and then adding it to the PolicySet.
 func (p *PolicySet) Allow(name string, patterns ...string) {
-	policy, err := kes.NewPolicy(patterns...)
-	if err != nil {
-		panic(fmt.Sprintf("kestest: failed to create policy: %v", err))
-	}
-	p.Add(name, policy)
+	p.Add(name, &kes.Policy{Allow: patterns})
 }
 
 // Assign assigns the KES policy with the given name to
@@ -173,6 +155,7 @@ func (i *policyIterator) Next() bool {
 	next := len(i.values) > 0
 	if next {
 		i.current = i.values[0]
+		i.values = i.values[1:]
 	}
 	return next
 }
@@ -245,6 +228,7 @@ func (i *identityIterator) Next() bool {
 	next := len(i.values) > 0
 	if next {
 		i.current = i.values[0]
+		i.values = i.values[1:]
 	}
 	return next
 }
