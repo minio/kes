@@ -5,10 +5,10 @@
 package kes
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
-	"path"
+	"errors"
+	"io"
+	"time"
 )
 
 // Policy contains a set of rules that explicitly allow
@@ -37,124 +37,92 @@ import (
 // [1]: https://en.wikipedia.org/wiki/Glob_(programming)
 // [2]: https://golang.org/pkg/path/#Match
 type Policy struct {
-	allowPatterns []string
-	denyPatterns  []string
+	Allow []string // Set of allow patterns
+	Deny  []string // Set of deny patterns
 }
 
-// NewPolicy returns a new policy that accepts requests
-// if at least one of the given patterns matches the
-// with request URL path. It returns an error if one
-// of the patterns contains invalid glob syntax.
-func NewPolicy(patterns ...string) (*Policy, error) {
-	policy := new(Policy)
-	if err := policy.Allow(patterns...); err != nil {
-		return nil, err
+// PolicyInfo describes a KES policy.
+type PolicyInfo struct {
+	Name      string    `json:"name"`                 // Name of the policy
+	CreatedAt time.Time `json:"created_at,omitempty"` // Point in time when the policy was created
+	CreatedBy Identity  `json:"created_by,omitempty"` // Identity that created the policy
+}
+
+// PolicyIterator iterates over a stream of PolicyInfo objects.
+// Close the PolicyIterator to release associated resources.
+type PolicyIterator struct {
+	decoder *json.Decoder
+	closer  io.Closer
+
+	current PolicyInfo
+	err     error
+	closed  bool
+}
+
+// Value returns the current PolicyInfo. It remains valid
+// until Next is called again.
+func (i *PolicyIterator) Value() PolicyInfo { return i.current }
+
+// Name returns the name of the current policy.
+// It is a short-hand for Value().Name.
+func (i *PolicyIterator) Name() string { return i.current.Name }
+
+// CreatedAt returns the created at timestamp of the current
+// policy. It is a short-hand for Value().CreatedAt.
+func (i *PolicyIterator) CreatedAt() time.Time { return i.current.CreatedAt }
+
+// CreatedBy returns the identiy that created the current policy.
+// It is a short-hand for Value().CreatedBy.
+func (i *PolicyIterator) CreatedBy() Identity { return i.current.CreatedBy }
+
+// Next returns true if there is another PolicyInfo.
+// It returns false if there are no more PolicyInfo
+// objects or when the PolicyIterator encounters an
+// error.
+func (i *PolicyIterator) Next() bool {
+	type Response struct {
+		Name      string    `json:"name"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+
+		Err string `json:"error"`
 	}
-	return policy, nil
-}
+	if i.closed || i.err != nil {
+		return false
+	}
 
-// Allow adds the given patterns to the list of
-// allow rules. It ignores empty patterns and
-// returns an error if one of the patterns contains
-// invalid glob syntax.
-func (p *Policy) Allow(patterns ...string) error {
-	for _, pattern := range patterns {
-		if pattern == "" {
-			continue
+	var resp Response
+	if err := i.decoder.Decode(&resp); err != nil {
+		if errors.Is(err, io.EOF) {
+			i.err = i.Close()
+		} else {
+			i.err = err
 		}
-		if _, err := path.Match(pattern, pattern); err != nil {
-			return err
-		}
-		p.allowPatterns = append(p.allowPatterns, pattern)
+		return false
 	}
-	return nil
+	if resp.Err != "" {
+		i.err = errors.New(resp.Err)
+		return false
+	}
+
+	i.current = PolicyInfo{
+		Name:      resp.Name,
+		CreatedAt: resp.CreatedAt,
+		CreatedBy: resp.CreatedBy,
+	}
+	return true
 }
 
-// Deny adds the given patterns to the list of
-// deny rules. It ignores empty patterns and
-// returns an error if one of the patterns contains
-// invalid glob syntax.
-func (p *Policy) Deny(patterns ...string) error {
-	for _, pattern := range patterns {
-		if pattern == "" {
-			continue
+// Close closes the PolicyIterator and releases
+// any associated resources.
+func (i *PolicyIterator) Close() error {
+	if !i.closed {
+		err := i.closer.Close()
+		if i.err == nil {
+			i.err = err
 		}
-		if _, err := path.Match(pattern, pattern); err != nil {
-			return err
-		}
-		p.denyPatterns = append(p.denyPatterns, pattern)
-	}
-	return nil
-}
-
-func (p Policy) MarshalJSON() ([]byte, error) {
-	type PolicyJSON struct {
-		Allow []string `json:"allow"`
-		Deny  []string `json:"deny"`
-	}
-
-	policy := PolicyJSON{
-		Allow: p.allowPatterns,
-		Deny:  p.denyPatterns,
-	}
-	if len(policy.Allow) == 0 {
-		policy.Allow = []string{} // marshal nil as empty array ([]) -  not null
-	}
-	if len(policy.Deny) == 0 {
-		policy.Deny = []string{} // marshal nil as empty array ([]) -  not null
-	}
-	return json.Marshal(policy)
-}
-
-func (p *Policy) UnmarshalJSON(b []byte) error {
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-
-	var policyJSON struct {
-		Allow []string `json:"allow"`
-		Deny  []string `json:"deny"`
-	}
-	if err := d.Decode(&policyJSON); err != nil {
+		i.closed = true
 		return err
 	}
-
-	deny := make([]string, 0, len(policyJSON.Deny))
-	for _, pattern := range policyJSON.Deny {
-		if pattern == "" {
-			continue
-		}
-		if _, err := path.Match(pattern, pattern); err != nil {
-			return err
-		}
-		deny = append(deny, pattern)
-	}
-	allow := make([]string, 0, len(policyJSON.Allow))
-	for _, pattern := range policyJSON.Allow {
-		if pattern == "" {
-			continue
-		}
-		if _, err := path.Match(pattern, pattern); err != nil {
-			return err
-		}
-		allow = append(allow, pattern)
-	}
-	p.allowPatterns, p.denyPatterns = allow, deny
-	return nil
-}
-
-// Verify determines whether a request should be accepted
-// or rejected. It returns ErrNotAllowed if any deny rule
-// or no allow rule matches the given request.
-func (p *Policy) Verify(r *http.Request) error {
-	for _, pattern := range p.denyPatterns {
-		if ok, _ := path.Match(pattern, r.URL.Path); ok {
-			return ErrNotAllowed
-		}
-	}
-	for _, pattern := range p.allowPatterns {
-		if ok, _ := path.Match(pattern, r.URL.Path); ok {
-			return nil
-		}
-	}
-	return ErrNotAllowed
+	return i.err
 }

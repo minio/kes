@@ -321,6 +321,7 @@ func (i *policyIterator) Next() bool {
 	next := len(i.values) > 0
 	if next {
 		i.current = i.values[0]
+		i.values = i.values[1:]
 	}
 	return next
 }
@@ -432,6 +433,7 @@ func (i *identityIterator) Next() bool {
 	next := len(i.values) > 0
 	if next {
 		i.current = i.values[0]
+		i.values = i.values[1:]
 	}
 	return next
 }

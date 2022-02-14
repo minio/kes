@@ -302,10 +302,11 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 }
 
 // ListPolicies lists all policy names that match the given pattern.
+// It returns a PolicyIterator that iterates over all matched policies.
 //
 // The pattern matching happens on the server side. If pattern is empty
 // ListPolicies returns all policy names.
-func (c *Client) ListPolicies(ctx context.Context, pattern string) ([]string, error) {
+func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyIterator, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
 		client:    retry(c.HTTPClient),
