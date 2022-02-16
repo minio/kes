@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -696,10 +695,13 @@ func handleAssignPolicy(config *ServerConfig) http.HandlerFunc {
 
 func handleListIdentities(config *ServerConfig) http.HandlerFunc {
 	type Response struct {
-		Identity kes.Identity `json:"identity"`
-		Policy   string       `json:"policy"`
-	}
+		Identity  kes.Identity `json:"identity"`
+		Policy    string       `json:"policy"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
 
+		Err string `json:"error,omitempty"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
@@ -711,8 +713,8 @@ func handleListIdentities(config *ServerConfig) http.HandlerFunc {
 			Error(w, err)
 			return
 		}
+		defer iterator.Close()
 
-		w.Header().Set("Trailer", "Status,Error")
 		var (
 			pattern    = pathBase(r.URL.Path)
 			encoder    = json.NewEncoder(w)
@@ -720,46 +722,36 @@ func handleListIdentities(config *ServerConfig) http.HandlerFunc {
 		)
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		for iterator.Next() {
-			if ok, err := path.Match(pattern, iterator.Identity().String()); ok && err == nil {
-				info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
-				if err != nil {
-					if !hasWritten {
-						Error(w, err)
-					} else {
-						ErrorTrailer(w, err)
-					}
-					return
-				}
-
-				hasWritten = true
-				err = encoder.Encode(Response{
-					Identity: iterator.Identity(),
-					Policy:   info.Policy,
-				})
-
-				// Once we encounter ErrHandlerTimeout the client connection
-				// has time'd out and we can stop sending responses.
-				if err == http.ErrHandlerTimeout {
-					break
-				}
-
-				// If there is another error we be conservative and try to
-				// inform the client that something went wrong. However,
-				// if we fail to write to the underlying connection there is
-				// not really something we can do except stop iterating and
-				// not waste server resources.
-				if err != nil {
-					ErrorTrailer(w, err)
-					return
-				}
+			if ok, _ := path.Match(pattern, iterator.Identity().String()); !ok {
+				continue
 			}
+			info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
+			if err != nil {
+				encoder.Encode(Response{Err: err.Error()})
+				return
+			}
+			err = encoder.Encode(Response{
+				Identity:  iterator.Identity(),
+				Policy:    info.Policy,
+				CreatedAt: info.CreatedAt,
+				CreatedBy: info.CreatedBy,
+			})
+			if err != nil {
+				return
+			}
+			hasWritten = true
 		}
-
+		if err = iterator.Close(); err != nil {
+			if hasWritten {
+				encoder.Encode(Response{Err: err.Error()})
+			} else {
+				Error(w, err)
+			}
+			return
+		}
 		if !hasWritten {
 			w.WriteHeader(http.StatusOK)
 		}
-		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
-		w.Header().Set("Error", "")
 	}
 }
 

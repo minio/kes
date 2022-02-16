@@ -147,14 +147,12 @@ func listIdentity(args []string) {
 		}
 		stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 	}
+	defer identities.Close()
 
 	if isTerm(os.Stdout) {
-		sortedIdentities := make([]kes.IdentityDescription, 0, 100)
+		sortedIdentities := make([]kes.IdentityInfo, 0, 100)
 		for identities.Next() {
 			sortedIdentities = append(sortedIdentities, identities.Value())
-		}
-		if err = identities.Err(); err != nil {
-			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 		}
 		if err = identities.Close(); err != nil {
 			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
@@ -170,9 +168,6 @@ func listIdentity(args []string) {
 		encoder := json.NewEncoder(os.Stdout)
 		for identities.Next() {
 			encoder.Encode(identities.Value())
-		}
-		if err = identities.Err(); err != nil {
-			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
 		}
 		if err = identities.Close(); err != nil {
 			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)

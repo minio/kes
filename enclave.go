@@ -448,8 +448,8 @@ func (e *Enclave) ListIdentities(ctx context.Context, pattern string) (*Identity
 		return nil, parseErrorResponse(resp)
 	}
 	return &IdentityIterator{
-		response: resp,
-		decoder:  json.NewDecoder(resp.Body),
+		decoder: json.NewDecoder(resp.Body),
+		closer:  resp.Body,
 	}, nil
 }
 
