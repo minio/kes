@@ -455,9 +455,12 @@ func TestReadWritePolicy(t *testing.T) {
 	}
 }
 
-func TestAssignIdentity(t *testing.T) {
+func TestAssignPolicy(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
+	}
+	if *Endpoint == "https://play.min.io:7373" {
+		t.SkipNow() // TODO: enable CI/CD check once it supports the new /v1/policy/assign API.
 	}
 
 	client, err := newClient()
@@ -472,7 +475,7 @@ func TestAssignIdentity(t *testing.T) {
 	defer client.DeletePolicy(context.Background(), name)
 
 	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
-	if err := client.AssignIdentity(context.Background(), name, identity); err != nil {
+	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
 }
@@ -497,7 +500,7 @@ func TestDeleteIdentity(t *testing.T) {
 	defer client.DeletePolicy(context.Background(), name)
 
 	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
-	if err := client.AssignIdentity(context.Background(), name, identity); err != nil {
+	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
 	if err := client.DeleteIdentity(context.Background(), identity); err != nil {

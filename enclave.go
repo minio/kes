@@ -276,6 +276,35 @@ func (e *Enclave) ListKeys(ctx context.Context, pattern string) (*KeyIterator, e
 	}, nil
 }
 
+// AssignPolicy assigns the policy to the identity.
+// The KES admin identity cannot be assigned to any
+// policy.
+//
+// AssignPolicy returns PolicyNotFound if no such policy exists.
+func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity Identity) error {
+	const (
+		APIPath  = "/v1/policy/assign"
+		Method   = http.MethodPost
+		StatusOK = http.StatusOK
+	)
+	type Request struct {
+		Identity Identity `json:"identity"`
+	}
+
+	body, err := json.Marshal(Request{Identity: identity})
+	if err != nil {
+		return err
+	}
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, policy), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
+}
+
 // SetPolicy creates the given policy. If a policy with the same
 // name already exists, SetPolicy overwrites the existing policy
 // with the given one. Any existing identites will be assigned to
@@ -376,28 +405,6 @@ func (e *Enclave) ListPolicies(ctx context.Context, pattern string) (*PolicyIter
 		decoder: json.NewDecoder(resp.Body),
 		closer:  resp.Body,
 	}, nil
-}
-
-// AssignIdentity assigns the policy to the identity.
-// The KES admin identity cannot be assigned to any
-// policy.
-//
-// AssignIdentity returns PolicyNotFound if no such policy exists.
-func (e *Enclave) AssignIdentity(ctx context.Context, policy string, identity Identity) error {
-	const (
-		APIPath  = "/v1/identity/assign"
-		Method   = http.MethodPost
-		StatusOK = http.StatusOK
-	)
-
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, policy, identity.String()), nil)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
 }
 
 // DeleteIdentity removes the identity. Once removed, any

@@ -95,10 +95,9 @@ func (e *Enclave) ListPolicies(ctx context.Context) (auth.PolicyIterator, error)
 	return e.policies.List(ctx)
 }
 
-// AssignIdentity assigns the given identity a policy referenced by
-// the policy name.
-func (e *Enclave) AssignIdentity(ctx context.Context, policy string, identities kes.Identity) error {
-	return e.identities.Assign(ctx, policy, identities)
+// AssignPolicy assigns the policy to the identity.
+func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity kes.Identity) error {
+	return e.identities.Assign(ctx, policy, identity)
 }
 
 // DeleteIdentity deletes the given identity.
