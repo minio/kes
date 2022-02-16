@@ -315,12 +315,12 @@ func TestDecryptKey(t *testing.T) {
 var listKeysTests = []struct {
 	Keys    []string
 	Pattern string
-	Listing []kes.KeyDescription
+	Listing []kes.KeyInfo
 }{
 	{
 		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
 		Pattern: "*",
-		Listing: []kes.KeyDescription{
+		Listing: []kes.KeyInfo{
 			{Name: "my-key"},
 			{Name: "my-key1"},
 			{Name: "my-key2"},
@@ -330,7 +330,7 @@ var listKeysTests = []struct {
 	{
 		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
 		Pattern: "my-key*",
-		Listing: []kes.KeyDescription{
+		Listing: []kes.KeyInfo{
 			{Name: "my-key"},
 			{Name: "my-key1"},
 			{Name: "my-key2"},
@@ -340,7 +340,7 @@ var listKeysTests = []struct {
 	{
 		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
 		Pattern: "my-key?",
-		Listing: []kes.KeyDescription{
+		Listing: []kes.KeyInfo{
 			{Name: "my-key1"},
 			{Name: "my-key2"},
 			{Name: "my-key3"},
@@ -349,7 +349,7 @@ var listKeysTests = []struct {
 	{
 		Keys:    []string{"my-key_2020-02-12", "my-key_2020-03-01", "my-key_2020-03-27", "my-key_2020-05-01"},
 		Pattern: "my-key_2020-0[1-4]-[0-1][0-9]", // All keys from Jan. to Apr. within the first 20 days of each month.
-		Listing: []kes.KeyDescription{
+		Listing: []kes.KeyInfo{
 			{Name: "my-key_2020-02-12"},
 			{Name: "my-key_2020-03-01"},
 		},
@@ -366,7 +366,7 @@ func TestListKeys(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	f := func(t *testing.T, i int, names []string, pattern string, listing ...kes.KeyDescription) {
+	f := func(t *testing.T, i int, names []string, pattern string, listing ...kes.KeyInfo) {
 		for _, name := range names {
 			if err := client.CreateKey(context.Background(), name); err != nil && err != kes.ErrKeyExists {
 				t.Fatalf("Test %d: Failed to create key %q: %v", i, name, err)
@@ -378,11 +378,11 @@ func TestListKeys(t *testing.T) {
 			t.Fatalf("Test %d: Failed to list keys: %v", i, err)
 		}
 
-		var descriptions []kes.KeyDescription
+		var descriptions []kes.KeyInfo
 		for keys.Next() {
 			descriptions = append(descriptions, keys.Value())
 		}
-		if err = keys.Err(); err != nil {
+		if err = keys.Close(); err != nil {
 			t.Fatalf("Test %d: Failed to list keys: %v", i, err)
 		}
 		if len(descriptions) != len(listing) {

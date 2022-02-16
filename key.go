@@ -8,8 +8,9 @@ import (
 	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
-	"net/http"
+	"time"
 )
 
 // DEK is a data encryption key. It has a plaintext
@@ -96,84 +97,90 @@ func (d *DEK) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// KeyIterator iterates over list of KeyDescription objects.
-//   for iterator.Next() {
-//       _ = iterator.Value() // Use the KeyDescription
-//   }
-//   if err := iterator.Err(); err != nil {
-//   }
-//   if err := iterator.Close(); err != nil {
-//   }
-//
-// Once done with iterating over the list of KeyDescription
-// objects, an iterator should be closed using the Close
-// method.
-//
-// In general, a KeyIterator does not provide any guarantees
-// about ordering or the when its underlying source is modified
-// concurrently.
-// Particularly, if a key is created or deleted at the KES server
-// the KeyIterator may or may not be affected by this change.
+// KeyInfo describes a cryptographic key at a KES server.
+type KeyInfo struct {
+	Name      string    // Name of the cryptographic key
+	CreatedAt time.Time // Point in time when the key was created
+	CreatedBy Identity  // Identity that created the key
+}
+
+// KeyIterator iterates over a stream of KeyInfo objects.
+// Close the KeyIterator to release associated resources.
 type KeyIterator struct {
-	response *http.Response
-	decoder  *json.Decoder
+	decoder *json.Decoder
+	closer  io.Closer
 
-	last     KeyDescription
-	nextErr  error // error encountered in Next()
-	closeErr error // error encountered in Close()
-	closed   bool
+	current KeyInfo
+	err     error
+	closed  bool
 }
 
-// KeyDescription describes a cryptographic key at a KES server.
-type KeyDescription struct {
-	// Name is the name of the cryptographic key.
-	Name string `json:"name"`
-}
-
-// Next returns true if there is another KeyDescription.
-// This KeyDescription can be retrieved via the Value method.
-//
-// It returns false once there is no more KeyDescription
-// or if the KeyIterator encountered an error. The error,
-// if any, can be retrieved via the Err method.
-func (i *KeyIterator) Next() bool {
-	if i.closed || i.nextErr != nil {
-		return false
-	}
-	if err := i.decoder.Decode(&i.last); err != nil {
-		if err == io.EOF {
-			i.nextErr = i.Close()
-		} else {
-			i.nextErr = err
-		}
-		return false
-	}
-	return true
-}
-
-// Value returns the current KeyDescription. It returns
-// the same KeyDescription until Next is called again.
+// Value returns the current KeyInfo. It returns
+// the same KeyInfo until Next is called again.
 //
 // If KeyIterator has been closed or if Next has not been
 // called once resp. once Next returns false then the
 // behavior of Value is undefined.
-func (i *KeyIterator) Value() KeyDescription { return i.last }
+func (i *KeyIterator) Value() KeyInfo { return i.current }
 
-// Err returns the first error encountered by the KeyIterator,
-// if any.
-func (i *KeyIterator) Err() error { return i.nextErr }
+// Name returns the name of the current key. It is a
+// short-hand for Value().Name.
+func (i *KeyIterator) Name() string { return i.current.Name }
 
-// Close closes the underlying connection to the KES server
-// and returns any encountered error.
+// CreatedAt returns the created-at timestamp of the current
+// key. It is a short-hand for Value().CreatedAt.
+func (i *KeyIterator) CreatedAt() time.Time { return i.current.CreatedAt }
+
+// CreatedBy returns the identiy that created the current key.
+// It is a short-hand for Value().CreatedBy.
+func (i *KeyIterator) CreatedBy() Identity { return i.current.CreatedBy }
+
+// Next returns true if there is another KeyInfo.
+// It returns false if there are no more KeyInfo
+// objects or when the KeyIterator encounters an
+// error.
+func (i *KeyIterator) Next() bool {
+	type Response struct {
+		Name      string    `json:"name"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+
+		Err string `json:"error"`
+	}
+	if i.closed || i.err != nil {
+		return false
+	}
+	var resp Response
+	if err := i.decoder.Decode(&resp); err != nil {
+		if errors.Is(err, io.EOF) {
+			i.err = i.Close()
+		} else {
+			i.err = err
+		}
+		return false
+	}
+	if resp.Err != "" {
+		i.err = errors.New(resp.Err)
+		return false
+	}
+	i.current = KeyInfo{
+		Name:      resp.Name,
+		CreatedAt: resp.CreatedAt,
+		CreatedBy: resp.CreatedBy,
+	}
+	return true
+}
+
+// Close closes the IdentityIterator and releases
+// any associated resources.
 func (i *KeyIterator) Close() error {
 	if !i.closed {
+		err := i.closer.Close()
+		if i.err == nil {
+			i.err = err
+		}
 		i.closed = true
-		if err := i.response.Body.Close(); err != nil {
-			i.closeErr = err
-		}
-		if err := parseErrorTrailer(i.response.Trailer); err != nil && i.closeErr == nil {
-			i.closeErr = err
-		}
+		return err
 	}
-	return i.closeErr
+	return i.err
 }

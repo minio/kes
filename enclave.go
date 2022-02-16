@@ -271,8 +271,8 @@ func (e *Enclave) ListKeys(ctx context.Context, pattern string) (*KeyIterator, e
 		return nil, parseErrorResponse(resp)
 	}
 	return &KeyIterator{
-		response: resp,
-		decoder:  json.NewDecoder(resp.Body),
+		decoder: json.NewDecoder(resp.Body),
+		closer:  resp.Body,
 	}, nil
 }
 
