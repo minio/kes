@@ -654,11 +654,14 @@ func handleDeletePolicy(config *ServerConfig) http.HandlerFunc {
 	}
 }
 
-func handleAssignIdentity(config *ServerConfig) http.HandlerFunc {
+func handleAssignPolicy(config *ServerConfig) http.HandlerFunc {
 	var (
 		ErrIdentityUnknown = kes.NewError(http.StatusBadRequest, "identity is unknown")
 		ErrSelfAssign      = kes.NewError(http.StatusForbidden, "identity cannot assign policy to itself")
 	)
+	type Request struct {
+		Identity kes.Identity `json:"identity"`
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
@@ -677,7 +680,13 @@ func handleAssignIdentity(config *ServerConfig) http.HandlerFunc {
 		}
 
 		policy := pathBase(strings.TrimSuffix(r.URL.Path, identity.String()))
-		if err = enclave.AssignIdentity(r.Context(), policy, identity); err != nil {
+
+		var request Request
+		if err = json.NewDecoder(r.Body).Decode(&request); err != nil {
+			Error(w, err)
+			return
+		}
+		if err = enclave.AssignPolicy(r.Context(), policy, request.Identity); err != nil {
 			Error(w, err)
 			return
 		}

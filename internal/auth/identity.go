@@ -60,7 +60,7 @@ type IdentitySet interface {
 	// and can perform any operation.
 	Admin(ctx context.Context) (kes.Identity, error)
 
-	// Assign assigns the identity to the given policy.
+	// Assign assigns the policy to the given identity.
 	//
 	// It returns an error when the identity is equal
 	// to the admin identity.

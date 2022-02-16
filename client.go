@@ -314,17 +314,17 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyItera
 	return enclave.ListPolicies(ctx, pattern)
 }
 
-// AssignIdentity assigns the policy to the identity.
+// AssignPolicy assigns the policy to the identity.
 // The KES admin identity cannot be assigned to any
 // policy.
 //
-// AssignIdentity returns PolicyNotFound if no such policy exists.
-func (c *Client) AssignIdentity(ctx context.Context, policy string, identity Identity) error {
+// AssignPolicy returns PolicyNotFound if no such policy exists.
+func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Identity) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
 		client:    retry(c.HTTPClient),
 	}
-	return enclave.AssignIdentity(ctx, policy, identity)
+	return enclave.AssignPolicy(ctx, policy, identity)
 }
 
 // DeleteIdentity removes the identity. Once removed, any

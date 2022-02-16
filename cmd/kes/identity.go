@@ -96,7 +96,7 @@ func assignIdentity(args []string) {
 	)
 	defer cancelCtx()
 
-	if err := client.AssignIdentity(ctx, policy, identity); err != nil {
+	if err := client.AssignPolicy(ctx, policy, identity); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
 		}
