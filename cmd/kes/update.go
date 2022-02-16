@@ -18,8 +18,42 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/cheggaaa/pb/v3"
+	"github.com/minio/kes/internal/cli"
 	"github.com/minio/selfupdate"
+	flag "github.com/spf13/pflag"
 )
+
+const updateCmdUsage = `Usage:
+    kes update [options]
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes update
+`
+
+func updateCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, updateCmdUsage) }
+
+	var insecureSkipVerify bool
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes update --help'", err)
+	}
+
+	if cmd.NArg() != 0 {
+		cli.Fatal("too many arguments. See 'kes update --help'")
+	}
+	if err := updateInplace(); err != nil {
+		cli.Fatal(err)
+	}
+}
 
 func getUpdateTransport(timeout time.Duration) http.RoundTripper {
 	var updateTransport http.RoundTripper = &http.Transport{

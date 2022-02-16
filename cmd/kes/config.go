@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	stdlog "log"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,7 +31,7 @@ import (
 )
 
 // connect tries to establish a connection to the KMS specified in the ServerConfig
-func connect(config *yml.ServerConfig, quiet quiet, errorLog *stdlog.Logger) (key.Store, error) {
+func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.Store, error) {
 	switch {
 	case config.KeyStore.Fs.Path.Value() != "":
 		f, err := os.Stat(config.KeyStore.Fs.Path.Value())

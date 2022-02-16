@@ -5,163 +5,372 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
-	"flag"
 	"fmt"
-	stdlog "log"
+	"io"
+	"io/ioutil"
+	"math/big"
+	"net"
 	"os"
 	"os/signal"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kes/internal/fips"
+	flag "github.com/spf13/pflag"
+	"golang.org/x/term"
 )
 
 const identityCmdUsage = `Usage:
     kes identity <command>
 
-    assign                 Assign an identity to a policy.
-    list                   List identities at the KES server.
-    forget                 Forget an identity.
+Commands:
+	new                      Create a new KES identity
+    of                       Compute a KES identity
+    ls                       List KES identities
+    rm                       Remove a KES identity
 
 Options:
-    -h, --help             Show list of command-line options
+    -h, --help               Print command line options
 `
 
-func identity(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
-	cli.Parse(args[1:])
+func identityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
 
-	if cli.NArg() == 0 {
-		cli.Usage()
-		os.Exit(1)
+	subCmds := commands{
+		"new": newIdentityCmd,
+		"of":  ofIdentityCmd,
+		"ls":  lsIdentityCmd,
+		"rm":  rmIdentityCmd,
 	}
 
-	switch args := cli.Args(); args[0] {
-	case "assign":
-		assignIdentity(args)
-	case "list":
-		listIdentity(args)
-	case "forget":
-		forgetIdentity(args)
-	default:
-		stdlog.Fatalf("Error: %q is not a kes identity command. See 'kes identity --help'", args[0])
+	if len(args) < 2 {
+		cmd.Usage()
+		os.Exit(2)
 	}
+	if cmd, ok := subCmds[args[1]]; ok {
+		cmd(args[1:])
+		return
+	}
+
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes identity --help'", err)
+	}
+	if cmd.NArg() > 0 {
+		cli.Fatalf("%q is not an identity command. See 'kes identity --help'", cmd.Arg(0))
+	}
+	cmd.Usage()
+	os.Exit(2)
 }
 
-const assignIdentityCmdUsage = `Usage:
-    kes identity assign [options] <identity> <policy>
+const newIdentityCmdUsage = `Usage:
+    kes identity new [options] <subject>
 
 Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
+    --key <PATH>             Path to private key. (default: ./private.key) 
+    --cert <PATH>            Path to certificate. (default: ./public.crt)
+    -f, --force              Overwrite an existing private key and/or certificate.
 
-Assigns policies to identities. An identity is the cryptographic hash of
-the public key that is part of the client TLS certificate. An identity
-can be computed using:
-    $ kes tool identity of <certificate>
+    --ip <IP>                Add <IP> as subject alternative name. (SAN)
+    --dns <DOMAIN>           Add <DOMAIN> as subject alternative name. (SAN)
+    --expiry <DURATION>      Duration until the certificate expires. (default: 720h)
+    --encrypt                Encrypt the private key with a password.
+
+    -h, --help               Print command line options.
 
 Examples:
-    $ MY_APP_IDENTITY=$(kes tool identity of my-app.crt)
-    $ kes identity assign "$MY_APP_IDENTITY" my-app-policy
+    $ kes identity new Client-1
+    $ kes identity new --ip "192.168.0.182" --ip "10.0.0.92" Client-1
+    $ kes identity new --key client1.key --cert client1.key --encrypt Client-1
 `
 
-func assignIdentity(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, assignIdentityCmdUsage) }
+func newIdentityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, newIdentityCmdUsage) }
 
-	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no identity specified")
+	var (
+		keyPath   string
+		certPath  string
+		forceFlag bool
+		IPs       []net.IP
+		domains   []string
+		expiry    time.Duration
+		encrypt   bool
+	)
+	cmd.StringVar(&keyPath, "key", "private.key", "Path to private key")
+	cmd.StringVar(&certPath, "cert", "public.crt", "Path to certificate")
+	cmd.BoolVarP(&forceFlag, "force", "f", false, "Overwrite an existing private key and/or certificate")
+	cmd.IPSliceVar(&IPs, "ip", []net.IP{}, "Add <IP> as subject alternative name")
+	cmd.StringSliceVar(&domains, "dns", []string{}, "Add <DOMAIN> as subject alternative name")
+	cmd.DurationVar(&expiry, "expiry", 720*time.Hour, "Duration until the certificate expires")
+	cmd.BoolVar(&encrypt, "encrypt", false, "Encrypt the private key with a password")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes identity new --help'", err)
 	}
-	if cli.NArg() == 1 {
-		stdlog.Fatal("Error: no policy specified")
+	if cmd.NArg() == 0 {
+		cli.Fatal("no certificate subject specified. See 'kes identity new --help'")
 	}
-	if cli.NArg() > 2 {
-		stdlog.Fatal("Error: too many arguments")
+	if cmd.NArg() > 1 {
+		cli.Fatal("too many arguments. See 'kes identity new --help'")
 	}
 
 	var (
-		client         = newClient(insecureSkipVerify)
-		identity       = kes.Identity(cli.Arg(0))
-		policy         = cli.Arg(1)
-		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		subject    = cmd.Arg(0)
+		publicKey  crypto.PublicKey
+		privateKey crypto.PrivateKey
 	)
-	defer cancelCtx()
-
-	if err := client.AssignPolicy(ctx, policy, identity); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
+	if fips.Enabled {
+		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			cli.Fatalf("failed to generate private key: %v", err)
 		}
-		stdlog.Fatalf("Error: failed to assign identity %q to policy %q: %v", identity, policy, err)
+		publicKey, privateKey = private.Public(), private
+	} else {
+		public, private, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			cli.Fatalf("failed to generate private key: %v", err)
+		}
+		publicKey, privateKey = public, private
+	}
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		cli.Fatalf("failed to create certificate serial number: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName: subject,
+		},
+		NotBefore: time.Now().UTC(),
+		NotAfter:  time.Now().UTC().Add(expiry),
+		KeyUsage:  x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
+		DNSNames:              domains,
+		IPAddresses:           IPs,
+		BasicConstraintsValid: true,
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, privateKey)
+	if err != nil {
+		cli.Fatalf("failed to create certificate: %v", err)
+	}
+	privBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		cli.Fatalf("failed to create private key: %v", err)
+	}
+
+	if !forceFlag {
+		if _, err = os.Stat(keyPath); err == nil {
+			cli.Fatal("private key already exists. Use --force to overwrite it")
+		}
+		if _, err = os.Stat(certPath); err == nil {
+			cli.Fatal("certificate already exists. Use --force to overwrite it")
+		}
+	}
+
+	var keyPem []byte
+	if encrypt {
+		fmt.Fprint(os.Stderr, "Enter password for private key:")
+		p, err := term.ReadPassword(int(os.Stderr.Fd()))
+		if err != nil {
+			cli.Fatal(err)
+		}
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprint(os.Stderr, "Confirm password for private key:")
+		confirm, err := term.ReadPassword(int(os.Stderr.Fd()))
+		if err != nil {
+			cli.Fatal(err)
+		}
+		fmt.Fprintln(os.Stderr)
+		if !bytes.Equal(p, confirm) {
+			cli.Fatal("passwords don't match")
+		}
+
+		block, err := x509.EncryptPEMBlock(rand.Reader, "PRIVATE KEY", privBytes, p, x509.PEMCipherAES256)
+		if err != nil {
+			cli.Fatalf("failed to encrypt private key: %v", err)
+		}
+		keyPem = pem.EncodeToMemory(block)
+	} else {
+		keyPem = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+	}
+	certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+
+	if err = os.WriteFile(keyPath, keyPem, 0o600); err != nil {
+		cli.Fatalf("failed to create private key: %v", err)
+	}
+	if err = os.WriteFile(certPath, certPem, 0o644); err != nil {
+		os.Remove(keyPath)
+		cli.Fatalf("failed to create certificate: %v", err)
+	}
+
+	if isTerm(os.Stdout) {
+		fmt.Printf("\n  Private key:  %s\n", keyPath)
+		fmt.Printf("  Certificate:  %s\n", certPath)
+
+		cert, err := x509.ParseCertificate(certBytes)
+		if err == nil {
+			identity := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+			fmt.Printf("  Identity:     %s\n", hex.EncodeToString(identity[:]))
+		}
 	}
 }
 
-const listIdentityCmdUsage = `Usage:
-    kes identity list [options] [<pattern>]
+const ofIdentityCmdUsage = `Usage:
+    kes identity of <certificate>...
 
 Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Lists all identities that match the optional glob <pattern>. If the pattern
-is omitted the pattern '*' is used by default. This pattern matches any identity,
-and therefore, lists all identities.
+    -h, --help               Print command line options.
 
 Examples:
-    $ kes identity list "3ecf*"
+    $ kes identity of client.crt
+    $ kes identity of client1.crt client2.crt
 `
 
-func listIdentity(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, listIdentityCmdUsage) }
+func ofIdentityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, ofIdentityCmdUsage) }
+
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes identity of --help'", err)
+	}
+	if cmd.NArg() == 0 {
+		cli.Fatal("no certificate specified. See 'kes identity of --help'")
+	}
+
+	identify := func(filename string) kes.Identity {
+		f, err := os.Open(filename)
+		if err != nil {
+			cli.Fatalf("failed to read certificate %q: %v", filename, err)
+		}
+		defer f.Close()
+
+		cert, err := parseCertificate(f)
+		if err != nil {
+			cli.Fatalf("failed to read certificate %q: %v", filename, err)
+		}
+		identity := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+		return kes.Identity(hex.EncodeToString(identity[:]))
+	}
+
+	switch {
+	case cmd.NArg() == 1:
+		if identity := identify(cmd.Arg(0)); isTerm(os.Stdout) {
+			fmt.Printf("\n  Identity:  %s\n", identity)
+		} else {
+			fmt.Print(identity)
+		}
+	case isTerm(os.Stdout):
+		for _, filename := range cmd.Args() {
+			fmt.Printf("%s: %s\n", filename, identify(filename))
+		}
+	default:
+		type Pair struct {
+			Name     string       `json:"name"`
+			Identity kes.Identity `json:"identity"`
+		}
+		encoder := json.NewEncoder(os.Stdout)
+		for _, filename := range cmd.Args() {
+			encoder.Encode(Pair{
+				Name:     filename,
+				Identity: identify(filename),
+			})
+		}
+	}
+}
+
+const lsIdentityCmdUsage = `Usage:
+    kes identity ls [options] [<pattern>]
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes identity ls
+    $ kes identity ls 'b804befd*'
+`
+
+func lsIdentityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, lsIdentityCmdUsage) }
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes identity ls --help'", err)
+	}
 
-	if cli.NArg() > 1 {
-		stdlog.Fatal("Error: too many arguments")
+	if cmd.NArg() > 1 {
+		cli.Fatal("too many arguments. See 'kes identity ls --help'")
 	}
 
 	pattern := "*"
-	if cli.NArg() == 1 {
-		pattern = cli.Arg(0)
+	if cmd.NArg() == 1 {
+		pattern = cmd.Arg(0)
 	}
+
+	client := newClient(insecureSkipVerify)
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	identities, err := newClient(insecureSkipVerify).ListIdentities(ctx, pattern)
+	identities, err := client.ListIdentities(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
+			os.Exit(1)
 		}
-		stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+		cli.Fatalf("failed to list identities: %v", err)
 	}
 	defer identities.Close()
 
 	if isTerm(os.Stdout) {
-		sortedIdentities := make([]kes.IdentityInfo, 0, 100)
+		sorted := make([]kes.IdentityInfo, 0, 100)
 		for identities.Next() {
-			sortedIdentities = append(sortedIdentities, identities.Value())
+			sorted = append(sorted, identities.Value())
 		}
 		if err = identities.Close(); err != nil {
-			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+			cli.Fatalf("failed to list identities: %v", err)
 		}
-		sort.Slice(sortedIdentities, func(i, j int) bool {
-			return strings.Compare(sortedIdentities[i].Identity.String(), sortedIdentities[j].Identity.String()) < 0
+		sort.Slice(sorted, func(i, j int) bool {
+			return strings.Compare(sorted[i].Identity.String(), sorted[j].Identity.String()) < 0
 		})
 
-		for _, id := range sortedIdentities {
+		for _, id := range sorted {
 			fmt.Printf("%s => %s\n", id.Identity, id.Policy)
 		}
 	} else {
@@ -170,54 +379,68 @@ func listIdentity(args []string) {
 			encoder.Encode(identities.Value())
 		}
 		if err = identities.Close(); err != nil {
-			stdlog.Fatalf("Error: failed to list identities matching %q: %v", pattern, err)
+			cli.Fatalf("failed to list identities: %v", err)
 		}
 	}
 }
 
-const forgetIdentityCmdUsage = `Usage:
-    kes identity forget <identity>
+const rmIdentityCmdUsage = `Usage:
+    kes identity rm <identity>...
 
 Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Forgets an identity by removing the association between an identity and a policy.
-An identity without a policy can not perform any action anymore. Therefore, forget
-disables access for the given <identity>.
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
 
 Examples:
-    $ MY_APP_IDENTITY=$(kes tool identity of my-app.crt)
-    $ kes identity forget "$MY_APP_IDENTITY"
+    $ kes identity rm 736bf58626441e3e134a2daf2e6a8441b40e1abc0eac510878168c8aac9f2b0b
 `
 
-func forgetIdentity(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, forgetIdentityCmdUsage) }
+func rmIdentityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmIdentityCmdUsage) }
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no identity specified")
-	}
-	if cli.NArg() > 2 {
-		stdlog.Fatal("Error: too many arguments")
-	}
-
-	var (
-		client         = newClient(insecureSkipVerify)
-		identity       = kes.Identity(cli.Arg(0))
-		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	)
-	defer cancelCtx()
-
-	if err := client.DeleteIdentity(ctx, identity); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
 		}
-		stdlog.Fatalf("Error: failed to forget identity %q: %v", identity, err)
+		cli.Fatalf("%v. See 'kes identity rm --help'", err)
 	}
+	if cmd.NArg() == 0 {
+		cli.Fatal("no identity specified. See 'kes identity rm --help'")
+	}
+
+	client := newClient(insecureSkipVerify)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	for _, identity := range cmd.Args() {
+		if err := client.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1)
+			}
+			cli.Fatalf("failed to remove identity %q: %v", identity, err)
+		}
+	}
+}
+
+func parseCertificate(r io.Reader) (*x509.Certificate, error) {
+	certPEMBlock, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		var certDERBlock *pem.Block
+		certDERBlock, certPEMBlock = pem.Decode(certPEMBlock)
+		if certDERBlock == nil {
+			break
+		}
+
+		if certDERBlock.Type == "CERTIFICATE" {
+			return x509.ParseCertificate(certDERBlock.Bytes)
+		}
+	}
+	return nil, errors.New("no (non-CA) certificate in any PEM block")
 }
