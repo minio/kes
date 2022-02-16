@@ -9,117 +9,317 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
-	stdlog "log"
 	"os"
 	"os/signal"
+
+	"github.com/minio/kes/internal/cli"
+	flag "github.com/spf13/pflag"
 )
 
 const keyCmdUsage = `Usage:
     kes key <command>
 
 Commands:
-    create                  Create a new secret key at a KES server.
-    delete                  Delete a secret key from a KES server.
-	list                    List secret key names at a KES server.
-    derive                  Derive a new key from a secret key.
-    decrypt                 Decrypt a ciphertext with secret key.
+    create                   Create a new crypto key.
+    import                   Import a crypto key.
+    ls                       List crypto keys.
+    rm                       Delete a crypto key.
+
+    encrypt                  Encrypt a message.
+    decrypt                  Decrypt an encrypted message.
+    dek                      Generate a new data encryption key.
 
 Options:
-   -h, --help               Show this list of command line options.
+    -h, --help               Print command line options.
 `
 
 func keyCmd(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprintf(os.Stderr, keyCmdUsage) }
-	cli.Parse(args[1:])
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, keyCmdUsage) }
 
-	if cli.NArg() == 0 {
-		cli.Usage()
+	subCmds := commands{
+		"create": createKeyCmd,
+		"import": importKeyCmd,
+		"ls":     lsKeyCmd,
+		"rm":     rmKeyCmd,
+
+		"encrypt": encryptKeyCmd,
+		"decrypt": decryptKeyCmd,
+		"dek":     dekCmd,
+	}
+
+	if len(args) < 2 {
+		cmd.Usage()
 		os.Exit(2)
 	}
-
-	switch args = cli.Args(); args[0] {
-	case "create":
-		createKey(args)
-	case "list":
-		listKeys(args)
-	case "delete":
-		deleteKey(args)
-	case "derive":
-		deriveKey(args)
-	case "decrypt":
-		decryptKey(args)
-	default:
-		stdlog.Fatalf("Error: %q is not a kes key command. See 'kes key --help'", args[0])
+	if cmd, ok := subCmds[args[1]]; ok {
+		cmd(args[1:])
+		return
 	}
+
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key --help'", err)
+	}
+	if cmd.NArg() > 0 {
+		cli.Fatalf("%q is not a key command. See 'kes key --help'", cmd.Arg(0))
+	}
+	cmd.Usage()
+	os.Exit(2)
 }
 
 const createKeyCmdUsage = `Usage:
-    kes key create [options] <name> [<key>]
+    kes key create [options] <name>...
 
 Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Creates a new key with the given <name> at the KES server. The optional key
-must be a base64-encoded value. If no key is specified the KES server will
-generate a new one at random.
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
 
 Examples:
     $ kes key create my-key
-    $ kes key create my-key-2 Xlnr/nOgAWE5cA7GAsl3L2goCvmfs6KE0gNgB1T93wE=
+    $ kes key create my-key1 my-key2
 `
 
-func createKey(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stdout, createKeyCmdUsage) }
+func createKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, createKeyCmdUsage) }
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no key name specified")
-	}
-	if cli.NArg() > 2 {
-		stdlog.Fatal("Error: too many arguments")
-	}
-
-	var (
-		name  = cli.Arg(0)
-		bytes []byte
-	)
-	if cli.NArg() == 2 {
-		b, err := base64.StdEncoding.DecodeString(cli.Arg(1))
-		if err != nil {
-			stdlog.Fatalf("Error: invalid key: %v", err)
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
 		}
-		bytes = b
+		cli.Fatalf("%v. See 'kes key create --help'", err)
 	}
 
-	var (
-		client         = newClient(insecureSkipVerify)
-		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	)
-	defer cancelCtx()
+	if cmd.NArg() == 0 {
+		cli.Fatal("no key name specified. See 'kes key create --help'")
+	}
 
-	if len(bytes) > 0 {
-		if err := client.ImportKey(ctx, name, bytes); err != nil {
-			if errors.Is(err, context.Canceled) {
-				os.Exit(1) // When the operation is canceled, don't print an error message
-			}
-			stdlog.Fatalf("Error: failed to import key %q: %v", name, err)
-		}
-	} else {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	client := newClient(insecureSkipVerify)
+	for _, name := range cmd.Args() {
 		if err := client.CreateKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
-				os.Exit(1) // When the operation is canceled, don't print an error message
+				os.Exit(1)
 			}
-			stdlog.Fatalf("Failed to create key %q: %v", name, err)
+			cli.Fatalf("failed to create key %q: %v", name, err)
 		}
+	}
+}
+
+const importKeyCmdUsage = `Usage:
+    kes key import [options] <name> [<key>]
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes key import my-key-2 Xlnr/nOgAWE5cA7GAsl3L2goCvmfs6KE0gNgB1T93wE=
+`
+
+func importKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, importKeyCmdUsage) }
+
+	var insecureSkipVerify bool
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key import --help'", err)
+	}
+
+	switch {
+	case cmd.NArg() == 0:
+		cli.Fatal("no key name specified. See 'kes key import --help'")
+	case cmd.NArg() == 1:
+		cli.Fatal("no crypto key specified. See 'kes key import --help'")
+	case cmd.NArg() > 2:
+		cli.Fatal("too many arguments. See 'kes key import --help'")
+	}
+	name := cmd.Arg(0)
+	key, err := base64.StdEncoding.DecodeString(cmd.Arg(1))
+	if err != nil {
+		cli.Fatalf("invalid key: %v. See 'kes key import --help'", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	client := newClient(insecureSkipVerify)
+	if err = client.ImportKey(ctx, name, key); err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatalf("failed to import %q: %v", name, err)
+	}
+}
+
+const lsKeyCmdUsage = `Usage:
+    kes key ls [options] [<pattern>]
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes key ls
+    $ kes key ls 'my-key*'
+`
+
+func lsKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, lsKeyCmdUsage) }
+
+	var insecureSkipVerify bool
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key ls --help'", err)
+	}
+
+	if cmd.NArg() > 1 {
+		cli.Fatal("too many arguments. See 'kes key ls --help'")
+	}
+
+	pattern := "*"
+	if cmd.NArg() == 1 {
+		pattern = cmd.Arg(0)
+	}
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	client := newClient(insecureSkipVerify)
+	iterator, err := client.ListKeys(ctx, pattern)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatalf("failed to list keys: %v", err)
+	}
+	defer iterator.Close()
+
+	if isTerm(os.Stdout) {
+		for iterator.Next() {
+			fmt.Println(iterator.Value().Name)
+		}
+	} else {
+		encoder := json.NewEncoder(os.Stdout)
+		for iterator.Next() {
+			encoder.Encode(iterator.Value())
+		}
+	}
+	if err = iterator.Close(); err != nil {
+		cli.Fatal(err)
+	}
+}
+
+const rmKeyCmdUsage = `Usage:
+    kes key rm [options] <name>...
+
+Options:
+    -k, --insecure         Skip X.509 certificate validation during TLS handshake.
+    -h, --help             Show list of command-line options.
+
+Examples:
+    $ kes key rm my-key
+    $ kes key rm my-key1 my-key2
+`
+
+func rmKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmKeyCmdUsage) }
+
+	var insecureSkipVerify bool
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key rm --help'", err)
+	}
+	if cmd.NArg() == 0 {
+		cli.Fatal("no key name specified. See 'kes key rm --help'")
+	}
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	client := newClient(insecureSkipVerify)
+	for _, name := range cmd.Args() {
+		if err := client.DeleteKey(ctx, name); err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1)
+			}
+			cli.Fatalf("failed to remove key %q: %v", name, err)
+		}
+	}
+}
+
+const encryptKeyCmdUsage = `Usage:
+    kes key encrypt [options] <name> <message>
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes key encrypt my-key "Hello World"
+`
+
+func encryptKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprintf(os.Stderr, encryptKeyCmdUsage) }
+
+	var insecureSkipVerify bool
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key encrypt --help'", err)
+	}
+
+	switch {
+	case cmd.NArg() == 0:
+		cli.Fatal("no key name specified. See 'kes key encrypt --help'")
+	case cmd.NArg() == 1:
+		cli.Fatal("no message specified. See 'kes key encrypt --help'")
+	case cmd.NArg() > 2:
+		cli.Fatal("too many arguments. See 'kes key encrypt --help'")
+	}
+
+	name := cmd.Arg(0)
+	message := cmd.Arg(1)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	client := newClient(insecureSkipVerify)
+	ciphertext, err := client.Encrypt(ctx, name, []byte(message), nil)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatalf("failed to encrypt message: %v", err)
+	}
+
+	if isTerm(os.Stdout) {
+		fmt.Printf("\n  ciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
+	} else {
+		fmt.Printf(`{"ciphertext":"%s"}`, base64.StdEncoding.EncodeToString(ciphertext))
 	}
 }
 
@@ -127,65 +327,62 @@ const decryptKeyCmdUsage = `Usage:
     kes key decrypt [options] <name> <ciphertext> [<context>]
 
 Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Decrypts the <ciphertext> with the key referenced by <name> using an
-optional <context> value that has been associated with the ciphertext.
-
-The <ciphertext> as well as the <context> must be base64-encoded values.
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
 
 Examples:
-    $ CIPHERTEXT=$(kes key derive my-key | jq -r .ciphertext)
+    $ CIPHERTEXT=$(kes key dek my-key | jq -r .ciphertext)
     $ kes key decrypt my-key "$CIPHERTEXT"
 `
 
-func decryptKey(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(cli.Output(), decryptKeyCmdUsage) }
+func decryptKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprintf(os.Stderr, decryptKeyCmdUsage) }
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no key name specified")
-	}
-	if cli.NArg() == 1 {
-		stdlog.Fatal("Error: no ciphertext specified")
-	}
-	if cli.NArg() > 3 {
-		stdlog.Fatal("Error: too many arguments")
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key decrypt --help'", err)
 	}
 
-	var (
-		name       = cli.Arg(0)
-		ciphertext []byte
-		cryptoCtx  []byte
-		err        error
-	)
-	ciphertext, err = base64.StdEncoding.DecodeString(cli.Arg(1))
+	switch {
+	case cmd.NArg() == 0:
+		cli.Fatal("no key name specified. See 'kes key decrypt --help'")
+	case cmd.NArg() == 1:
+		cli.Fatal("no ciphertext specified. See 'kes key decrypt --help'")
+	case cmd.NArg() > 3:
+		cli.Fatal("too many arguments. See 'kes key decrypt --help'")
+	}
+
+	name := cmd.Arg(0)
+	ciphertext, err := base64.StdEncoding.DecodeString(cmd.Arg(1))
 	if err != nil {
-		stdlog.Fatalf("Error: invalid ciphertext: %v", err)
+		cli.Fatalf("invalid ciphertext: %v. See 'kes key decrypt --help'", err)
 	}
-	if cli.NArg() == 3 {
-		cryptoCtx, err = base64.StdEncoding.DecodeString(cli.Arg(2))
+
+	var associatedData []byte
+	if cmd.NArg() == 3 {
+		associatedData, err = base64.StdEncoding.DecodeString(cmd.Arg(2))
 		if err != nil {
-			stdlog.Fatalf("Error: invalid context: %v", err)
+			cli.Fatalf("invalid context: %v. See 'kes key decrypt --help'", err)
 		}
 	}
 
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
 
-	plaintext, err := newClient(insecureSkipVerify).Decrypt(ctx, name, ciphertext, cryptoCtx)
+	client := newClient(insecureSkipVerify)
+	plaintext, err := client.Decrypt(ctx, name, ciphertext, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
+			os.Exit(1)
 		}
-		stdlog.Fatalf("Error: failed to decrypt ciphertext: %v", err)
+		cli.Fatalf("failed to decrypt ciphertext: %v", err)
 	}
+
 	if isTerm(os.Stdout) {
 		fmt.Printf("\n  plaintext: %s\n", base64.StdEncoding.EncodeToString(plaintext))
 	} else {
@@ -193,180 +390,68 @@ func decryptKey(args []string) {
 	}
 }
 
-const deriveKeyCmdUsage = `Usage:
-    kes key derive <name> [<context>]
+const dekCmdUsage = `Usage:
+    kes key dek <name> [<context>]
 
 Options:
-   -k, --insecure         Skip X.509 certificate validation during TLS handshake
-   -h, --help             Show list of command-line options
-
-Derives a new cryptographic key from the master key <name> and returns the
-plaintext as well the ciphertext of the key. The ciphertext can be decrypted
-using:
-    $ kes key decrypt <name> <ciphertext>
-
-An optional context value can be associated with the returned ciphertext.
-The <context> must be base64-encoded.
+    -k, --insecure           Skip TLS certificate validation.
+    -h, --help               Print command line options.
 
 Examples:
-    $ kes key derive my-key
+    $ kes key dek my-key
 `
 
-func deriveKey(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, deriveKeyCmdUsage) }
+func dekCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, dekCmdUsage) }
 
 	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no key name specified")
-	}
-	if cli.NArg() > 2 {
-		stdlog.Fatal("Error: too many arguments")
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key dek --help'", err)
 	}
 
-	var (
-		name      = cli.Arg(0)
-		cryptoCtx []byte
-	)
-	if cli.NArg() == 2 {
-		b, err := base64.StdEncoding.DecodeString(cli.Arg(1))
+	switch {
+	case cmd.NArg() == 0:
+		cli.Fatal("no key name specified. See 'kes key dek --help'")
+	case cmd.NArg() > 2:
+		cli.Fatal("too many arguments. See 'kes key dek --help'")
+	}
+
+	var associatedData []byte
+	name := cmd.Arg(0)
+	if cmd.NArg() == 2 {
+		b, err := base64.StdEncoding.DecodeString(cmd.Arg(1))
 		if err != nil {
-			stdlog.Fatalf("Error: invalid context: %v", err)
+			cli.Fatalf("invalid context: %v. See 'kes key dek --help'", err)
 		}
-		cryptoCtx = b
+		associatedData = b
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	key, err := newClient(insecureSkipVerify).GenerateKey(ctx, name, cryptoCtx)
+	client := newClient(insecureSkipVerify)
+	key, err := client.GenerateKey(ctx, name, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
+			os.Exit(1)
 		}
-		stdlog.Fatalf("Error: failed to derive key: %v", err)
+		cli.Fatalf("failed to derive key: %v", err)
 	}
 
+	var (
+		plaintext  = base64.StdEncoding.EncodeToString(key.Plaintext)
+		ciphertext = base64.StdEncoding.EncodeToString(key.Ciphertext)
+	)
 	if isTerm(os.Stdout) {
-		fmt.Println("{")
-		fmt.Printf("  plaintext : %s\n", base64.StdEncoding.EncodeToString(key.Plaintext))
-		fmt.Printf("  ciphertext: %s\n", base64.StdEncoding.EncodeToString(key.Ciphertext))
-		fmt.Println("}")
+		const format = "{\n  plaintext : %s\n  ciphertext: %s\n}\n"
+		fmt.Printf(format, plaintext, ciphertext)
 	} else {
-		const format = `{"plaintext":"%s","ciphertext":"%s"}`
-		fmt.Printf(format, base64.StdEncoding.EncodeToString(key.Plaintext), base64.StdEncoding.EncodeToString(key.Ciphertext))
-	}
-}
-
-const listKeyCmdUsage = `Usage:
-    kes key list [options] [<pattern>]
-
-Options:
-    --json                 Print key names as JSON
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Lists the description for all keys that match the optional <pattern>. If no
-pattern is provided the default pattern ('*') is used - which matches any
-key name, and therefore, lists all keys.
-
-Examples:
-    $ kes key list my-key*
-`
-
-func listKeys(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, listKeyCmdUsage) }
-
-	var (
-		insecureSkipVerify bool
-		jsonFlag           bool
-	)
-	cli.BoolVar(&jsonFlag, "json", false, "Print key names as JSON")
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() > 1 {
-		stdlog.Fatal("Error: too many arguments")
-	}
-
-	pattern := "*"
-	if cli.NArg() == 1 {
-		pattern = cli.Arg(0)
-	}
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
-	iterator, err := newClient(insecureSkipVerify).ListKeys(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
-		}
-		stdlog.Fatalf("Error: failed to list keys matching %q: %v", pattern, err)
-	}
-	defer iterator.Close()
-
-	if !isTerm(os.Stdout) || jsonFlag {
-		encoder := json.NewEncoder(os.Stdout)
-		for iterator.Next() {
-			encoder.Encode(iterator.Value())
-		}
-	} else {
-		for iterator.Next() {
-			fmt.Println(iterator.Value().Name)
-		}
-	}
-	if err = iterator.Close(); err != nil {
-		stdlog.Fatalf("Error: %v", err)
-	}
-}
-
-const deleteCmdUsage = `Usage:
-    kes key delete [options] <name>
-
-Options:
-    -k, --insecure         Skip X.509 certificate validation during TLS handshake
-    -h, --help             Show list of command-line options
-
-Deletes the key referenced by <name>. Any ciphertext produced by this key cannot
-be decrypted anymore.
-
-Examples:
-    $ kes key delete my-key
-`
-
-func deleteKey(args []string) {
-	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
-	cli.Usage = func() { fmt.Fprint(os.Stderr, deleteCmdUsage) }
-
-	var insecureSkipVerify bool
-	cli.BoolVar(&insecureSkipVerify, "k", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.BoolVar(&insecureSkipVerify, "insecure", false, "Skip X.509 certificate validation during TLS handshake")
-	cli.Parse(args[1:])
-
-	if cli.NArg() == 0 {
-		stdlog.Fatal("Error: no key name specified")
-	}
-	if cli.NArg() > 1 {
-		stdlog.Fatal("Error: too many arguments")
-	}
-
-	var (
-		name           = cli.Arg(0)
-		ctx, cancelCtx = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	)
-	defer cancelCtx()
-
-	if err := newClient(insecureSkipVerify).DeleteKey(ctx, name); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1) // When the operation is canceled, don't print an error message
-		}
-		stdlog.Fatalf("Error: failed to delete key %q: %v", name, err)
+		const format = `{"plaintext":"%x","ciphertext":"%x"}`
+		fmt.Printf(format, plaintext, ciphertext)
 	}
 }
