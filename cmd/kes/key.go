@@ -310,6 +310,7 @@ func listKeys(args []string) {
 		}
 		stdlog.Fatalf("Error: failed to list keys matching %q: %v", pattern, err)
 	}
+	defer iterator.Close()
 
 	if !isTerm(os.Stdout) || jsonFlag {
 		encoder := json.NewEncoder(os.Stdout)
@@ -320,10 +321,6 @@ func listKeys(args []string) {
 		for iterator.Next() {
 			fmt.Println(iterator.Value().Name)
 		}
-	}
-	if err = iterator.Err(); err != nil {
-		iterator.Close()
-		stdlog.Fatalf("Error: %v", err)
 	}
 	if err = iterator.Close(); err != nil {
 		stdlog.Fatalf("Error: %v", err)

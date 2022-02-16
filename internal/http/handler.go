@@ -465,7 +465,11 @@ func handleDecryptKey(config *ServerConfig) http.HandlerFunc {
 // no such trailer.
 func handleListKeys(config *ServerConfig) http.HandlerFunc {
 	type Response struct {
-		Name string
+		Name      string       `json:"name"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+
+		Err string `json:"error,omitempty"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		enclave, err := getEnclave(config.Vault, r)
@@ -478,7 +482,6 @@ func handleListKeys(config *ServerConfig) http.HandlerFunc {
 			Error(w, err)
 			return
 		}
-		w.Header().Set("Trailer", "Status,Error")
 
 		var (
 			pattern    = pathBase(r.URL.Path)
@@ -487,44 +490,27 @@ func handleListKeys(config *ServerConfig) http.HandlerFunc {
 		)
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		for iterator.Next() {
-			name := iterator.Name()
-			if ok, err := path.Match(pattern, name); ok && err == nil {
-				hasWritten = true
-				err = encoder.Encode(Response{
-					Name: name,
-				})
-
-				// Once we encounter ErrHandlerTimeout the client connection
-				// has time'd out and we can stop sending responses.
-				if err == http.ErrHandlerTimeout {
-					break
-				}
-
-				// If there is another error we be conservative and try to
-				// inform the client that something went wrong. However,
-				// if we fail to write to the underlying connection there is
-				// not really something we can do except stop iterating and
-				// not waste server resources.
-				if err != nil {
-					ErrorTrailer(w, err)
-					return
-				}
+			if ok, _ := path.Match(pattern, iterator.Name()); !ok {
+				continue
+			}
+			err = encoder.Encode(Response{
+				Name: iterator.Name(),
+			})
+			if err != nil {
+				return
 			}
 		}
-		if err := iterator.Err(); err != nil {
-			if !hasWritten {
-				Error(w, err)
+		if err = iterator.Err(); err != nil {
+			if hasWritten {
+				encoder.Encode(Response{Err: err.Error()})
 			} else {
-				ErrorTrailer(w, err)
+				Error(w, err)
 			}
 			return
 		}
-
 		if !hasWritten {
 			w.WriteHeader(http.StatusOK)
 		}
-		w.Header().Set("Status", strconv.Itoa(http.StatusOK))
-		w.Header().Set("Error", "")
 	}
 }
 
