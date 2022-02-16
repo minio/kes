@@ -6,8 +6,9 @@ package kes
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
-	"net/http"
+	"time"
 )
 
 // IdentityUnknown is the identity returned
@@ -30,84 +31,95 @@ func (id Identity) IsUnknown() bool { return id == IdentityUnknown }
 // the identity.
 func (id Identity) String() string { return string(id) }
 
-// IdentityIterator iterates over list of IdentityDescription objects.
-//   for iterator.Next() {
-//       _ = iterator.Value() // Use the IdentityDescription
-//   }
-//   if err := iterator.Err(); err != nil {
-//   }
-//   if err := iterator.Close(); err != nil {
-//   }
-//
-// Once done with iterating over the list of IdentityDescription
-// objects, an iterator should be closed using the Close
-// method.
-//
-// In general, an IdentityIterator does not provide any guarantees
-// about ordering or the when its underlying source is modified
-// concurrently.
-// Particularly, if an identity is created or deleted at the KES server
-// the IdentityIterator may or may not be affected by this change.
+// IdentityInfo describes a KES identity.
+type IdentityInfo struct {
+	Identity  Identity  `json:"identity"`
+	Policy    string    `json:"policy"`     // Name of the associated policy
+	CreatedAt time.Time `json:"created_at"` // Point in time when the identity was created
+	CreatedBy Identity  `json:"created_by"` // Identity that created the identity
+}
+
+// IdentityIterator iterates over a stream of IdentityInfo objects.
+// Close the IdentityIterator to release associated resources.
 type IdentityIterator struct {
-	response *http.Response
-	decoder  *json.Decoder
+	decoder *json.Decoder
+	closer  io.Closer
 
-	last     IdentityDescription
-	nextErr  error // error encountered in Next()
-	closeErr error // error encountered in Close()
-	closed   bool
+	current IdentityInfo
+	err     error
+	closed  bool
 }
 
-// IdentityDescription describes an identity at a KES server.
-type IdentityDescription struct {
-	Identity Identity `json:"identity"`
-	Policy   string   `json:"policy"`
-}
+// Value returns the current IdentityInfo. It remains valid
+// until Next is called again.
+func (i *IdentityIterator) Value() IdentityInfo { return i.current }
 
-// Next returns true if there is another IdentityDescription.
-// This IdentityDescription can be retrieved via the Value method.
-//
-// It returns false once there are no more IdentityDescriptions
-// or if the IdentityIterator encountered an error. The error,
-// if any, can beretrieved via the Err method.
+// Identity returns the current identity. It is a short-hand
+// for Value().Identity.
+func (i *IdentityIterator) Identity() Identity { return i.current.Identity }
+
+// Policy returns the policy assigned to the current identity.
+// It is a short-hand for Value().Policy.
+func (i *IdentityIterator) Policy() string { return i.current.Policy }
+
+// CreatedAt returns the created-at timestamp of the current
+// identity. It is a short-hand for Value().CreatedAt.
+func (i *IdentityIterator) CreatedAt() time.Time { return i.current.CreatedAt }
+
+// CreatedBy returns the identiy that created the current identity.
+// It is a short-hand for Value().CreatedBy.
+func (i *IdentityIterator) CreatedBy() Identity { return i.current.CreatedBy }
+
+// Next returns true if there is another IdentityInfo.
+// It returns false if there are no more IdentityInfo
+// objects or when the IdentityIterator encounters an
+// error.
 func (i *IdentityIterator) Next() bool {
-	if i.closed || i.nextErr != nil {
+	type Response struct {
+		Identity  Identity  `json:"identity"`
+		Policy    string    `json:"policy"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+
+		Err string `json:"error"`
+	}
+
+	if i.closed || i.err != nil {
 		return false
 	}
-	if err := i.decoder.Decode(&i.last); err != nil {
-		if err == io.EOF {
-			i.nextErr = i.Close()
+	var resp Response
+	if err := i.decoder.Decode(&resp); err != nil {
+		if errors.Is(err, io.EOF) {
+			i.err = i.Close()
 		} else {
-			i.nextErr = err
+			i.err = err
 		}
 		return false
+	}
+	if resp.Err != "" {
+		i.err = errors.New(resp.Err)
+		return false
+	}
+
+	i.current = IdentityInfo{
+		Identity:  resp.Identity,
+		Policy:    resp.Policy,
+		CreatedAt: resp.CreatedAt,
+		CreatedBy: resp.CreatedBy,
 	}
 	return true
 }
 
-// Value returns the current IdentityDescription. It returns
-// the same IdentityDescription until Next is called again.
-//
-// If the IdentityIterator has been closed or if Next has not
-// been called once resp. Next returns false then the behavior
-// of Value is undefined.
-func (i *IdentityIterator) Value() IdentityDescription { return i.last }
-
-// Err returns the first error encountered by the IdentityIterator,
-// if any.
-func (i *IdentityIterator) Err() error { return i.nextErr }
-
-// Close closes the underlying connection to the KES server and
-// returns any encountered error.
+// Close closes the IdentityIterator and releases
+// any associated resources
 func (i *IdentityIterator) Close() error {
 	if !i.closed {
+		err := i.closer.Close()
+		if i.err == nil {
+			i.err = err
+		}
 		i.closed = true
-		if err := i.response.Body.Close(); err != nil {
-			i.closeErr = err
-		}
-		if err := parseErrorTrailer(i.response.Trailer); err != nil && i.closeErr == nil {
-			i.closeErr = err
-		}
+		return err
 	}
-	return i.closeErr
+	return i.err
 }
