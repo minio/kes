@@ -477,9 +477,12 @@ func TestAssignIdentity(t *testing.T) {
 	}
 }
 
-func TestForgetIdentity(t *testing.T) {
+func TestDeleteIdentity(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
+	}
+	if *Endpoint == "https://play.min.io:7373" {
+		t.SkipNow() // TODO: enable CI/CD check once it supports the new /v1/identity/delete API.
 	}
 
 	client, err := newClient()
@@ -497,7 +500,7 @@ func TestForgetIdentity(t *testing.T) {
 	if err := client.AssignIdentity(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
-	if err := client.ForgetIdentity(context.Background(), identity); err != nil {
+	if err := client.DeleteIdentity(context.Background(), identity); err != nil {
 		t.Fatalf("Failed to forget identity '%s': %v", identity, err)
 	}
 }

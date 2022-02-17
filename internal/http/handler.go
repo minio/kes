@@ -754,7 +754,7 @@ func handleListIdentities(config *ServerConfig) http.HandlerFunc {
 	}
 }
 
-func handleForgetIdentity(config *ServerConfig) http.HandlerFunc {
+func handleDeleteIdentity(config *ServerConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		enclave, err := getEnclave(config.Vault, r)
 		if err != nil {
