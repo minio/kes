@@ -11,8 +11,6 @@ import (
 	"log"
 	"strings"
 	"sync"
-
-	"github.com/minio/kes"
 )
 
 // Target groups a set of logging targets.
@@ -115,12 +113,15 @@ func (w *ErrEncoder) Write(p []byte) (int, error) {
 // writes its JSON representation to the underlying
 // io.Writer.
 func (w *ErrEncoder) WriteString(s string) (int, error) {
+	type Response struct {
+		Message string `json:"message"`
+	}
 	// A log.Logger will add a newline character to each
 	// log message. This newline has to be removed since
 	// it's not part of the actual error message.
 	s = strings.TrimSuffix(s, "\n")
 
-	err := w.encoder.Encode(kes.ErrorEvent{
+	err := w.encoder.Encode(Response{
 		Message: s,
 	})
 	if err != nil {

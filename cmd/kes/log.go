@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -77,14 +76,16 @@ func logCmd(args []string) {
 		stream, err := client.AuditLog(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				os.Exit(1) // When the operation is canceled, don't print an error message
+				os.Exit(1)
 			}
 			cli.Fatalf("failed to connect to error log: %v", err)
 		}
 		defer stream.Close()
 
 		if jsonFlag {
-			printAuditJSON(ctx, stream)
+			if _, err = stream.WriteTo(os.Stdout); err != nil {
+				cli.Fatal(err)
+			}
 		} else {
 			printAuditLog(ctx, stream)
 		}
@@ -92,14 +93,16 @@ func logCmd(args []string) {
 		stream, err := client.ErrorLog(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				os.Exit(1) // When the operation is canceled, don't print an error message
+				os.Exit(1)
 			}
 			cli.Fatalf("failed to connect to error log: %v", err)
 		}
 		defer stream.Close()
 
 		if jsonFlag {
-			printErrorJSON(ctx, stream)
+			if _, err = stream.WriteTo(os.Stdout); err != nil {
+				cli.Fatal(err)
+			}
 		} else {
 			printErrorLog(ctx, stream)
 		}
@@ -109,25 +112,13 @@ func logCmd(args []string) {
 	}
 }
 
-func printAuditJSON(ctx context.Context, stream *kes.AuditStream) {
-	for stream.Next() {
-		fmt.Println(string(stream.Bytes()))
-	}
-	if err := stream.Err(); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatal(err)
-	}
-}
-
 func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
 	var (
-		red      = tui.NewStyle().Foreground(tui.Color("#800000")).Width(5)
-		green    = tui.NewStyle().Foreground(tui.Color("#008000")).Width(5)
-		orange20 = tui.NewStyle().Foreground(tui.Color("#ff8300")).MaxWidth(20)
-		blue     = tui.NewStyle().Foreground(tui.Color("#2e8bc0")).Width(30)
-		ipStyle  = tui.NewStyle().Width(15).MaxWidth(15)
+		statStyleFail    = tui.NewStyle().Foreground(tui.Color("#ff0000")).Width(5)
+		statStyleSuccess = tui.NewStyle().Foreground(tui.Color("#00ff00")).Width(5)
+		identityStyle    = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#D1BD2E", Dark: "#C6A18C"}).MaxWidth(20)
+		apiStyle         = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Width(30)
+		ipStyle          = tui.NewStyle().Width(15).MaxWidth(15)
 	)
 	const (
 		header = "Time        Status    Identity                IP                 API                               Latency"
@@ -135,28 +126,24 @@ func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
 	)
 
 	if isTerm(os.Stdout) {
-		fmt.Println(tui.NewStyle().Bold(true).Render(header))
+		fmt.Println(tui.NewStyle().Bold(true).Underline(true).Render(header))
 	} else {
 		fmt.Println(header)
 	}
 	for stream.Next() {
 		event := stream.Event()
-		if len(event.Request.IP) == 0 {
-			event.Request.IP = net.IPv4(0, 0, 0, 0)
-		}
 		var (
-			hour, min, sec = event.Time.Clock()
-			status         = strconv.Itoa(event.Response.StatusCode)
-			ip             = ipStyle.Render(event.Request.IP.String())
-			identity       = orange20.Render(event.Request.Identity)
-			apiPath        = blue.Render(event.Request.Path)
-			latency        = event.Response.Time
+			hour, min, sec = event.Timestamp.Clock()
+			status         = strconv.Itoa(event.StatusCode)
+			identity       = identityStyle.Render(event.ClientIdentity.String())
+			apiPath        = apiStyle.Render(event.APIPath)
+			latency        = event.ResponseTime
 		)
 
-		if event.Response.StatusCode == http.StatusOK {
-			status = green.Render(status)
+		if event.StatusCode == http.StatusOK {
+			status = statStyleSuccess.Render(status)
 		} else {
-			status = red.Render(status)
+			status = statStyleFail.Render(status)
 		}
 
 		switch {
@@ -169,21 +156,18 @@ func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
 		case latency >= 10*time.Microsecond:
 			latency = latency.Round(time.Microsecond)
 		}
-		fmt.Printf(format, hour, min, sec, status, identity, ip, apiPath, latency)
-	}
-	if err := stream.Err(); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatal(err)
-	}
-}
 
-func printErrorJSON(ctx context.Context, stream *kes.ErrorStream) {
-	for stream.Next() {
-		fmt.Println(string(stream.Bytes()))
+		var ipAddr string
+		if len(event.ClientIP) == 0 {
+			ipAddr = "<unknown>"
+		} else {
+			ipAddr = event.ClientIP.String()
+		}
+		ipAddr = ipStyle.Render(ipAddr)
+
+		fmt.Printf(format, hour, min, sec, status, identity, ipAddr, apiPath, latency)
 	}
-	if err := stream.Err(); err != nil {
+	if err := stream.Close(); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
@@ -193,9 +177,9 @@ func printErrorJSON(ctx context.Context, stream *kes.ErrorStream) {
 
 func printErrorLog(ctx context.Context, stream *kes.ErrorStream) {
 	for stream.Next() {
-		fmt.Printf(stream.Event().Message)
+		fmt.Println(stream.Event().Message)
 	}
-	if err := stream.Err(); err != nil {
+	if err := stream.Close(); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}

@@ -361,7 +361,7 @@ func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityI
 // audit log.
 func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/audit/trace", nil)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/audit", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,7 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 // error log.
 func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/error/trace", nil)
+	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/error", nil)
 	if err != nil {
 		return nil, err
 	}
