@@ -327,17 +327,17 @@ func (c *Client) AssignIdentity(ctx context.Context, policy string, identity Ide
 	return enclave.AssignIdentity(ctx, policy, identity)
 }
 
-// ForgetIdentity removes the identity such that no policy
-// applies to the given identity. Once removed, any operation
-// issued by this identity will fail with ErrNotAllowed.
+// DeleteIdentity removes the identity. Once removed, any
+// operation issued by this identity will fail with
+// ErrNotAllowed.
 //
 // The KES admin identity cannot be removed.
-func (c *Client) ForgetIdentity(ctx context.Context, identity Identity) error {
+func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
 		client:    retry(c.HTTPClient),
 	}
-	return enclave.ForgetIdentity(ctx, identity)
+	return enclave.DeleteIdentity(ctx, identity)
 }
 
 // ListIdentities lists all identites that match the given pattern.

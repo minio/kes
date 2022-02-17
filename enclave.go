@@ -400,14 +400,14 @@ func (e *Enclave) AssignIdentity(ctx context.Context, policy string, identity Id
 	return nil
 }
 
-// ForgetIdentity removes the identity such that no policy
-// applies to the given identity. Once removed, any operation
-// issued by this identity will fail with ErrNotAllowed.
+// DeleteIdentity removes the identity. Once removed, any
+// operation issued by this identity will fail with
+// ErrNotAllowed.
 //
 // The KES admin identity cannot be removed.
-func (e *Enclave) ForgetIdentity(ctx context.Context, identity Identity) error {
+func (e *Enclave) DeleteIdentity(ctx context.Context, identity Identity) error {
 	const (
-		APIPath  = "/v1/identity/forget"
+		APIPath  = "/v1/identity/delete"
 		Method   = http.MethodDelete
 		StatusOK = http.StatusOK
 	)

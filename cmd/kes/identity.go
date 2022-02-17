@@ -219,7 +219,7 @@ func forgetIdentity(args []string) {
 	)
 	defer cancelCtx()
 
-	if err := client.ForgetIdentity(ctx, identity); err != nil {
+	if err := client.DeleteIdentity(ctx, identity); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1) // When the operation is canceled, don't print an error message
 		}
