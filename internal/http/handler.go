@@ -108,9 +108,9 @@ func audit(logger *log.Logger, f http.HandlerFunc) http.HandlerFunc {
 			ResponseWriter: w,
 			Logger:         logger,
 
-			URL:      *r.URL,
-			Identity: auth.Identify(r),
-			Time:     time.Now(),
+			URL:       *r.URL,
+			Identity:  auth.Identify(r),
+			CreatedAt: time.Now(),
 		}
 		if ip := auth.ForwardedIPFromContext(r.Context()); ip != nil {
 			aw.IP = ip

@@ -11,7 +11,7 @@ import (
 	"github.com/minio/kes"
 )
 
-const AuditStream = `{"time":"2020-03-24T12:37:33Z","request":{"path":"/v1/log/audit/trace","identity":"dd46485bedc9ad2909d2e8f9017216eec4413bc5c64b236d992f7ec19c843c5f"},"response":{"code":200, "time":12106}}
+const AuditStream = `{"time":"2020-03-24T12:37:33Z","request":{"path":"/v1/log/audit","identity":"dd46485bedc9ad2909d2e8f9017216eec4413bc5c64b236d992f7ec19c843c5f"},"response":{"code":200, "time":12106}}
 {"time":"2020-03-24T12:38:02Z","request":{"path":"/v1/policy/list/*","identity":"dd46485bedc9ad2909d2e8f9017216eec4413bc5c64b236d992f7ec19c843c5f"},"response":{"code":200, "time":15572}}
 {"time":"2020-03-24T12:39:02Z","request":{"path":"/v1/identity/list/*","identity":"dd46485bedc9ad2909d2e8f9017216eec4413bc5c64b236d992f7ec19c843c5f"},"response":{"code":200, "time":15953}}`
 
@@ -19,12 +19,14 @@ func ExampleNewAuditStream() {
 	reader := strings.NewReader(AuditStream)
 
 	stream := kes.NewAuditStream(reader)
+	defer stream.Close()
+
 	for stream.Next() {
 		event := stream.Event()
 
-		fmt.Println(event.Time)
+		fmt.Println(event.Timestamp)
 	}
-	if err := stream.Err(); err != nil {
+	if err := stream.Close(); err != nil {
 		panic(err) // TODO: error handling
 	}
 	// Output:
@@ -41,12 +43,13 @@ func ExampleNewErrorStream() {
 	reader := strings.NewReader(ErrorStream)
 
 	stream := kes.NewErrorStream(reader)
+	defer stream.Close()
+
 	for stream.Next() {
 		event := stream.Event()
-
 		fmt.Println(event.Message)
 	}
-	if err := stream.Err(); err != nil {
+	if err := stream.Close(); err != nil {
 		panic(err) // TODO: error handling
 	}
 	// Output:

@@ -5,6 +5,7 @@
 package http
 
 import (
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -27,8 +28,8 @@ type AuditResponseWriter struct {
 	URL url.URL // The request URL
 	IP  net.IP  // The client IP address
 
-	Identity kes.Identity // The client's X.509 identity
-	Time     time.Time    // The time when we receive the request
+	Identity  kes.Identity // The client's X.509 identity
+	CreatedAt time.Time    // The time when we receive the request
 
 	sentHeader bool // Set to true on first WriteHeader
 }
@@ -45,23 +46,36 @@ var (
 // WriteHeader does not produce another kes.AuditEvent when
 // invoked again.
 func (w *AuditResponseWriter) WriteHeader(statusCode int) {
+	type RequestInfo struct {
+		IP       net.IP       `json:"ip,omitempty"`
+		APIPath  string       `json:"path"`
+		Identity kes.Identity `json:"identity,omitempty"`
+	}
+	type ResponseInfo struct {
+		StatusCode int           `json:"code"`
+		Time       time.Duration `json:"time"`
+	}
+	type Response struct {
+		Timestamp time.Time    `json:"time"`
+		Request   RequestInfo  `json:"request"`
+		Response  ResponseInfo `json:"response"`
+	}
 	if !w.sentHeader { // Avoid logging an event twice
 		w.sentHeader = true
 		w.ResponseWriter.WriteHeader(statusCode) // Sent the status code BEFORE logging the event
 
-		event := kes.AuditEvent{
-			Time: w.Time,
-			Request: kes.AuditEventRequest{
+		json.NewEncoder(w.Logger.Writer()).Encode(Response{
+			Timestamp: w.CreatedAt,
+			Request: RequestInfo{
 				IP:       w.IP,
-				Path:     w.URL.Path,
-				Identity: w.Identity.String(),
+				APIPath:  w.URL.Path,
+				Identity: w.Identity,
 			},
-			Response: kes.AuditEventResponse{
+			Response: ResponseInfo{
 				StatusCode: statusCode,
-				Time:       time.Now().UTC().Sub(w.Time.UTC()),
+				Time:       time.Now().UTC().Sub(w.CreatedAt.UTC()).Truncate(1 * time.Microsecond),
 			},
-		}
-		w.Logger.Print(event.String()) // The string representation of a kes.AuditEvent is JSON
+		})
 	}
 }
 
