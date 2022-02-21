@@ -16,8 +16,8 @@ var newErrorTests = []struct {
 }{
 	{Code: http.StatusBadRequest, Message: "", Err: NewError(http.StatusBadRequest, "")},
 	{Code: http.StatusNotFound, Message: "key does not exist", Err: ErrKeyNotFound},
-	{Code: http.StatusBadRequest, Message: "key does already exist", Err: ErrKeyExists},
-	{Code: http.StatusForbidden, Message: "prohibited by policy", Err: ErrNotAllowed},
+	{Code: http.StatusBadRequest, Message: "key already exists", Err: ErrKeyExists},
+	{Code: http.StatusForbidden, Message: "not authorized: insufficient permissions", Err: ErrNotAllowed},
 }
 
 func TestNewError(t *testing.T) {

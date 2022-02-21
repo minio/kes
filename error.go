@@ -14,49 +14,31 @@ import (
 	"strings"
 )
 
+// KES server API errors
 var (
-	// ErrNotAllowed represents a KES server response returned when the
-	// client has not sufficient policy permissions to perform a particular
-	// operation.
-	ErrNotAllowed = NewError(http.StatusForbidden, "prohibited by policy")
+	// ErrNotAllowed is returned by a KES server when a client has
+	// not sufficient permission to perform the API operation.
+	ErrNotAllowed = NewError(http.StatusForbidden, "not authorized: insufficient permissions")
 
-	// ErrKeyNotFound represents a KES server response returned when a client
-	// tries to access or use a cryptographic key which does not exist.
+	// ErrKeyNotFound is returned by a KES server when a client tries to
+	// access or use a cryptographic key which does not exist.
 	ErrKeyNotFound = NewError(http.StatusNotFound, "key does not exist")
 
-	// ErrKeyExists represents a KES server response returned when a client tries
+	// ErrKeyExists is returned by a KES server when a client tries
 	// to create a cryptographic key which already exists.
-	ErrKeyExists = NewError(http.StatusBadRequest, "key does already exist")
+	ErrKeyExists = NewError(http.StatusBadRequest, "key already exists")
 
-	// ErrPolicyNotFound represents a KES server response returned when a client
+	// ErrPolicyNotFound is returned by a KES server when a client
 	// tries to access a policy which does not exist.
 	ErrPolicyNotFound = NewError(http.StatusNotFound, "policy does not exist")
 
-	// ErrDecrypt represents a KES server response returned when the server fails
-	// to decrypt an encrypted ciphertext. It may occur when a client uses the
-	// the wrong key or the ciphertext has been (maliciously) modified.
+	// ErrDecrypt is returned by a KES server when it fails to decrypt
+	// a ciphertext. It may occur when a client uses the wrong key or
+	// the ciphertext has been (maliciously) modified.
 	ErrDecrypt = NewError(http.StatusBadRequest, "decryption failed: ciphertext is not authentic")
 )
 
-// Error is the type of client-server API errors.
-// A Client returns an Error if a server responds
-// with a well-formed error message.
-//
-// An Error contains the HTTP status code sent by
-// the server. Errors with the same status code and
-// error message are equal. In particular:
-//   ErrKeyExists == NewError(400, "key does already exist") // true
-//
-// The client may distinguish errors as following:
-//   switch err := client.CreateKey("example-key"); err {
-//       case nil: // Success!
-//       case ErrKeyExists:
-//          // The key "example-key" already exists.
-//       case ErrNotAllowed:
-//          // We don't have the permission to create this key.
-//       default:
-//          // Something else went wrong.
-//   }
+// Error is a KES server API error.
 type Error struct {
 	code    int
 	message string
@@ -64,9 +46,6 @@ type Error struct {
 
 // NewError returns a new Error with the given
 // HTTP status code and error message.
-//
-// Two errors with the same status code and
-// error message are equal.
 func NewError(code int, msg string) Error {
 	return Error{
 		code:    code,
@@ -113,6 +92,15 @@ func parseErrorResponse(resp *http.Response) error {
 		var response Response
 		if err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
+		}
+
+		// TODO(aead): Remove the backwards-compatibility error checks once enough of the
+		// KES server ecosystem has updated.
+		if resp.StatusCode == http.StatusBadRequest && response.Message == "key does already exist" {
+			return ErrKeyExists
+		}
+		if resp.StatusCode == http.StatusForbidden && response.Message == "prohibited by policy" {
+			return ErrNotAllowed
 		}
 		return NewError(resp.StatusCode, response.Message)
 	}
