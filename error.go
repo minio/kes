@@ -33,6 +33,14 @@ var (
 	// a ciphertext. It may occur when a client uses the wrong key or
 	// the ciphertext has been (maliciously) modified.
 	ErrDecrypt = NewError(http.StatusBadRequest, "decryption failed: ciphertext is not authentic")
+
+	// ErrEnclaveExists is returned by a KES server when a client tries
+	// to create an enclave that already exists.
+	ErrEnclaveExists = NewError(http.StatusBadRequest, "enclave already exists")
+
+	// ErrEnclaveNotFound is returned by a KES server when a client tries
+	// to access an enclave which does not exist.
+	ErrEnclaveNotFound = NewError(http.StatusNotFound, "enclave does not exist")
 )
 
 // Error is a KES server API error.

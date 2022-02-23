@@ -51,7 +51,7 @@ func (v *statelessVault) GetEnclave(_ context.Context, name string) (*Enclave, e
 	if name == "" {
 		return v.enclave, nil
 	}
-	return nil, ErrEnclaveNotFound
+	return nil, kes.ErrEnclaveNotFound
 }
 
 func (v *statelessVault) DeleteEnclave(_ context.Context, _ string) error {
