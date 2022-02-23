@@ -6,15 +6,8 @@ package sys
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/minio/kes"
-)
-
-var (
-	ErrEnclaveExists = kes.NewError(http.StatusBadRequest, "enclave already exists")
-
-	ErrEnclaveNotFound = kes.NewError(http.StatusNotFound, "enclave does not exist")
 )
 
 type Vault interface {
