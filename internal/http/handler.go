@@ -668,23 +668,21 @@ func handleAssignPolicy(config *ServerConfig) http.HandlerFunc {
 			return
 		}
 
-		identity := kes.Identity(pathBase(r.URL.Path))
-		if identity.IsUnknown() {
-			Error(w, ErrIdentityUnknown)
-			return
-		}
-		if self := auth.Identify(r); self == identity {
-			Error(w, ErrSelfAssign)
-			return
-		}
-
-		policy := pathBase(strings.TrimSuffix(r.URL.Path, identity.String()))
-
 		var request Request
 		if err = json.NewDecoder(r.Body).Decode(&request); err != nil {
 			Error(w, err)
 			return
 		}
+		if request.Identity.IsUnknown() {
+			Error(w, ErrIdentityUnknown)
+			return
+		}
+		if self := auth.Identify(r); self == request.Identity {
+			Error(w, ErrSelfAssign)
+			return
+		}
+
+		policy := pathBase(r.URL.Path)
 		if err = enclave.AssignPolicy(r.Context(), policy, request.Identity); err != nil {
 			Error(w, err)
 			return
