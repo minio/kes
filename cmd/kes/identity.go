@@ -389,13 +389,12 @@ func lsIdentityCmd(args []string) {
 			fmt.Printf("%s => %s\n", id.Identity, id.Policy)
 		}
 	} else {
-		encoder := json.NewEncoder(os.Stdout)
-		for identities.Next() {
-			encoder.Encode(identities.Value())
+		if _, err = identities.WriteTo(os.Stdout); err != nil {
+			cli.Fatal(err)
 		}
-		if err = identities.Close(); err != nil {
-			cli.Fatalf("failed to list identities: %v", err)
-		}
+	}
+	if err = identities.Close(); err != nil {
+		cli.Fatalf("failed to list identities: %v", err)
 	}
 }
 

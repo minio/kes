@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -216,9 +215,8 @@ func lsKeyCmd(args []string) {
 			fmt.Println(iterator.Value().Name)
 		}
 	} else {
-		encoder := json.NewEncoder(os.Stdout)
-		for iterator.Next() {
-			encoder.Encode(iterator.Value())
+		if _, err = iterator.WriteTo(os.Stdout); err != nil {
+			cli.Fatal(err)
 		}
 	}
 	if err = iterator.Close(); err != nil {

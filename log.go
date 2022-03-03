@@ -80,6 +80,9 @@ func (s *ErrorStream) WriteTo(w io.Writer) (int64, error) {
 	type Response struct {
 		Message string `json:"message"`
 	}
+	if s.err != nil || s.closed {
+		return 0, s.err
+	}
 
 	cw := countWriter{W: w}
 	encoder := json.NewEncoder(&cw)
@@ -211,6 +214,9 @@ func (s *AuditStream) WriteTo(w io.Writer) (int64, error) {
 			StatusCode int           `json:"code"`
 			Time       time.Duration `json:"time"`
 		} `json:"response"`
+	}
+	if s.err != nil || s.closed {
+		return 0, s.err
 	}
 
 	cw := countWriter{W: w}
