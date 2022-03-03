@@ -219,9 +219,8 @@ func lsPolicyCmd(args []string) {
 			fmt.Println(policies.Name())
 		}
 	} else {
-		encoder := json.NewEncoder(os.Stdout)
-		for policies.Next() {
-			encoder.Encode(policies.Value())
+		if _, err = policies.WriteTo(os.Stdout); err != nil {
+			cli.Fatal(err)
 		}
 	}
 	if err = policies.Close(); err != nil {

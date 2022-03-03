@@ -110,6 +110,49 @@ func (i *IdentityIterator) Next() bool {
 	return true
 }
 
+// WriteTo encodes and writes all remaining IdentityInfos
+// from its current iterator position to w. It returns
+// the number of bytes written to w and the first error
+// encounterred, if any.
+func (i *IdentityIterator) WriteTo(w io.Writer) (int64, error) {
+	type Response struct {
+		Identity  Identity  `json:"identity"`
+		Policy    string    `json:"policy,omitempty"`
+		CreatedAt time.Time `json:"created_at,omitempty"`
+		CreatedBy Identity  `json:"created_by,omitempty"`
+
+		Err string `json:"error,omitempty"`
+	}
+	if i.err != nil {
+		return 0, i.err
+	}
+	if i.closed {
+		return 0, errors.New("kes: WriteTo called after Close")
+	}
+
+	cw := countWriter{W: w}
+	encoder := json.NewEncoder(&cw)
+	for {
+		var resp Response
+		if err := i.decoder.Decode(&resp); err != nil {
+			if errors.Is(err, io.EOF) {
+				i.err = i.Close()
+			} else {
+				i.err = err
+			}
+			return cw.N, i.err
+		}
+		if resp.Err != "" {
+			i.err = errors.New(resp.Err)
+			return cw.N, i.err
+		}
+		if err := encoder.Encode(resp); err != nil {
+			i.err = err
+			return cw.N, err
+		}
+	}
+}
+
 // Close closes the IdentityIterator and releases
 // any associated resources
 func (i *IdentityIterator) Close() error {
