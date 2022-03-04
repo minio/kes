@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
+	xhttp "github.com/minio/kes/internal/http"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -104,56 +104,57 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 		cli.Fatal("no TLS client certificate. Environment variable 'KES_CLIENT_CERT' is not set")
 	}
 	if strings.TrimSpace(certPath) == "" {
-		cli.Fatal("Error: no TLS client certificate. Environment variable 'KES_CLIENT_CERT' is empty")
+		cli.Fatal("no TLS client certificate. Environment variable 'KES_CLIENT_CERT' is empty")
 	}
 
 	keyPath, ok := os.LookupEnv("KES_CLIENT_KEY")
 	if !ok {
-		cli.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_KEY' is not set")
+		cli.Fatal("no TLS private key. Environment variable 'KES_CLIENT_KEY' is not set")
 	}
 	if strings.TrimSpace(keyPath) == "" {
-		cli.Fatal("Error: no TLS private key. Environment variable 'KES_CLIENT_KEY' is empty")
+		cli.Fatal("no TLS private key. Environment variable 'KES_CLIENT_KEY' is empty")
 	}
 
 	certPem, err := os.ReadFile(certPath)
 	if err != nil {
-		cli.Fatalf("Error: failed to load TLS certificate: %v", err)
+		cli.Fatalf("failed to load TLS certificate: %v", err)
+	}
+	certPem, err = xhttp.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+	if err != nil {
+		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}
 	keyPem, err := os.ReadFile(keyPath)
 	if err != nil {
-		cli.Fatalf("Error: failed to load TLS private key: %v", err)
+		cli.Fatalf("failed to load TLS private key: %v", err)
 	}
 
 	// Check whether the private key is encrypted. If so, ask the user
 	// to enter the password on the CLI.
-	privateKey, rest := pem.Decode(bytes.TrimSpace(keyPem))
-	if len(rest) > 0 {
-		cli.Fatal("Error: failed to load TLS private key: PEM block contains additional unknown data")
-	}
-	if privateKey.Type != "PRIVATE KEY" && !strings.HasSuffix(privateKey.Type, " PRIVATE KEY") {
-		cli.Fatalf("Error: failed to load TLS private key: invalid type %q", privateKey.Type)
+	privateKey, err := decodePrivateKey(keyPem)
+	if err != nil {
+		cli.Fatalf("failed to read TLS private key: %v", err)
 	}
 	if len(privateKey.Headers) > 0 && x509.IsEncryptedPEMBlock(privateKey) {
 		fmt.Fprint(os.Stderr, "Enter password for private key: ")
 		password, err := term.ReadPassword(int(os.Stderr.Fd()))
 		if err != nil {
-			cli.Fatalf("Error: failed to read private key password: %v", err)
+			cli.Fatalf("failed to read private key password: %v", err)
 		}
 		fmt.Fprintln(os.Stderr) // Add the newline again
 
 		decPrivateKey, err := x509.DecryptPEMBlock(privateKey, password)
 		if err != nil {
 			if errors.Is(err, x509.IncorrectPasswordError) {
-				cli.Fatalf("Error: incorrect password")
+				cli.Fatalf("incorrect password")
 			}
-			cli.Fatalf("Error: failed to decrypt private key: %v", err)
+			cli.Fatalf("failed to decrypt private key: %v", err)
 		}
 		keyPem = pem.EncodeToMemory(&pem.Block{Type: privateKey.Type, Bytes: decPrivateKey})
 	}
 
 	cert, err := tls.X509KeyPair(certPem, keyPem)
 	if err != nil {
-		cli.Fatalf("Error: failed to load TLS private key or certificate: %v", err)
+		cli.Fatalf("failed to load TLS private key or certificate: %v", err)
 	}
 
 	addr := DefaultServer
@@ -167,3 +168,19 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 }
 
 func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
+
+func decodePrivateKey(pemBlock []byte) (*pem.Block, error) {
+	ErrNoPrivateKey := errors.New("no PEM-encoded private key found")
+
+	for len(pemBlock) > 0 {
+		next, rest := pem.Decode(pemBlock)
+		if next == nil {
+			return nil, ErrNoPrivateKey
+		}
+		if next.Type == "PRIVATE KEY" || strings.HasSuffix(next.Type, " PRIVATE KEY") {
+			return next, nil
+		}
+		pemBlock = rest
+	}
+	return nil, ErrNoPrivateKey
+}

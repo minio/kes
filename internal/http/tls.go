@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +137,26 @@ func (c *Certificate) ReloadAfter(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// FilterPEM applies the filter function on each PEM block
+// in pemBlocks and returns an error if at least one PEM
+// block does not pass the filter.
+func FilterPEM(pemBlocks []byte, filter func(*pem.Block) bool) ([]byte, error) {
+	pemBlocks = bytes.TrimSpace(pemBlocks)
+
+	b := pemBlocks
+	for len(b) > 0 {
+		next, rest := pem.Decode(b)
+		if next == nil {
+			return nil, errors.New("http: no valid PEM data")
+		}
+		if !filter(next) {
+			return nil, errors.New("http: unsupported PEM data block")
+		}
+		b = rest
+	}
+	return pemBlocks, nil
+}
+
 // readCertificate reads the TLS certificate from
 // the given file path.
 func readCertificate(certFile string) ([]byte, error) {
@@ -143,7 +164,7 @@ func readCertificate(certFile string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return bytes.TrimSpace(data), nil
+	return FilterPEM(data, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 }
 
 // readPrivateKey reads the TLS private key from the
@@ -152,26 +173,38 @@ func readCertificate(certFile string) ([]byte, error) {
 // It decrypts the private key using the given password
 // if the private key is an encrypted PEM block.
 func readPrivateKey(keyFile, password string) ([]byte, error) {
-	keyPEMBlock, err := os.ReadFile(keyFile)
+	pemBlock, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	pemBlock, err = FilterPEM(pemBlock, func(b *pem.Block) bool {
+		return b.Type == "CERTIFICATE" || b.Type == "PRIVATE KEY" || strings.HasSuffix(b.Type, " PRIVATE KEY")
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	pemBlock, rest := pem.Decode(keyPEMBlock)
-	if len(rest) > 0 {
-		return nil, errors.New("http: private key contains additional data")
-	}
+	for len(pemBlock) > 0 {
+		next, rest := pem.Decode(pemBlock)
+		if next == nil {
+			return nil, errors.New("http: no PEM-encoded private key found")
+		}
+		if next.Type != "PRIVATE KEY" && !strings.HasSuffix(next.Type, " PRIVATE KEY") {
+			pemBlock = rest
+			continue
+		}
 
-	if !x509.IsEncryptedPEMBlock(pemBlock) {
-		return keyPEMBlock, nil
+		if x509.IsEncryptedPEMBlock(next) {
+			if password == "" {
+				return nil, errors.New("http: private key is encrypted: password required")
+			}
+			plaintext, err := x509.DecryptPEMBlock(next, []byte(password))
+			if err != nil {
+				return nil, err
+			}
+			return pem.EncodeToMemory(&pem.Block{Type: next.Type, Bytes: plaintext}), nil
+		}
+		return pem.EncodeToMemory(next), nil
 	}
-	if password == "" {
-		return nil, errors.New("http: private key is encrypted: password required")
-	}
-
-	plaintext, err := x509.DecryptPEMBlock(pemBlock, []byte(password))
-	if err != nil {
-		return nil, err
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: pemBlock.Type, Bytes: plaintext}), nil
+	return nil, errors.New("http: no PEM-encoded private key found")
 }
