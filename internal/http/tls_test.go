@@ -31,3 +31,24 @@ func TestReadPrivateKey(t *testing.T) {
 		}
 	}
 }
+
+var readCertificateTests = []struct {
+	FilePath   string
+	ShouldFail bool
+}{
+	{FilePath: "testdata/certificates/single.pem"},
+	{FilePath: "testdata/certificates/with_whitespaces.pem"},
+	{FilePath: "testdata/certificates/with_privatekey.pem", ShouldFail: true},
+}
+
+func TestReadCertificate(t *testing.T) {
+	for i, test := range readCertificateTests {
+		_, err := readCertificate(test.FilePath)
+		if err != nil && !test.ShouldFail {
+			t.Fatalf("Test %d: failed to read certificate %q: %v", i, test.FilePath, err)
+		}
+		if err == nil && test.ShouldFail {
+			t.Fatalf("Test %d: reading certificate %q should have failed", i, test.FilePath)
+		}
+	}
+}

@@ -20,8 +20,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -33,6 +31,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
+	xhttp "github.com/minio/kes/internal/http"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -269,31 +268,43 @@ func ofIdentityCmd(args []string) {
 		cli.Fatal("no certificate specified. See 'kes identity of --help'")
 	}
 
-	identify := func(filename string) kes.Identity {
-		f, err := os.Open(filename)
+	identify := func(filename string) (kes.Identity, error) {
+		pemBlock, err := os.ReadFile(filename)
 		if err != nil {
-			cli.Fatalf("failed to read certificate %q: %v", filename, err)
+			return "", err
 		}
-		defer f.Close()
-
-		cert, err := parseCertificate(f)
+		pemBlock, err = xhttp.FilterPEM(pemBlock, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 		if err != nil {
-			cli.Fatalf("failed to read certificate %q: %v", filename, err)
+			return "", fmt.Errorf("failed to parse certificate in %q: %v", filename, err)
+		}
+
+		next, _ := pem.Decode(pemBlock)
+		cert, err := x509.ParseCertificate(next.Bytes)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse certificate in %q: %v", filename, err)
 		}
 		identity := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-		return kes.Identity(hex.EncodeToString(identity[:]))
+		return kes.Identity(hex.EncodeToString(identity[:])), nil
 	}
 
 	switch {
 	case cmd.NArg() == 1:
-		if identity := identify(cmd.Arg(0)); isTerm(os.Stdout) {
+		identity, err := identify(cmd.Arg(0))
+		if err != nil {
+			cli.Fatal(err)
+		}
+		if isTerm(os.Stdout) {
 			fmt.Printf("\n  Identity:  %s\n", identity)
 		} else {
 			fmt.Print(identity)
 		}
 	case isTerm(os.Stdout):
 		for _, filename := range cmd.Args() {
-			fmt.Printf("%s: %s\n", filename, identify(filename))
+			identity, err := identify(filename)
+			if err != nil {
+				cli.Fatal(err)
+			}
+			fmt.Printf("%s: %s\n", filename, identity)
 		}
 	default:
 		type Pair struct {
@@ -302,9 +313,13 @@ func ofIdentityCmd(args []string) {
 		}
 		encoder := json.NewEncoder(os.Stdout)
 		for _, filename := range cmd.Args() {
+			identity, err := identify(filename)
+			if err != nil {
+				cli.Fatal(err)
+			}
 			encoder.Encode(Pair{
 				Name:     filename,
-				Identity: identify(filename),
+				Identity: identity,
 			})
 		}
 	}
@@ -423,24 +438,4 @@ func rmIdentityCmd(args []string) {
 			cli.Fatalf("failed to remove identity %q: %v", identity, err)
 		}
 	}
-}
-
-func parseCertificate(r io.Reader) (*x509.Certificate, error) {
-	certPEMBlock, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
-	for {
-		var certDERBlock *pem.Block
-		certDERBlock, certPEMBlock = pem.Decode(certPEMBlock)
-		if certDERBlock == nil {
-			break
-		}
-
-		if certDERBlock.Type == "CERTIFICATE" {
-			return x509.ParseCertificate(certDERBlock.Bytes)
-		}
-	}
-	return nil, errors.New("no (non-CA) certificate in any PEM block")
 }
