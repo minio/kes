@@ -8,7 +8,7 @@ KES is a stateless and distributed key-management system for high-performance ap
 
 ## Install
 
-### Binary Releases
+<details open="true"><summary><b><a name="binary-releases">Binary Releases</a></b></summary>
 
 | OS       | ARCH    | Binary                                                                                       |
 |:--------:|:-------:|:--------------------------------------------------------------------------------------------:|
@@ -24,15 +24,17 @@ You can also verify the binary with [minisign](https://jedisct1.github.io/minisi
 ```
 minisign -Vm kes-<OS>-<ARCH> -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 ```
-
-### Docker
+</details>   
+   
+<details><summary><b><a name="docker">Docker</a></b></summary>
 
 Pull the latest release via:
 ```
 docker pull minio/kes
 ```
-
-### Build from source
+</details>
+   
+<details><summary><b><a name="build-from-source">Build from source</a></b></summary>
 
 ```
 GO111MODULE=on go get github.com/minio/kes/cmd/kes
@@ -40,16 +42,71 @@ GO111MODULE=on go get github.com/minio/kes/cmd/kes
 > You will need a working Go environment. Therefore, please follow [How to install Go](https://golang.org/doc/install).
 > Minimum version required is go1.14
 
+</details>
+   
 ## Getting Started
-
+   
 We run a public KES server instance at `https://play.min.io:7373` for you to experiment with.
-Just follow the steps below to get a first impression of how easy it is to use KES as a client.
-All you need is `cURL`.
+You can interact with our play instance either via the KES CLI or cURL. Alternatively, you can
+get started by setting up your own KES server in less than five minutes.
+   
+<details><summary><b>CLI</b></summary>
 
-If you instead want to run a KES server locally as your first steps then checkout our
-[Getting Started Guide](https://github.com/minio/kes/wiki/Getting-Started).
+#### 1. Fetch Admin Credentials
+   
+As an initial step, you will need to download the "private" key and certificate
+to authenticate to the KES server as the root identity.
+```sh
+curl -sSL --tlsv1.2 \
+   -O 'https://raw.githubusercontent.com/minio/kes/master/root.key' \
+   -O 'https://raw.githubusercontent.com/minio/kes/master/root.cert'
+```
+   
+#### 2. Configure CLI
+Then we point the KES CLI to the KES server at `https://play.min.io:7373` and
+use the `root.key` and `root.cert` as authentication credentials.
+```sh
+export KES_SERVER=https://play.min.io:7373
+export KES_CLIENT_KEY=root.key
+export KES_CLIENT_CERT=root.cert
+```
 
-#### 1. Fetch the root identity
+#### 3. Create a Key
+Next, we can create a new master key - e.g. `my-key`.
+```
+kes key create my-key
+```
+> Note that creating a new key will fail with `key already exist` if it already exist.
+
+#### 4. Generate a DEK
+Now, you can use that master key to derive a new data encryption key (DEK).
+```sh
+kes key dek my-key
+```
+You will get a plaintext and a ciphertext data key. The ciphertext data
+key is the encrypted version of the plaintext key. Your application would
+use the plaintext key to e.g. encrypt some application data but only remember
+the ciphertext key version.
+
+#### 5. Further References
+For more KES CLI commands run `kes --help`. For example, you can list all master
+keys at the KES server:
+```sh
+kes key ls
+```
+   
+</details>   
+   
+<details><summary><b>Server</b></summary>
+
+For a quickstart setup take a look at our [FS guide](https://github.com/minio/kes/wiki/Filesystem-Keystore).
+For further references checkout our list of key store [guides](https://github.com/minio/kes/wiki#guides).
+   
+</details>
+   
+<details><summary><b>cURL</b></summary>
+
+#### 1. Fetch Admin Credentials
 
 As an initial step, you will need to download the "private" key and certificate
 to authenticate to the KES server as the root identity.
@@ -58,23 +115,21 @@ curl -sSL --tlsv1.2 \
    -O 'https://raw.githubusercontent.com/minio/kes/master/root.key' \
    -O 'https://raw.githubusercontent.com/minio/kes/master/root.cert'
 ```
-
-#### 2. Create a new master key
-
-Then, you can create a new master key named e.g. `my-key`.
+   
+#### 2. Create a Key   
+Then, you can create a new master key e.g. `my-key`.
 ```sh
-curl -sSL --tlsv1.3 --http2 \
+curl -sSL --tlsv1.3 \
     --key root.key \
     --cert root.cert \
     -X POST 'https://play.min.io:7373/v1/key/create/my-key'
 ```
-> Note that creating a new key will fail with `key does already exist` if it already exist.
+> Note that creating a new key will fail with `key already exist` if it already exist.
 
-#### 3. Generate a new data encryption key (DEK)
-
-Now, you can use that master key to derive a new data encryption key.
+#### 3. Generate a DEK
+Now, you can use that master key to derive a new data encryption key (DEK).
 ```sh
-curl -sSL --tlsv1.3 --http2 \
+curl -sSL --tlsv1.3 \
     --key root.key \
     --cert root.cert \
     --data '{}' \
@@ -85,20 +140,11 @@ key is the encrypted version of the plaintext key. Your application would
 use the plaintext key to e.g. encrypt some application data but only remember
 the ciphertext key version.
 
-#### 4. Use the KES CLI client
-
-For more sophisticated tasks, like managing policies or audit log tracing, you
-may want to use the KES CLI. Therefore, point your CLI to our KES instance:
-```sh
-export KES_SERVER=https://play.min.io:7373
-export KES_CLIENT_KEY=root.key
-export KES_CLIENT_CERT=root.cert
-```
-
-Then run a KES CLI command. For example:
-```
-kes key list
-```
+#### 4. Further References
+   
+For a comprehensive list of REST API endpoints refer to the KES [API overview](https://github.com/minio/kes/wiki/Server-API).
+   
+</details>
 
 ***
 
