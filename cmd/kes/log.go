@@ -116,9 +116,9 @@ func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
 	var (
 		statStyleFail    = tui.NewStyle().Foreground(tui.Color("#ff0000")).Width(5)
 		statStyleSuccess = tui.NewStyle().Foreground(tui.Color("#00ff00")).Width(5)
-		identityStyle    = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#D1BD2E", Dark: "#C6A18C"}).MaxWidth(20)
-		apiStyle         = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Width(30)
-		ipStyle          = tui.NewStyle().Width(15).MaxWidth(15)
+		identityStyle    = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#D1BD2E", Dark: "#C6A18C"}).MaxWidth(20).Inline(true)
+		apiStyle         = tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Width(30).Inline(true)
+		ipStyle          = tui.NewStyle().Width(15).Inline(true)
 	)
 	const (
 		header = "Time        Status    Identity                IP                 API                               Latency"
