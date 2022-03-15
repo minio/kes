@@ -152,10 +152,15 @@ func (s *KeySecure) Create(ctx context.Context, name string, key key.Key) error 
 		Name  string `json:"name"`
 	}
 
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		logf(s.ErrorLog, "gemalto: failed to encode key '%s': %v", name, err)
+		return err
+	}
 	body, err := json.Marshal(Request{
 		Type:  "seed", // KeySecure supports blob, password and seed
 		Name:  name,
-		Value: key.String(),
+		Value: string(encodedKey),
 	})
 	if err != nil {
 		logf(s.ErrorLog, "gemalto: failed to create key %q: %v", name, err)
@@ -187,7 +192,7 @@ func (s *KeySecure) Create(ctx context.Context, name string, key key.Key) error 
 		if response, err := parseServerError(resp); err != nil {
 			logf(s.ErrorLog, "gemalto: %q: failed to parse server response: %v", resp.Status, err)
 		} else {
-			logf(s.ErrorLog, "gemalto: failed to create key %q: %q (%d)", key, response.Message, response.Code)
+			logf(s.ErrorLog, "gemalto: failed to create key %q: %q (%d)", name, response.Message, response.Code)
 		}
 		return errCreateKey
 	}
@@ -237,7 +242,7 @@ func (s *KeySecure) Get(ctx context.Context, name string) (key.Key, error) {
 		}
 		return key.Key{}, errGetKey
 	}
-	k, err := key.Parse(response.Value)
+	k, err := key.Parse([]byte(response.Value))
 	if err != nil {
 		return key.Key{}, errGetKey
 	}

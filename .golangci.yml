@@ -24,6 +24,8 @@ linters:
 
 issues:
   exclude-use-default: false
+  exclude:
+      - "var-naming: don't use ALL_CAPS in Go names; use CamelCase"
 
 service:
   golangci-lint-version: 1.43.0 # use the fixed version to not introduce new linters unexpectedly

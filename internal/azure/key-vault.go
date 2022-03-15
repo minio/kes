@@ -113,7 +113,12 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 		}
 	}
 
-	stat, err = kv.client.CreateSecret(ctx, name, key.String())
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		kv.logf("azure: failed to encode key '%s': %v", name, err)
+		return errCreateKey
+	}
+	stat, err = kv.client.CreateSecret(ctx, name, string(encodedKey))
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			kv.logf("azure: failed to create %q: %v", name, err)
@@ -139,7 +144,7 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 			Jitter = 800 * time.Millisecond
 		)
 		for i := 0; i < Retry; i++ {
-			stat, err = kv.client.CreateSecret(ctx, name, key.String())
+			stat, err = kv.client.CreateSecret(ctx, name, string(encodedKey))
 			if err != nil {
 				if !errors.Is(err, context.Canceled) {
 					kv.logf("azure: failed to create %q: %v", name, err)
@@ -157,11 +162,11 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 	case stat.StatusCode == http.StatusOK:
 		return nil
 	case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsDeletedButRecoverable":
-		kv.logf("azure: failed to create %q: key already exists but is currently marked as deleted. Either restore or purge %q", key, key)
+		kv.logf("azure: failed to create %q: key already exists but is currently marked as deleted. Either restore or purge %q", name, name)
 	case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
-		kv.logf("azure: failed to create %q: insufficient permissions: %s", key, stat.Message)
+		kv.logf("azure: failed to create %q: insufficient permissions: %s", name, stat.Message)
 	default:
-		kv.logf("azure: failed to create %q: %s (%s)", key, stat.Message, stat.ErrorCode)
+		kv.logf("azure: failed to create %q: %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
 	return errCreateKey
 }
@@ -286,7 +291,7 @@ func (kv *KeyVault) Get(ctx context.Context, name string) (key.Key, error) {
 		kv.logf("azure: failed to get %q: %s (%s)", name, stat.Message, stat.ErrorCode)
 		return key.Key{}, errGetKey
 	}
-	k, err := key.Parse(value)
+	k, err := key.Parse([]byte(value))
 	if err != nil {
 		kv.logf("azure: failed to parse key %q: %v", name, err)
 		return key.Key{}, err

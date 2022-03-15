@@ -1,22 +1,24 @@
+// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package key
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"strings"
+	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
-	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -29,191 +31,253 @@ const (
 	Size = 256 / 8
 )
 
-// Key is a secret key for symmetric cryptography.
+// ValidName returns true if and only if name is
+// a valid name for a key.
+func ValidName(name string) bool {
+	const (
+		DigitStart     = '0'
+		DigitEnd       = '9'
+		UpperCaseStart = 'A'
+		UpperCaseEnd   = 'Z'
+		LowerCaseStart = 'a'
+		LowerCaseEnd   = 'z'
+		Hyphen         = '-'
+		Underscore     = '_'
+	)
+	for _, r := range name {
+		switch {
+		case r >= DigitStart || r <= DigitEnd:
+		case r >= UpperCaseStart || r <= UpperCaseEnd:
+		case r >= LowerCaseStart || r <= LowerCaseEnd:
+		case r == Hyphen:
+		case r == Underscore:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// Parse parses b as encoded Key.
+func Parse(b []byte) (Key, error) {
+	var key Key
+	if err := key.UnmarshalText(b); err != nil {
+		return Key{}, err
+	}
+	return key, nil
+}
+
+// New returns an new Key for the given cryptographic algorithm.
+// The key len must match algorithm's key size. The returned key
+// is owned to the specified identity.
+func New(algorithm Algorithm, key []byte, owner kes.Identity) (Key, error) {
+	if len(key) != algorithm.KeySize() {
+		return Key{}, errors.New("key: invalid key size")
+	}
+	return Key{
+		bytes:     clone(key...),
+		algorithm: algorithm,
+		createdAt: time.Now().UTC(),
+		createdBy: owner,
+	}, nil
+}
+
+// Random generates a new random Key for the cryptographic algorithm.
+// The returned key is owned to the specified identity.
+func Random(algorithm Algorithm, owner kes.Identity) (Key, error) {
+	key, err := randomBytes(algorithm.KeySize())
+	if err != nil {
+		return Key{}, err
+	}
+	return New(algorithm, key, owner)
+}
+
+func randomBytes(length int) ([]byte, error) {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// Key is a symmetric cryptographic key.
 type Key struct {
 	bytes []byte
+
+	algorithm Algorithm
+	createdAt time.Time
+	createdBy kes.Identity
 }
 
-// New returns a new key for symmetric cryptography.
-func New(bytes []byte) Key {
-	return Key{
-		bytes: clone(bytes...),
-	}
-}
+// Algorithm returns the cryptographic algorithm for which the
+// key can be used.
+func (k *Key) Algorithm() Algorithm { return k.algorithm }
 
-// Parse parses s as encoded secret key.
-func Parse(s string) (Key, error) {
-	type JSON struct {
-		Bytes []byte `json:"bytes"`
-	}
-	var key JSON
-	if err := json.NewDecoder(strings.NewReader(s)).Decode(&key); err != nil {
-		return Key{}, errors.New("key: key is malformed")
-	}
-	if len(key.Bytes) != 256/8 { // Only accept 256 bit keys
-		return Key{}, errors.New("key: key is malformed")
-	}
-	return New(key.Bytes), nil
-}
+// CreatedAt returns the point in time when the key has
+// been created.
+func (k *Key) CreatedAt() time.Time { return k.createdAt }
+
+// CreatedBy returns the identity that created the key.
+func (k *Key) CreatedBy() kes.Identity { return k.createdBy }
 
 // ID returns the k's key ID.
-func (k Key) ID() string {
+func (k *Key) ID() string {
 	const Size = 128 / 8
 	h := sha256.Sum256(k.bytes)
 	return hex.EncodeToString(h[:Size])
 }
 
-// Equal returns true if and only if both keys
-// are identical.
-func (k Key) Equal(other Key) bool { return subtle.ConstantTimeCompare(k.bytes, other.bytes) == 1 }
-
-// String returns k's string representation.
-func (k Key) String() string {
-	return fmt.Sprintf(`{"bytes":"%s"}`, base64.StdEncoding.EncodeToString(k.bytes))
+// Clone returns a deep copy of the key.
+func (k *Key) Clone() Key {
+	return Key{
+		bytes:     clone(k.bytes...),
+		algorithm: k.Algorithm(),
+		createdAt: k.CreatedAt(),
+		createdBy: k.CreatedBy(),
+	}
 }
 
-// Wrap encrypts the given plaintext with k and binds
+// Equal returns true if and only if both keys
+// are identical.
+func (k *Key) Equal(other Key) bool {
+	if k.Algorithm() != other.Algorithm() {
+		return false
+	}
+	return subtle.ConstantTimeCompare(k.bytes, other.bytes) == 1
+}
+
+// MarshalText returns the key's text representation.
+func (k *Key) MarshalText() ([]byte, error) {
+	type JSON struct {
+		Bytes     []byte       `json:"bytes"`
+		Algorithm Algorithm    `json:"algorithm,omitempty"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+	}
+	return json.Marshal(JSON{
+		Bytes:     k.bytes,
+		Algorithm: k.Algorithm(),
+		CreatedAt: k.CreatedAt(),
+		CreatedBy: k.CreatedBy(),
+	})
+}
+
+// UnmarshalText parses and decodes text as encoded key.
+func (k *Key) UnmarshalText(text []byte) error {
+	type JSON struct {
+		Bytes     []byte       `json:"bytes"`
+		Algorithm Algorithm    `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy kes.Identity `json:"created_by"`
+	}
+	var value JSON
+	if err := json.Unmarshal(text, &value); err != nil {
+		return err
+	}
+	k.bytes = value.Bytes
+	k.algorithm = value.Algorithm
+	k.createdAt = value.CreatedAt
+	k.createdBy = value.CreatedBy
+	return nil
+}
+
+// Wrap encrypts the given plaintext and binds
 // the associatedData to the returned ciphertext.
 //
 // To unwrap the ciphertext the same associatedData
 // has to be provided again.
-func (k Key) Wrap(plaintext, associatedData []byte) ([]byte, error) {
-	iv, err := sioutil.Random(16)
+func (k *Key) Wrap(plaintext, associatedData []byte) ([]byte, error) {
+	iv, err := randomBytes(16)
 	if err != nil {
 		return nil, err
 	}
 
-	var algorithm string
-	if fips.Enabled || sioutil.NativeAES() {
-		algorithm = "AES-256-GCM-HMAC-SHA-256"
-	} else {
-		algorithm = "ChaCha20Poly1305"
+	algorithm := k.Algorithm()
+	if algorithm == "" {
+		if fips.Enabled || cpu.HasAESGCM() {
+			algorithm = AES256_GCM_SHA256
+		} else {
+			algorithm = XCHACHA20_POLY1305
+		}
 	}
-
-	var aead cipher.AEAD
-	switch algorithm {
-	case "AES-256-GCM-HMAC-SHA-256":
-		mac := hmac.New(sha256.New, k.bytes)
-		mac.Write(iv)
-		sealingKey := mac.Sum(nil)
-
-		var block cipher.Block
-		block, err = aes.NewCipher(sealingKey)
-		if err != nil {
-			return nil, err
-		}
-		aead, err = cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-	case "ChaCha20Poly1305":
-		var sealingKey []byte
-		sealingKey, err = chacha20.HChaCha20(k.bytes, iv)
-		if err != nil {
-			return nil, err
-		}
-		aead, err = chacha20poly1305.New(sealingKey)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.New("invalid algorithm: " + algorithm)
-	}
-
-	nonce, err := sioutil.Random(aead.NonceSize())
+	cipher, err := newAEAD(algorithm, k.bytes, iv)
 	if err != nil {
 		return nil, err
 	}
-	ciphertext := aead.Seal(nil, nonce, plaintext, associatedData)
-	type SealedKey struct {
-		Algorithm string `json:"aead"`
-		ID        string `json:"id,omitempty"`
-		IV        []byte `json:"iv"`
-		Nonce     []byte `json:"nonce"`
-		Bytes     []byte `json:"bytes"`
+
+	nonce, err := randomBytes(cipher.NonceSize())
+	if err != nil {
+		return nil, err
 	}
-	return json.Marshal(SealedKey{
+	ciphertext := ciphertext{
 		Algorithm: algorithm,
 		ID:        k.ID(),
 		IV:        iv,
 		Nonce:     nonce,
-		Bytes:     ciphertext,
-	})
+		Bytes:     cipher.Seal(nil, nonce, plaintext, associatedData),
+	}
+	return ciphertext.MarshalBinary()
 }
 
-// Unwrap decrypts the ciphertext using k and returns
-// the resulting plaintext.
+// Unwrap decrypts the ciphertext and returns the
+// resulting plaintext.
 //
 // It verifies that the associatedData matches the
 // value used when the ciphertext has been generated.
-func (k Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
-	type SealedKey struct {
-		Algorithm string `json:"aead"`
-		ID        string `json:"id"`
-		IV        []byte `json:"iv"`
-		Nonce     []byte `json:"nonce"`
-		Bytes     []byte `json:"bytes"`
-	}
-	var sealedKey SealedKey
-	if err := json.Unmarshal(ciphertext, &sealedKey); err != nil {
-		return nil, kes.NewError(http.StatusBadRequest, "invalid ciphertext")
-	}
-	if sealedKey.ID != "" && sealedKey.ID != k.ID() { // Ciphertexts generated in the past may not contain a key ID
-		return nil, kes.NewError(http.StatusBadRequest, "invalid ciphertext: key ID mismatch")
-	}
-	if n := len(sealedKey.IV); n != 16 {
-		return nil, kes.NewError(http.StatusBadRequest, "invalid iv size")
+func (k *Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
+	text, err := decodeCiphertext(ciphertext)
+	if err != nil {
+		return nil, kes.ErrDecrypt
 	}
 
-	var aead cipher.AEAD
-	switch {
-	case sealedKey.Algorithm == "AES-256-GCM-HMAC-SHA-256":
-		mac := hmac.New(sha256.New, k.bytes)
-		mac.Write(sealedKey.IV)
-		sealingKey := mac.Sum(nil)
-
-		block, err := aes.NewCipher(sealingKey[:])
-		if err != nil {
-			return nil, err
-		}
-		aead, err = cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-	case !fips.Enabled && sealedKey.Algorithm == "ChaCha20Poly1305":
-		sealingKey, err := chacha20.HChaCha20(k.bytes, sealedKey.IV)
-		if err != nil {
-			return nil, err
-		}
-		aead, err = chacha20poly1305.New(sealingKey)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, kes.NewError(http.StatusUnprocessableEntity, "unsupported cryptographic algorithm")
+	if text.ID != "" && text.ID != k.ID() { // Ciphertexts generated in the past may not contain a key ID
+		return nil, kes.ErrDecrypt
+	}
+	if k.algorithm != "" && text.Algorithm != k.Algorithm() {
+		return nil, kes.ErrDecrypt
 	}
 
-	if n := len(sealedKey.Nonce); n != aead.NonceSize() {
-		return nil, kes.NewError(http.StatusBadRequest, "invalid nonce size")
+	cipher, err := newAEAD(text.Algorithm, k.bytes, text.IV)
+	if err != nil {
+		return nil, kes.ErrDecrypt
 	}
-	plaintext, err := aead.Open(nil, sealedKey.Nonce, sealedKey.Bytes, associatedData)
+	plaintext, err := cipher.Open(nil, text.Nonce, text.Bytes, associatedData)
 	if err != nil {
 		return nil, kes.ErrDecrypt
 	}
 	return plaintext, nil
 }
 
-// ID returns the ID of the key used to generate
-// the ciphertext.
-func ID(ciphertext []byte) string {
-	type JSON struct {
-		ID string `json:"id"`
+// newAEAD returns a new AEAD cipher that implements the given
+// algorithm and is initialized with the given key and iv.
+func newAEAD(algorithm Algorithm, Key, IV []byte) (cipher.AEAD, error) {
+	const (
+		LEGACY_AES256_GCM_SHA256  = "AES-256-GCM-HMAC-SHA-256"
+		LEGACY_XCHACHA20_POLY1305 = "ChaCha20Poly1305"
+	)
+	switch algorithm {
+	case AES256_GCM_SHA256, LEGACY_AES256_GCM_SHA256:
+		mac := hmac.New(sha256.New, Key)
+		mac.Write(IV)
+		sealingKey := mac.Sum(nil)
+
+		block, err := aes.NewCipher(sealingKey)
+		if err != nil {
+			return nil, err
+		}
+		return cipher.NewGCM(block)
+	case XCHACHA20_POLY1305, LEGACY_XCHACHA20_POLY1305:
+		if fips.Enabled {
+			return nil, kes.ErrDecrypt
+		}
+		sealingKey, err := chacha20.HChaCha20(Key, IV)
+		if err != nil {
+			return nil, err
+		}
+		return chacha20poly1305.New(sealingKey)
+	default:
+		return nil, kes.ErrDecrypt
 	}
-	var key JSON
-	if err := json.Unmarshal(ciphertext, &key); err != nil {
-		return ""
-	}
-	return key.ID
 }
 
 func clone(b ...byte) []byte {

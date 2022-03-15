@@ -7,6 +7,7 @@ package kes_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
@@ -17,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/minio/kes"
-	"github.com/secure-io/sio-go/sioutil"
 )
 
 // The integration tests require a KES server instance to run against.
@@ -96,7 +96,7 @@ func TestCreateKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
@@ -117,7 +117,7 @@ func TestDeleteKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
@@ -166,7 +166,7 @@ func TestImportKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	for i, test := range importKeyTests {
 		if err := client.ImportKey(context.Background(), key, test.Key); err != nil {
 			t.Fatalf("Failed to import key '%s': %v", key, err)
@@ -205,7 +205,7 @@ func TestGenerateKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
@@ -254,7 +254,7 @@ func TestEncryptKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
@@ -291,7 +291,7 @@ func TestDecryptKey(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	key := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	key := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.CreateKey(context.Background(), key); err != nil {
 		t.Fatalf("Failed to create key '%s': %v", key, err)
 	}
@@ -401,7 +401,7 @@ func TestListKeys(t *testing.T) {
 	// The random prefix is added to the pattern and the key names
 	// to ensure that the test does not fail on a KES server with
 	// existing keys.
-	prefix := fmt.Sprintf("%x-", sioutil.MustRandom(12))
+	prefix := fmt.Sprintf("%x-", randomBytes(12))
 	for i, test := range listKeysTests {
 		test.Pattern = prefix + test.Pattern
 		for j := range test.Keys {
@@ -438,7 +438,7 @@ func TestReadWritePolicy(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	for i, test := range readWritePolicyTests {
 		policy := &kes.Policy{
 			Allow: test.Allow,
@@ -465,13 +465,13 @@ func TestAssignPolicy(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
 		t.Fatalf("Failed to create policy '%s': %v", name, err)
 	}
 	defer client.DeletePolicy(context.Background(), name)
 
-	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
+	identity := kes.Identity(hex.EncodeToString(randomBytes(32)))
 	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
@@ -487,13 +487,13 @@ func TestDeleteIdentity(t *testing.T) {
 		t.Fatalf("Failed to create KES client: %v", err)
 	}
 
-	name := fmt.Sprintf("KES-test-%x", sioutil.MustRandom(12))
+	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
 	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
 		t.Fatalf("Failed to create policy '%s': %v", name, err)
 	}
 	defer client.DeletePolicy(context.Background(), name)
 
-	identity := kes.Identity(hex.EncodeToString(sioutil.MustRandom(32)))
+	identity := kes.Identity(hex.EncodeToString(randomBytes(32)))
 	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
 		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
 	}
@@ -538,6 +538,15 @@ func newPolicy(patterns ...string) *kes.Policy {
 
 func mustDecodeB64(s string) []byte {
 	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func randomBytes(length int) []byte {
+	b := make([]byte, length)
+	_, err := rand.Read(b)
 	if err != nil {
 		panic(err)
 	}

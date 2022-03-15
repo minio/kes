@@ -97,9 +97,14 @@ func (s *SecretsManager) Create(ctx context.Context, name string, key key.Key) e
 		return errCreateKey
 	}
 
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		s.logf("aws: failed to encode key '%s': %v", name, err)
+		return err
+	}
 	createOpt := secretsmanager.CreateSecretInput{
 		Name:         aws.String(name),
-		SecretString: aws.String(key.String()),
+		SecretString: aws.String(string(encodedKey)),
 	}
 	if s.KMSKeyID != "" {
 		createOpt.KmsKeyId = aws.String(s.KMSKeyID)
@@ -153,11 +158,11 @@ func (s *SecretsManager) Get(ctx context.Context, name string) (key.Key, error) 
 	// However, AWS demands and specifies that only one is present -
 	// either "SecretString" or "SecretBinary" - we can check which
 	// one is present and safely assume that the other one isn't.
-	var value string
+	var value []byte
 	if response.SecretString != nil {
-		value = *response.SecretString
+		value = []byte(*response.SecretString)
 	} else {
-		value = string(response.SecretBinary)
+		value = response.SecretBinary
 	}
 	k, err := key.Parse(value)
 	if err != nil {
