@@ -26,6 +26,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
@@ -33,7 +34,6 @@ import (
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/yml"
-	"github.com/secure-io/sio-go/sioutil"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -201,12 +201,18 @@ func serverCmd(args []string) {
 	defer cache.Stop()
 
 	for _, k := range config.Keys {
-		bytes, err := sioutil.Random(key.Size)
+		var algorithm key.Algorithm
+		if fips.Enabled || cpu.HasAESGCM() {
+			algorithm = key.AES256_GCM_SHA256
+		} else {
+			algorithm = key.XCHACHA20_POLY1305
+		}
+
+		key, err := key.Random(algorithm, config.Admin.Identity.Value())
 		if err != nil {
 			cli.Fatalf("failed to create key %q: %v", k.Name, err)
 		}
-
-		if err = store.Create(ctx, k.Name.Value(), key.New(bytes)); err != nil && err != kes.ErrKeyExists {
+		if err = store.Create(ctx, k.Name.Value(), key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
 			cli.Fatalf("failed to create key %q: %v", k.Name.Value(), err)
 		}
 	}

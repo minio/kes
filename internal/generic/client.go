@@ -78,8 +78,13 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 	type Request struct {
 		Bytes []byte `json:"bytes"`
 	}
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		s.logf("generic: failed to encode key '%s': %v", name, err)
+		return err
+	}
 	body, err := json.Marshal(Request{
-		Bytes: []byte(key.String()),
+		Bytes: encodedKey,
 	})
 	if err != nil {
 		s.logf("generic: failed to create key %q: %v", name, err)
@@ -180,7 +185,7 @@ func (s *Store) Get(ctx context.Context, name string) (key.Key, error) {
 		return key.Key{}, errGetKey
 	}
 
-	k, err := key.Parse(string(response.Bytes))
+	k, err := key.Parse(response.Bytes)
 	if err != nil {
 		s.logf("generic: failed to parse key %q: %v", name, err)
 		return key.Key{}, err

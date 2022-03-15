@@ -8,6 +8,7 @@
 package fs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -80,7 +81,12 @@ func (s *Store) Create(_ context.Context, name string, key key.Key) error {
 	}
 	defer file.Close()
 
-	if _, err = file.WriteString(key.String()); err != nil {
+	b, err := key.MarshalText()
+	if err != nil {
+		s.logf("fs: failed to encode key '%s': %v", name, err)
+		return err
+	}
+	if _, err = file.Write(b); err != nil {
 		s.logf("fs: failed to write to %q: %v", path, err)
 		if rmErr := os.Remove(path); rmErr != nil {
 			s.logf("fs: cannot remove %q: %v", path, rmErr)
@@ -144,12 +150,12 @@ func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
 	}
 	defer file.Close()
 
-	var value strings.Builder
-	if _, err := io.Copy(&value, io.LimitReader(file, key.MaxSize)); err != nil {
+	var b bytes.Buffer
+	if _, err := io.Copy(&b, io.LimitReader(file, key.MaxSize)); err != nil {
 		s.logf("fs: failed to read from %q: %v", path, err)
 		return key.Key{}, err
 	}
-	k, err := key.Parse(value.String())
+	k, err := key.Parse(b.Bytes())
 	if err != nil {
 		s.logf("fs: failed to parse key from %q: %v", path, err)
 		return key.Key{}, err

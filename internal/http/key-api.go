@@ -6,14 +6,17 @@ package http
 
 import (
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes/internal/cpu"
+	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/key"
-	"github.com/secure-io/sio-go/sioutil"
 )
 
 func createKey(mux *http.ServeMux, config *ServerConfig) API {
@@ -53,7 +56,18 @@ func createKey(mux *http.ServeMux, config *ServerConfig) API {
 			return
 		}
 
-		key := key.New(sioutil.MustRandom(key.Size))
+		var algorithm key.Algorithm
+		if fips.Enabled || cpu.HasAESGCM() {
+			algorithm = key.AES256_GCM_SHA256
+		} else {
+			algorithm = key.XCHACHA20_POLY1305
+		}
+
+		key, err := key.Random(algorithm, auth.Identify(r))
+		if err != nil {
+			Error(w, err)
+			return
+		}
 		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
@@ -77,7 +91,8 @@ func importKey(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
-		Bytes []byte `json:"bytes"`
+		Bytes     []byte `json:"bytes"`
+		Algorithm string `json:"algorithm"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -114,11 +129,30 @@ func importKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		if len(req.Bytes) != key.Size {
+
+		var algorithm key.Algorithm
+		switch key.Algorithm(req.Algorithm) {
+		case key.AES256_GCM_SHA256:
+			algorithm = key.AES256_GCM_SHA256
+		case key.XCHACHA20_POLY1305:
+			algorithm = key.XCHACHA20_POLY1305
+		case key.AlgorithmGeneric:
+			algorithm = key.AlgorithmGeneric
+		default:
+			Error(w, kes.NewError(http.StatusBadRequest, "invalid algorithm"))
+			return
+		}
+
+		if len(req.Bytes) != algorithm.KeySize() {
 			Error(w, kes.NewError(http.StatusBadRequest, "invalid key size"))
 			return
 		}
-		if err = enclave.CreateKey(r.Context(), name, key.New(req.Bytes)); err != nil {
+		key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
 		}
@@ -240,8 +274,8 @@ func generateKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		dataKey, err := sioutil.Random(32)
-		if err != nil {
+		dataKey := make([]byte, 32)
+		if _, err = rand.Read(dataKey); err != nil {
 			Error(w, err)
 			return
 		}

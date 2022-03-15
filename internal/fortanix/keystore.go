@@ -202,12 +202,18 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 		OpExport        = "EXPORT"
 		OpAppManageable = "APPMANAGEABLE"
 	)
+
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		s.logf("fortanix: failed to encode key '%s': %v", name, err)
+		return err
+	}
 	request, err := json.Marshal(Request{
 		Type:       Type,
 		Name:       name,
 		GroupID:    s.GroupID,
 		Operations: []string{OpExport, OpAppManageable},
-		Value:      base64.StdEncoding.EncodeToString([]byte(key.String())), // Fortanix expects base64-encoded values and will not accept raw strings
+		Value:      base64.StdEncoding.EncodeToString(encodedKey), // Fortanix expects base64-encoded values and will not accept raw strings
 		Enabled:    true,
 	})
 	if err != nil {
@@ -391,7 +397,7 @@ func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
 		s.logf("fortanix: failed to fetch %q: %v", name, err)
 		return key.Key{}, err
 	}
-	k, err := key.Parse(string(value))
+	k, err := key.Parse(value)
 	if err != nil {
 		s.logf("fortanix: failed to fetch %q: failed to parse key: %v", name, err)
 		return key.Key{}, err

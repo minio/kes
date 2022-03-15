@@ -130,10 +130,14 @@ func (s *SecretManager) Create(ctx context.Context, name string, key key.Key) er
 		return err
 	}
 
+	encodedKey, err := key.MarshalText()
+	if err != nil {
+		return err
+	}
 	_, err = s.client.AddSecretVersion(ctx, &secretmanagerpb.AddSecretVersionRequest{
 		Parent: secret.Name,
 		Payload: &secretmanagerpb.SecretPayload{
-			Data: []byte(key.String()),
+			Data: encodedKey,
 		},
 	})
 	if err != nil {
@@ -160,7 +164,7 @@ func (s *SecretManager) Get(ctx context.Context, name string) (key.Key, error) {
 		return key.Key{}, err
 	}
 
-	k, err := key.Parse(string(result.Payload.Data))
+	k, err := key.Parse(result.Payload.Data)
 	if err != nil {
 		s.logf("gcp: failed to parse key %q: %v", name, err)
 		return key.Key{}, err

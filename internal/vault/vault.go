@@ -245,7 +245,7 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 		return kes.ErrKeyExists
 	case err != nil:
 		s.logf("vault: failed to create %q: %v", location, err)
-		return err
+		return errCreateKey
 	}
 
 	// Finally, we create the value since it seems that it
@@ -254,6 +254,11 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 	// Since there is now way we can detect that reliable we require
 	// that whoever has the permission to create keys does that in
 	// a non-racy way.
+	k, err := key.MarshalText()
+	if err != nil {
+		s.logf("vault: failed encode key '%s': %v", location, err)
+		return errCreateKey
+	}
 	var data map[string]interface{}
 	if s.config.APIVersion == APIv2 {
 		data = map[string]interface{}{
@@ -261,12 +266,12 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 				"cas": 0, // We need to set CAS to 0 to ensure atomic creates / avoid any overwrite.
 			},
 			"data": map[string]interface{}{
-				name: key.String(),
+				name: string(k),
 			},
 		}
 	} else {
 		data = map[string]interface{}{
-			name: key.String(),
+			name: string(k),
 		}
 	}
 
@@ -357,7 +362,7 @@ func (s *KeyStore) Get(_ context.Context, name string) (key.Key, error) {
 		s.logf("vault: failed to read %q: invalid K/V format", location)
 		return key.Key{}, errGetKey
 	}
-	k, err := key.Parse(value)
+	k, err := key.Parse([]byte(value))
 	if err != nil {
 		s.logf("vault: failed to parse key at %q: %v", location, err)
 		return key.Key{}, err
