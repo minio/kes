@@ -81,6 +81,7 @@ func (s *Server) IssueClientCertificate(name string) tls.Certificate {
 	return issueCertificate(name, s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageClientAuth)
 }
 
+// CAs returns the Server's root CAs.
 func (s *Server) CAs() *x509.CertPool {
 	if s.caCertificate == nil || s.caPrivateKey == nil {
 		s.caPrivateKey, s.caCertificate = newCA()

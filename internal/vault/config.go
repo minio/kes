@@ -11,7 +11,13 @@ import (
 )
 
 const (
+	// APIv1 is the Vault K/V secret engine API version 1.
+	// The v1 K/V secret engine does not support version'ed
+	// secrets.
 	APIv1 = "v1"
+
+	// APIv2 is the Vault K/V secret engine API version 2.
+	// The v1 K/V secret engine supports version'ed secrets.
 	APIv2 = "v2"
 )
 

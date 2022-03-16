@@ -17,6 +17,16 @@ import (
 	"github.com/minio/kes"
 )
 
+// A TLSProxy handles HTTP requests sent by a client through
+// a TLS proxy sitting between the client and the server.
+//
+// It verifies that the request actually came from a known
+// TLS proxy, extracts the client information attached by
+// proxy and modifies request based on the client information.
+//
+// In particular, it extracts the forwarded client IP, if any,
+// and adjusts the request TLS state with the forwarded client
+// certificate.
 type TLSProxy struct {
 	// CertHeader is the HTTP header key used to extract the
 	// client certificate forwarded by a TLS proxy. The TLS

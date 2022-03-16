@@ -13,6 +13,9 @@ import (
 
 var errPrefix = color.RedString("Error: ")
 
+// Fatal formats writes an error prefix and the operands
+// to OS stderr. Then, Fatal terminates the program by
+// calling os.Exit(1).
 func Fatal(v ...interface{}) {
 	fmt.Fprint(os.Stderr, errPrefix)
 	fmt.Fprint(os.Stderr, v...)
@@ -20,6 +23,9 @@ func Fatal(v ...interface{}) {
 	os.Exit(1)
 }
 
+// Fatalf formats writes an error prefix and the operands,
+// formated according to the format specifier, to OS stderr.
+// Then, Fatalf terminates the program by calling os.Exit(1).
 func Fatalf(format string, v ...interface{}) {
 	fmt.Fprintf(os.Stderr, errPrefix+format+"\n", v...)
 	os.Exit(1)

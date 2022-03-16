@@ -10,8 +10,13 @@ import (
 )
 
 const (
+	// AlignLeft aligns text to the left.
 	AlignLeft Alignment = iota
+
+	// AlignCenter aligns text to the middle.
 	AlignCenter
+
+	// AlignRight aligns text to the right.
 	AlignRight
 )
 

@@ -10,6 +10,12 @@ import (
 	"github.com/minio/kes"
 )
 
+// A Vault manages a set of Enclaves.
+//
+// It is either in a sealed or unsealed state. When the
+// Vault is sealed it does not process any requests except
+// unseal requests. Once unsealed, Vault provides access
+// to existing enclaves.
 type Vault interface {
 	// Seal seals the Vault. Once sealed, any subsequent operation
 	// returns ErrSealed.

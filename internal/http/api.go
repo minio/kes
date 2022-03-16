@@ -20,11 +20,12 @@ import (
 	"github.com/minio/kes/internal/sys"
 )
 
+// API describes a KES server API.
 type API struct {
-	Method  string
-	Path    string
-	MaxBody int64
-	Timeout time.Duration
+	Method  string        // The HTTP method
+	Path    string        // The URI API path.
+	MaxBody int64         // The max. body size the API accepts
+	Timeout time.Duration // The duration after which an API request times out.
 }
 
 // A ServerConfig structure is used to configure a
