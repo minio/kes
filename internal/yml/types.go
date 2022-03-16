@@ -36,8 +36,11 @@ var ( // compiler check
 // Value returns the KES identity.
 func (i *Identity) Value() kes.Identity { return i.value }
 
+// MarshalYAML returns the Identity's YAML representation.
 func (i Identity) MarshalYAML() (interface{}, error) { return i.raw, nil }
 
+// UnmarshalYAML uses the unmarhsal function to unmarshal
+// a YAML block into the Identity.
 func (i *Identity) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var raw string
 	if err := unmarshal(&raw); err != nil {
@@ -70,10 +73,14 @@ var ( // compiler check
 // Value returns the plain string value.
 func (s *String) Value() string { return s.value }
 
+// Set sets the String value to v.
 func (s *String) Set(v string) { s.value = v }
 
+// MarshalYAML returns the String's YAML representation.
 func (s String) MarshalYAML() (interface{}, error) { return s.raw, nil }
 
+// UnmarshalYAML uses the unmarhsal function to unmarshal
+// a YAML block into the String.
 func (s *String) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var raw string
 	if err := unmarshal(&raw); err != nil {
@@ -107,8 +114,11 @@ var ( // compiler check
 // Value returns the time duration value.
 func (d *Duration) Value() time.Duration { return d.value }
 
+// MarshalYAML returns the Duration's YAML representation.
 func (d Duration) MarshalYAML() (interface{}, error) { return d.raw, nil }
 
+// UnmarshalYAML uses the unmarhsal function to unmarshal
+// a YAML block into the Duration.
 func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var raw string
 	if err := unmarshal(&raw); err != nil {

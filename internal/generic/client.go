@@ -215,6 +215,8 @@ func (s *Store) List(ctx context.Context) (key.Iterator, error) {
 	}, nil
 }
 
+// Authenticate authentictes to the generic plugin server.
+// It returns any authentication error encountered, if any.
 func (s *Store) Authenticate() error {
 	config := &tls.Config{
 		MinVersion: tls.VersionTLS13,

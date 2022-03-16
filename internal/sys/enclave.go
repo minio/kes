@@ -36,6 +36,12 @@ type Enclave struct {
 	identities auth.IdentitySet
 }
 
+// Status returns the current state of the key store.
+//
+// If Status fails to reach the Store - e.g.
+// due to a network error - it returns a
+// StoreState with StoreUnreachable and no
+// error.
 func (e *Enclave) Status(ctx context.Context) (key.StoreState, error) { return e.keys.Status(ctx) }
 
 // CreateKey stores the given key if and only if no entry with

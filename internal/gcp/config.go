@@ -59,18 +59,30 @@ func (c Credentials) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// A Config structure is used to configure a GCP SecretManager
+// client.
 type Config struct {
+	// Endpoint is the GCP SecretManager endpoint.
 	Endpoint string
 
+	// ProjectID is the ID of the GCP project.
 	ProjectID string
 
+	// Credentials are the GCP credentials to
+	// access the SecretManager.
 	Credentials Credentials
 
+	// ErrorLog is an optional logger for errors
+	// that may occur when interacting with GCP
+	// SecretManager.
 	ErrorLog *log.Logger
 
 	lock sync.RWMutex
 }
 
+// Clone returns a shallow clone of c or nil if c is
+// nil. It is safe to clone a Config that is being used
+// concurrently.
 func (c *Config) Clone() *Config {
 	if c == nil {
 		return nil

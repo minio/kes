@@ -63,6 +63,7 @@ func (w FlushWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// Flush sends any buffered data to the client.
 func (w FlushWriter) Flush() {
 	if w.f != nil {
 		w.f.Flush()
