@@ -334,8 +334,9 @@ func (i *policyIterator) Close() error { return nil }
 // from the given ServerConfig.
 func identitySetFromConfig(config *yml.ServerConfig) (auth.IdentitySet, error) {
 	identities := &identitySet{
-		admin: config.Admin.Identity.Value(),
-		roles: map[kes.Identity]auth.IdentityInfo{},
+		admin:     config.Admin.Identity.Value(),
+		createdAt: time.Now().UTC(),
+		roles:     map[kes.Identity]auth.IdentityInfo{},
 	}
 
 	for name, policy := range config.Policies {
@@ -366,7 +367,8 @@ func identitySetFromConfig(config *yml.ServerConfig) (auth.IdentitySet, error) {
 }
 
 type identitySet struct {
-	admin kes.Identity
+	admin     kes.Identity
+	createdAt time.Time
 
 	lock  sync.RWMutex
 	roles map[kes.Identity]auth.IdentityInfo
@@ -386,17 +388,24 @@ func (i *identitySet) Assign(_ context.Context, policy string, identity kes.Iden
 	i.roles[identity] = auth.IdentityInfo{
 		Policy:    policy,
 		CreatedAt: time.Now().UTC(),
+		CreatedBy: i.admin,
 	}
 	return nil
 }
 
 func (i *identitySet) Get(_ context.Context, identity kes.Identity) (auth.IdentityInfo, error) {
+	if identity == i.admin {
+		return auth.IdentityInfo{
+			IsAdmin:   true,
+			CreatedAt: i.createdAt,
+		}, nil
+	}
 	i.lock.RLock()
 	defer i.lock.RUnlock()
 
 	policy, ok := i.roles[identity]
 	if !ok {
-		return auth.IdentityInfo{}, kes.ErrNotAllowed
+		return auth.IdentityInfo{}, auth.ErrIdentityNotFound
 	}
 	return policy, nil
 }

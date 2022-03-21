@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/auth"
 )
 
 func describeIdentity(mux *http.ServeMux, config *ServerConfig) API {
@@ -24,6 +25,7 @@ func describeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	)
 	type Response struct {
 		Identity  kes.Identity `json:"identity"`
+		IsAdmin   bool         `json:"admin,omitempty"`
 		Policy    string       `json:"policy"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
@@ -68,6 +70,84 @@ func describeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 			Policy:    info.Policy,
 			CreatedAt: info.CreatedAt,
 			CreatedBy: info.CreatedBy,
+		})
+	}
+	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
+	return API{
+		Method:  Method,
+		Path:    APIPath,
+		MaxBody: MaxBody,
+		Timeout: Timeout,
+	}
+}
+
+func selfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
+	const (
+		Method  = http.MethodGet
+		APIPath = "/v1/identity/self/describe"
+		MaxBody = 0
+		Timeout = 15 * time.Second
+	)
+	type InlinePolicy struct {
+		Allow []string
+		Deny  []string
+	}
+	type Response struct {
+		Identity kes.Identity `json:"identity"`
+
+		IsAdmin    bool   `json:"admin"`
+		PolicyName string `json:"policy_name,omitempty"`
+
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+
+		Policy InlinePolicy `json:"policy"`
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w = audit(w, r, config.AuditLog.Log())
+
+		if r.Method != Method {
+			w.Header().Set("Accept", Method)
+			Error(w, errMethodNotAllowed)
+			return
+		}
+		if err := normalizeURL(r.URL, APIPath); err != nil {
+			Error(w, err)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+
+		enclave, err := lookupEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		identity := auth.Identify(r)
+		info, err := enclave.GetIdentity(r.Context(), identity)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		policy := new(auth.Policy)
+		if !info.IsAdmin {
+			policy, err = enclave.GetPolicy(r.Context(), info.Policy)
+			if err != nil {
+				Error(w, err)
+				return
+			}
+		}
+		json.NewEncoder(w).Encode(Response{
+			Identity:   identity,
+			PolicyName: info.Policy,
+			IsAdmin:    info.IsAdmin,
+			CreatedAt:  info.CreatedAt,
+			CreatedBy:  info.CreatedBy,
+			Policy: InlinePolicy{
+				Allow: policy.Allow,
+				Deny:  policy.Deny,
+			},
 		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
@@ -140,6 +220,7 @@ func listIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	)
 	type Response struct {
 		Identity  kes.Identity `json:"identity"`
+		IsAdmin   bool         `json:"admin"`
 		Policy    string       `json:"policy"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
@@ -198,6 +279,7 @@ func listIdentity(mux *http.ServeMux, config *ServerConfig) API {
 			}
 			err = encoder.Encode(Response{
 				Identity:  iterator.Identity(),
+				IsAdmin:   info.IsAdmin,
 				Policy:    info.Policy,
 				CreatedAt: info.CreatedAt,
 				CreatedBy: info.CreatedBy,

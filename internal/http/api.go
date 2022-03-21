@@ -91,6 +91,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	config.APIs = append(config.APIs, deletePolicy(mux, config))
 
 	config.APIs = append(config.APIs, describeIdentity(mux, config))
+	config.APIs = append(config.APIs, selfDescribeIdentity(mux, config))
 	config.APIs = append(config.APIs, listIdentity(mux, config))
 	config.APIs = append(config.APIs, deleteIdentity(mux, config))
 
