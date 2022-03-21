@@ -79,8 +79,9 @@ func (p *PolicySet) policySet() auth.PolicySet {
 
 func (p *PolicySet) identitySet() auth.IdentitySet {
 	return &identitySet{
-		admin: p.admin,
-		roles: p.identities,
+		admin:     p.admin,
+		createdAt: time.Now().UTC(),
+		roles:     p.identities,
 	}
 }
 
@@ -165,7 +166,8 @@ func (i *policyIterator) Name() string { return i.current }
 func (i *policyIterator) Close() error { return nil }
 
 type identitySet struct {
-	admin kes.Identity
+	admin     kes.Identity
+	createdAt time.Time
 
 	lock  sync.RWMutex
 	roles map[kes.Identity]auth.IdentityInfo
@@ -188,12 +190,18 @@ func (i *identitySet) Assign(_ context.Context, policy string, identity kes.Iden
 }
 
 func (i *identitySet) Get(_ context.Context, identity kes.Identity) (auth.IdentityInfo, error) {
+	if identity == i.admin {
+		return auth.IdentityInfo{
+			IsAdmin:   true,
+			CreatedAt: i.createdAt,
+		}, nil
+	}
 	i.lock.RLock()
 	defer i.lock.RUnlock()
 
 	policy, ok := i.roles[identity]
 	if !ok {
-		return auth.IdentityInfo{}, kes.ErrNotAllowed
+		return auth.IdentityInfo{}, auth.ErrIdentityNotFound
 	}
 	return policy, nil
 }

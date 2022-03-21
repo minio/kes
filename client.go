@@ -327,6 +327,29 @@ func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Ident
 	return enclave.AssignPolicy(ctx, policy, identity)
 }
 
+// DescribeIdentity returns an IdentityInfo describing the given identity.
+func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*IdentityInfo, error) {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.DescribeIdentity(ctx, identity)
+}
+
+// DescribeSelf returns an IdentityInfo describing the identity
+// making the API request. It also returns the assigned policy,
+// if any.
+//
+// DescribeSelf allows an application to obtain identity and
+// policy information about itself.
+func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, error) {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.DescribeSelf(ctx)
+}
+
 // DeleteIdentity removes the identity. Once removed, any
 // operation issued by this identity will fail with
 // ErrNotAllowed.

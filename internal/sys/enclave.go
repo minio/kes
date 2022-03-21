@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"net/http"
 
 	"github.com/minio/kes"
@@ -165,6 +166,9 @@ func (e *Enclave) VerifyRequest(r *http.Request) error {
 	}
 
 	info, err := e.GetIdentity(r.Context(), identity)
+	if errors.Is(err, auth.ErrIdentityNotFound) {
+		return kes.ErrNotAllowed
+	}
 	if err != nil {
 		return err
 	}

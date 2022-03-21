@@ -33,10 +33,11 @@ func (id Identity) String() string { return string(id) }
 
 // IdentityInfo describes a KES identity.
 type IdentityInfo struct {
-	Identity  Identity  `json:"identity"`
-	Policy    string    `json:"policy"`     // Name of the associated policy
-	CreatedAt time.Time `json:"created_at"` // Point in time when the identity was created
-	CreatedBy Identity  `json:"created_by"` // Identity that created the identity
+	Identity  Identity
+	IsAdmin   bool      // Indicates whether the identity has admin privileges
+	Policy    string    // Name of the associated policy
+	CreatedAt time.Time // Point in time when the identity was created
+	CreatedBy Identity  // Identity that created the identity
 }
 
 // IdentityIterator iterates over a stream of IdentityInfo objects.
@@ -77,6 +78,7 @@ func (i *IdentityIterator) CreatedBy() Identity { return i.current.CreatedBy }
 func (i *IdentityIterator) Next() bool {
 	type Response struct {
 		Identity  Identity  `json:"identity"`
+		IsAdmin   bool      `json:"admin"`
 		Policy    string    `json:"policy"`
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
@@ -117,6 +119,7 @@ func (i *IdentityIterator) Next() bool {
 func (i *IdentityIterator) WriteTo(w io.Writer) (int64, error) {
 	type Response struct {
 		Identity  Identity  `json:"identity"`
+		Admin     bool      `json:"admin"`
 		Policy    string    `json:"policy,omitempty"`
 		CreatedAt time.Time `json:"created_at,omitempty"`
 		CreatedBy Identity  `json:"created_by,omitempty"`

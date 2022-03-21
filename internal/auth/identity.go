@@ -15,6 +15,10 @@ import (
 	"github.com/minio/kes"
 )
 
+// ErrIdentityNotFound is returned by an IdentitySet if a specified
+// identity does not exist.
+var ErrIdentityNotFound = kes.NewError(http.StatusNotFound, "identity does not exist")
+
 // Identify computes the identity of the given HTTP request.
 //
 // If the request was not sent over TLS or no client
@@ -48,10 +52,6 @@ func Identify(req *http.Request) kes.Identity {
 	return kes.Identity(hex.EncodeToString(h[:]))
 }
 
-// ErrNotAssigned is an error indicating that an identity is
-// not assigned resp. does not exist.
-var ErrNotAssigned = kes.NewError(http.StatusNotFound, "identity not assigned")
-
 // An IdentitySet is a set of identities that are assigned to policies.
 type IdentitySet interface {
 	// Admin returns the identity of the admin.
@@ -68,7 +68,7 @@ type IdentitySet interface {
 
 	// Get returns the IdentityInfo of an assigned identity.
 	//
-	// It returns ErrNotAssigned when there is no IdentityInfo
+	// It returns ErrIdentityNotFound when there is no IdentityInfo
 	// associated to the given identity.
 	Get(ctx context.Context, identity kes.Identity) (IdentityInfo, error)
 
@@ -120,6 +120,10 @@ type IdentityIterator interface {
 type IdentityInfo struct {
 	// Policy is the policy the identity is assigned to.
 	Policy string
+
+	// IsAdmin indicates whether the identity has admin
+	// privileges.
+	IsAdmin bool
 
 	// CreatedAt is the point in time when the identity
 	// has been assigned.

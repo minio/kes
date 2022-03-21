@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"time"
 )
 
 // An Enclave is an isolated area within a KES server.
@@ -405,6 +406,93 @@ func (e *Enclave) ListPolicies(ctx context.Context, pattern string) (*PolicyIter
 		decoder: json.NewDecoder(resp.Body),
 		closer:  resp.Body,
 	}, nil
+}
+
+// DescribeIdentity returns an IdentityInfo describing the given identity.
+func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*IdentityInfo, error) {
+	const (
+		APIPath         = "/v1/identity/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MiB
+	)
+	type Response struct {
+		Identity  Identity  `json:"identity"`
+		IsAdmin   bool      `json:"admin"`
+		Policy    string    `json:"policy"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+	}
+
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, identity.String()), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &IdentityInfo{
+		Identity:  identity,
+		Policy:    response.Policy,
+		IsAdmin:   response.IsAdmin,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
+// DescribeSelf returns an IdentityInfo describing the identity
+// making the API request. It also returns the assigned policy,
+// if any.
+//
+// DescribeSelf allows an application to obtain identity and
+// policy information about itself.
+func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, error) {
+	const (
+		APIPath         = "/v1/identity/self/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MiB
+	)
+	type InlinePolicy struct {
+		Allow []string `json:"allow"`
+		Deny  []string `json:"deny"`
+	}
+	type Response struct {
+		Identity   Identity     `json:"identity"`
+		IsAdmin    bool         `json:"admin"`
+		PolicyName string       `json:"policy_name"`
+		CreatedAt  time.Time    `json:"created_at"`
+		CreatedBy  Identity     `json:"created_by"`
+		Policy     InlinePolicy `json:"policy"`
+	}
+
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, nil, parseErrorResponse(resp)
+	}
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, nil, err
+	}
+	info := &IdentityInfo{
+		Identity:  response.Identity,
+		Policy:    response.PolicyName,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+		IsAdmin:   response.IsAdmin,
+	}
+	policy := &Policy{
+		Allow: response.Policy.Allow,
+		Deny:  response.Policy.Deny,
+	}
+	return info, policy, nil
 }
 
 // DeleteIdentity removes the identity. Once removed, any
