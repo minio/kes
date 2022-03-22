@@ -252,6 +252,21 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
 
+// DecryptAll decrypts all ciphertexts with the named key at the
+// KES server. It either returns all decrypted plaintexts or the
+// first decryption error.
+//
+// DecryptAll returns ErrKeyNotFound if the specified key does not
+// exist. It returns ErrDecrypt if any ciphertext has been modified
+// or a different context value was used.
+func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP) ([]PCP, error) {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.DecryptAll(ctx, name, ciphertexts...)
+}
+
 // ListKeys lists all names of cryptographic keys that match the given
 // pattern. It returns a KeyIterator that iterates over all matched key
 // names.

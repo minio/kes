@@ -81,6 +81,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	config.APIs = append(config.APIs, generateKey(mux, config))
 	config.APIs = append(config.APIs, encryptKey(mux, config))
 	config.APIs = append(config.APIs, decryptKey(mux, config))
+	config.APIs = append(config.APIs, bulkDecryptKey(mux, config))
 	config.APIs = append(config.APIs, listKey(mux, config))
 
 	config.APIs = append(config.APIs, describePolicy(mux, config))

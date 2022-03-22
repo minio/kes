@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"sort"
 	"strconv"
 	"strings"
@@ -182,6 +183,144 @@ func TestEncryptKey(t *testing.T) {
 	}
 }
 
+var decryptKeyTests = []struct {
+	Ciphertext []byte
+	Plaintext  []byte
+	Context    []byte
+	ShouldFail bool
+}{
+	{
+		Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiQkpDU2FRZ1MrMUovZ3ZhcWZNaXJYUT09Iiwibm9uY2UiOiJHZkllRHdSdjByRDBIYncrIiwiYnl0ZXMiOiIvNndhelRQbnREMHhra0w5RWFGWjduK0s5SEJhem5YaDlKYjcifQ=="),
+		Plaintext:  []byte("Hello World"),
+		Context:    nil,
+	},
+	{
+		Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiYVN0OExGZWE2UUlFNVhhaEpTQ0w0Zz09Iiwibm9uY2UiOiJISjYyYndDcW1vMWVncHoxIiwiYnl0ZXMiOiJ1c291ZjhTb0Z5R1dybStOV0ZUQXFnPT0ifQ=="),
+		Plaintext:  nil,
+		Context:    make([]byte, 32),
+	},
+	{
+		Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2Ijoia3dLalZpcTBHSXpnMWJVcDM3QVNwZz09Iiwibm9uY2UiOiJ3Q0lJZEorcys3NTdGNjZFIiwiYnl0ZXMiOiIwYkZDSEY3NFUwZ29CT2w2d1lTaGE2K3FFV2FtNVZYYllxTW4ifQ=="),
+		Plaintext:  []byte("Hello World"),
+		Context:    make([]byte, 32),
+	},
+}
+
+func TestDecryptKey(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewServer()
+	defer server.Close()
+
+	client := server.Client()
+
+	const KeyName = "my-key"
+	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
+	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
+		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	}
+	for i, test := range decryptKeyTests {
+		plaintext, err := client.Decrypt(ctx, KeyName, test.Ciphertext, test.Context)
+		if test.ShouldFail {
+			if err == nil {
+				t.Fatalf("Test %d: should fail but succeeded", i)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Test %d: failed to decrypt ciphertext: %v", i, err)
+		}
+		if !bytes.Equal(plaintext, test.Plaintext) {
+			t.Fatalf("Test %d: failed to decrypt ciphertext: got '%x' - want '%x'", i, plaintext, test.Plaintext)
+		}
+	}
+}
+
+var decryptAllKeyTests = []struct {
+	Ciphertexts []kes.CCP
+	Plaintexts  []kes.PCP
+	ShouldFail  bool
+}{
+	{ // 0
+		Ciphertexts: []kes.CCP{
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiQkpDU2FRZ1MrMUovZ3ZhcWZNaXJYUT09Iiwibm9uY2UiOiJHZkllRHdSdjByRDBIYncrIiwiYnl0ZXMiOiIvNndhelRQbnREMHhra0w5RWFGWjduK0s5SEJhem5YaDlKYjcifQ==")},
+		},
+		Plaintexts: []kes.PCP{
+			{Plaintext: []byte("Hello World")},
+		},
+	},
+	{ // 1
+		Ciphertexts: []kes.CCP{
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiQkpDU2FRZ1MrMUovZ3ZhcWZNaXJYUT09Iiwibm9uY2UiOiJHZkllRHdSdjByRDBIYncrIiwiYnl0ZXMiOiIvNndhelRQbnREMHhra0w5RWFGWjduK0s5SEJhem5YaDlKYjcifQ==")},
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiR3pFcFI0am1JMWRWTzJsdXZvdG9xQT09Iiwibm9uY2UiOiJCV2c1eE54eU4yck9sLzV3IiwiYnl0ZXMiOiJmVXlycTI1Q3VDeEp4TW5XOXVZSSsrSjVsVzdGbVFtcmZpdEoifQ=="), Context: []byte("Hello World Context")},
+		},
+		Plaintexts: []kes.PCP{
+			{Plaintext: []byte("Hello World")},
+			{Plaintext: []byte("Hello World"), Context: []byte("Hello World Context")},
+		},
+	},
+	{ // 2
+		Ciphertexts: []kes.CCP{
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiQkpDU2FRZ1MrMUovZ3ZhcWZNaXJYUT09Iiwibm9uY2UiOiJHZkllRHdSdjByRDBIYncrIiwiYnl0ZXMiOiIvNndhelRQbnREMHhra0w5RWFGWjduK0s5SEJhem5YaDlKYjcifQ==")},
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiR3pFcFI0am1JMWRWTzJsdXZvdG9xQT09Iiwibm9uY2UiOiJCV2c1eE54eU4yck9sLzV3IiwiYnl0ZXMiOiJmVXlycTI1Q3VDeEp4TW5XOXVZSSsrSjVsVzdGbVFtcmZpdEoifQ=="), Context: []byte("Hello World Context")},
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiRDc5M3VKOEtuUjlrUjBzUm9QNGt5Zz09Iiwibm9uY2UiOiJOQ245dkFqQUhla0QyQW9OIiwiYnl0ZXMiOiJrZGZVRjErMVIvSEFXRkhrU3RjRGdkOHlya3hSUmYvNFV4ZmtPTGxiWjZJM0IxWml3MG0yUjZkM2JZalE3NVZ6In0="), Context: mustDecodeB64("3L+XLd07zRgH+JT/TDGj5Q==")},
+		},
+		Plaintexts: []kes.PCP{
+			{Plaintext: []byte("Hello World")},
+			{Plaintext: []byte("Hello World"), Context: []byte("Hello World Context")},
+			{Plaintext: mustDecodeB64("20p8/WDxkN2ekJWmOpabC48urRMnhfbAUOUB6TvRAN8="), Context: mustDecodeB64("3L+XLd07zRgH+JT/TDGj5Q==")},
+		},
+	},
+
+	{ // 3
+		Ciphertexts: []kes.CCP{
+			{Ciphertext: mustDecodeB64("eyJhZWFkIjoiQUVTLTI1Ni1HQ00tSE1BQy1TSEEtMjU2IiwiaWQiOiI2MmNmMjEzMDY2OTI3MmYzOWY3ZGU2MDU4Y2YzNzEyMyIsIml2IjoiR3pFcFI0am1JMWRWTzJsdXZvdG9xQT09Iiwibm9uY2UiOiJCV2c1eE54eU4yck9sLzV3IiwiYnl0ZXMiOiJmVXlycTI1Q3VDeEp4TW5XOXVZSSsrSjVsVzdGbVFtcmZpdEoifQ==")},
+		},
+		ShouldFail: true, // Wrong context
+	},
+}
+
+func TestDecryptKeyAll(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewServer()
+	defer server.Close()
+
+	client := server.Client()
+
+	const KeyName = "my-key"
+	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
+	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
+		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	}
+
+	for i, test := range decryptAllKeyTests {
+		plaintexts, err := client.DecryptAll(ctx, KeyName, test.Ciphertexts...)
+		if test.ShouldFail {
+			if err == nil {
+				t.Fatalf("Test %d: should fail but succeeded", i)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Test %d: failed to decrypt ciphertexts: %v", i, err)
+		}
+		if len(plaintexts) != len(test.Plaintexts) {
+			t.Fatalf("Test %d: plaintext mismatch: got len '%d' - want len '%d'", i, len(plaintexts), len(test.Plaintexts))
+		}
+		for j := range test.Plaintexts {
+			if !bytes.Equal(plaintexts[j].Plaintext, test.Plaintexts[j].Plaintext) {
+				t.Fatalf("Test %d: %d-nth plaintext mismatch: got '%x' - want '%x'", i, j, plaintexts[j].Plaintext, test.Plaintexts[j].Plaintext)
+			}
+			if !bytes.Equal(plaintexts[j].Context, test.Plaintexts[j].Context) {
+				t.Fatalf("Test %d: %d-nth context mismatch: got '%x' - want '%x'", i, j, plaintexts[j].Context, test.Plaintexts[j].Context)
+			}
+		}
+	}
+}
+
 var setPolicyTests = []struct {
 	Name       string
 	Policy     *kes.Policy
@@ -332,4 +471,12 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func mustDecodeB64(s string) []byte {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

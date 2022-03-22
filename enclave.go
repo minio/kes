@@ -246,6 +246,66 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 	return response.Plaintext, nil
 }
 
+// DecryptAll decrypts all ciphertexts with the named key at the
+// KES server. It either returns all decrypted plaintexts or the
+// first decryption error.
+//
+// DecryptAll returns ErrKeyNotFound if the specified key does not
+// exist. It returns ErrDecrypt if any ciphertext has been modified
+// or a different context value was used.
+func (e *Enclave) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP) ([]PCP, error) {
+	const (
+		APIPath         = "/v1/key/bulk/decrypt"
+		Method          = http.MethodPost
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20
+	)
+	type Request struct {
+		Ciphertext []byte `json:"ciphertext"`
+		Context    []byte `json:"context,omitempty"` // A context is optional
+	}
+	type Response struct {
+		Plaintext []byte `json:"plaintext"`
+	}
+	if len(ciphertexts) == 0 {
+		return []PCP{}, nil
+	}
+	requests := make([]Request, 0, len(ciphertexts))
+	for i := range ciphertexts {
+		requests = append(requests, Request{
+			Ciphertext: ciphertexts[i].Ciphertext,
+			Context:    ciphertexts[i].Context,
+		})
+	}
+
+	body, err := json.Marshal(requests)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	defer resp.Body.Close()
+
+	var responses []Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&responses); err != nil {
+		return nil, err
+	}
+
+	plaintexts := make([]PCP, 0, len(responses))
+	for i, response := range responses {
+		plaintexts = append(plaintexts, PCP{
+			Plaintext: response.Plaintext,
+			Context:   requests[i].Context,
+		})
+	}
+	return plaintexts, nil
+}
+
 // ListKeys lists all names of cryptographic keys that match the given
 // pattern. It returns a KeyIterator that iterates over all matched key
 // names.
