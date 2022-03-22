@@ -413,6 +413,93 @@ func decryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
+func bulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
+	const (
+		Method      = http.MethodPost
+		APIPath     = "/v1/key/bulk/decrypt/"
+		MaxBody     = 1 << 20
+		Timeout     = 15 * time.Second
+		ContentType = "application/json"
+		MaxRequests = 1000 // For now, we limit the number of decryption requests in a single API call to 1000.
+	)
+	type Request struct {
+		Ciphertext []byte `json:"ciphertext"`
+		Context    []byte `json:"context"` // optional
+	}
+	type Response struct {
+		Plaintext []byte `json:"plaintext"`
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w = audit(w, r, config.AuditLog.Log())
+
+		if r.Method != Method {
+			w.Header().Set("Accept", Method)
+			Error(w, errMethodNotAllowed)
+			return
+		}
+		if err := normalizeURL(r.URL, APIPath); err != nil {
+			Error(w, err)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+
+		enclave, err := lookupEnclave(config.Vault, r)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		if err = enclave.VerifyRequest(r); err != nil {
+			Error(w, err)
+			return
+		}
+
+		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+		if err = validateName(name); err != nil {
+			Error(w, err)
+			return
+		}
+		key, err := enclave.GetKey(r.Context(), name)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		var (
+			requests  []Request
+			responses []Response
+		)
+		if err = json.NewDecoder(r.Body).Decode(&requests); err != nil {
+			Error(w, err)
+			return
+		}
+		if len(requests) > MaxRequests {
+			Error(w, kes.NewError(http.StatusBadRequest, "too many ciphertexts"))
+			return
+		}
+		responses = make([]Response, 0, len(requests))
+		for _, req := range requests {
+			plaintext, err := key.Unwrap(req.Ciphertext, req.Context)
+			if err != nil {
+				Error(w, err)
+				return
+			}
+			responses = append(responses, Response{
+				Plaintext: plaintext,
+			})
+		}
+
+		w.Header().Set("Content-Type", ContentType)
+		json.NewEncoder(w).Encode(responses)
+	}
+	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
+	return API{
+		Method:  Method,
+		Path:    APIPath,
+		MaxBody: MaxBody,
+		Timeout: Timeout,
+	}
+}
+
 func listKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodGet

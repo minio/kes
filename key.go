@@ -5,8 +5,6 @@
 package kes
 
 import (
-	"encoding"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -24,77 +22,29 @@ import (
 // safe to store the DEK's ciphertext representation next
 // to the encrypted data. The ciphertext representation
 // does not need to stay secret.
-//
-// DEK implements binary as well as text marshaling.
-// However, only the ciphertext representation gets
-// encoded. The plaintext should never be stored
-// anywhere.
-// Therefore, after un-marshaling there will be no
-// plaintext representation. To obtain it the
-// ciphertext must be decrypted.
 type DEK struct {
 	Plaintext  []byte
 	Ciphertext []byte
 }
 
-var (
-	_ encoding.BinaryMarshaler   = (*DEK)(nil)
-	_ encoding.TextMarshaler     = (*DEK)(nil)
-	_ encoding.BinaryUnmarshaler = (*DEK)(nil)
-	_ encoding.TextUnmarshaler   = (*DEK)(nil)
-)
-
-// MarshalText encodes the DEK's ciphertext into
-// a base64-encoded text and returns the result.
+// CCP is a structure wrapping a ciphertext / decryption context
+// pair.
 //
-// It never returns an error.
-func (d DEK) MarshalText() ([]byte, error) {
-	ciphertext := make([]byte, base64.StdEncoding.EncodedLen(len(d.Ciphertext)))
-	base64.StdEncoding.Encode(ciphertext, d.Ciphertext)
-	return ciphertext, nil
+// Its main purpose is to group a ciphertext and decryption
+// context to improve API ergonomics.
+type CCP struct {
+	Ciphertext []byte // Ciphertext bytes
+	Context    []byte // Decryption context
 }
 
-// UnmarshalText tries to decode a base64-encoded text
-// and sets DEK's ciphertext to the decoded data.
+// PCP is a structure wrapping a plaintext / encryption context
+// pair.
 //
-// It returns an error if text is not base64-encoded.
-//
-// UnmarshalText sets DEK's plaintext to nil.
-func (d *DEK) UnmarshalText(text []byte) (err error) {
-	n := base64.StdEncoding.DecodedLen(len(text))
-	if len(d.Ciphertext) < n {
-		if cap(d.Ciphertext) >= n {
-			d.Ciphertext = d.Ciphertext[:n]
-		} else {
-			d.Ciphertext = make([]byte, n)
-		}
-	}
-
-	d.Plaintext = nil // Forget any previous plaintext
-	n, err = base64.StdEncoding.Decode(d.Ciphertext, text)
-	d.Ciphertext = d.Ciphertext[:n]
-	return err
-}
-
-// MarshalBinary returns DEK's ciphertext representation.
-// It never returns an error.
-func (d DEK) MarshalBinary() ([]byte, error) { return d.Ciphertext, nil }
-
-// UnmarshalBinary sets DEK's ciphertext to the given data.
-// It never returns an error and DEK's plaintext will be nil.
-func (d *DEK) UnmarshalBinary(data []byte) error {
-	n := len(data)
-	if len(d.Ciphertext) < n {
-		if cap(d.Ciphertext) >= n {
-			d.Ciphertext = d.Ciphertext[:n]
-		} else {
-			d.Ciphertext = make([]byte, n)
-		}
-	}
-
-	d.Plaintext = nil // Forget any previous plaintext
-	copy(d.Ciphertext, data)
-	return nil
+// Its main purpose is to group a plaintext and encryption
+// context to improve API ergonomics.
+type PCP struct {
+	Plaintext []byte
+	Context   []byte
 }
 
 // KeyInfo describes a cryptographic key at a KES server.
