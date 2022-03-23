@@ -119,21 +119,26 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version(ctx context.Context) (string, error) {
+	const (
+		APIPath        = "/version"
+		Method         = http.MethodGet
+		StatusOK       = http.StatusOK
+		MaxResponeSize = 1024 // 1 KB
+	)
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/version", nil)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return "", err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != StatusOK {
 		return "", parseErrorResponse(resp)
 	}
 
 	type Response struct {
 		Version string `json:"version"`
 	}
-	const limit = 1 << 20
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+	if err = json.NewDecoder(limitBody(resp, MaxResponeSize)).Decode(&response); err != nil {
 		return "", err
 	}
 	return response.Version, nil
@@ -141,12 +146,18 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 
 // Status returns the current state of the KES server.
 func (c *Client) Status(ctx context.Context) (State, error) {
+	const (
+		APIPath         = "/v1/status"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MB
+	)
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/status", nil)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return State{}, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != StatusOK {
 		return State{}, parseErrorResponse(resp)
 	}
 
@@ -154,12 +165,56 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		Version string        `json:"version"`
 		UpTime  time.Duration `json:"uptime"`
 	}
-	const limit = 1 << 20
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+	if err = json.NewDecoder(limitBody(resp, MaxResponseSize)).Decode(&response); err != nil {
 		return State{}, err
 	}
 	return State(response), nil
+}
+
+// APIs returns a list of all API endpoints supported
+// by the KES server.
+//
+// It returns ErrNotAllowed if the client does not
+// have sufficient permissions to fetch the server
+// APIs.
+func (c *Client) APIs(ctx context.Context) ([]API, error) {
+	const (
+		APIPath         = "/v1/api"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MB
+	)
+	client := retry(c.HTTPClient)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	type Response struct {
+		Method  string `json:"method"`
+		Path    string `json:"path"`
+		MaxBody int64  `json:"max_body"`
+		Timeout int64  `json:"timeout"` // Timeout in seconds
+	}
+	var responses []Response
+	if err = json.NewDecoder(limitBody(resp, MaxResponseSize)).Decode(&responses); err != nil {
+		return nil, err
+	}
+
+	apis := make([]API, 0, len(responses))
+	for _, response := range responses {
+		apis = append(apis, API{
+			Method:  response.Method,
+			Path:    response.Path,
+			MaxBody: response.MaxBody,
+			Timeout: time.Second * time.Duration(response.Timeout),
+		})
+	}
+	return apis, nil
 }
 
 // CreateKey creates a new cryptographic key. The key will
@@ -398,12 +453,17 @@ func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityI
 // have sufficient permissions to subscribe to the
 // audit log.
 func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
+	const (
+		APIPath  = "/v1/log/audit"
+		Method   = http.MethodGet
+		StatusOK = http.StatusOK
+	)
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/audit", nil)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 	return NewAuditStream(resp.Body), nil
@@ -417,12 +477,17 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 // have sufficient permissions to subscribe to the
 // error log.
 func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
+	const (
+		APIPath  = "/v1/log/error"
+		Method   = http.MethodGet
+		StatusOK = http.StatusOK
+	)
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/log/error", nil)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 	return NewErrorStream(resp.Body), nil
@@ -433,12 +498,18 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 // It returns ErrNotAllowed if the client does not
 // have sufficient permissions to fetch server metrics.
 func (c *Client) Metrics(ctx context.Context) (Metric, error) {
+	const (
+		APIPath        = "/v1/metrics"
+		Method         = http.MethodGet
+		StatusOK       = http.StatusOK
+		MaxResponeSize = 1 << 20 // 1 MB
+	)
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, http.MethodGet, c.Endpoints, "/v1/metrics", nil)
+	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return Metric{}, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != StatusOK {
 		return Metric{}, parseErrorResponse(resp)
 	}
 	defer resp.Body.Close()
@@ -458,7 +529,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		metric       Metric
 		metricFamily dto.MetricFamily
 	)
-	decoder := expfmt.NewDecoder(resp.Body, expfmt.ResponseFormat(resp.Header))
+	decoder := expfmt.NewDecoder(limitBody(resp, MaxResponeSize), expfmt.ResponseFormat(resp.Header))
 	for {
 		err := decoder.Decode(&metricFamily)
 		if err == io.EOF {
@@ -527,4 +598,16 @@ func endpoint(endpoint string, elems ...string) string {
 		endpoint += "/"
 	}
 	return endpoint + path.Join(elems...)
+}
+
+// limitBody returns the response body limited to at most
+// maxLen bytes. If the response content length is smaller
+// then maxLen, the returned io.Reader may return less than
+// maxLen bytes.
+func limitBody(r *http.Response, maxLen int64) io.Reader {
+	size := r.ContentLength
+	if size < 0 || size > maxLen {
+		size = maxLen
+	}
+	return io.LimitReader(r.Body, size)
 }
