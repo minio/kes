@@ -141,6 +141,12 @@ func listAPIs(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
+	type Response struct {
+		Method  string `json:"method"`
+		Path    string `json:"path"`
+		MaxBody int64  `json:"max_body"`
+		Timeout int64  `json:"timeout"` // Timeout in seconds
+	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -163,8 +169,17 @@ func listAPIs(mux *http.ServeMux, config *ServerConfig) API {
 			return
 		}
 
+		responses := make([]Response, 0, len(config.APIs))
+		for _, api := range config.APIs {
+			responses = append(responses, Response{
+				Method:  api.Method,
+				Path:    api.Path,
+				MaxBody: api.MaxBody,
+				Timeout: int64(api.Timeout.Truncate(time.Second).Seconds()),
+			})
+		}
 		w.Header().Set("Content-Type", ContentType)
-		json.NewEncoder(w).Encode(config.APIs)
+		json.NewEncoder(w).Encode(responses)
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
