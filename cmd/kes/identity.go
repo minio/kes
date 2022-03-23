@@ -40,7 +40,7 @@ const identityCmdUsage = `Usage:
     kes identity <command>
 
 Commands:
-	new                      Create a new KES identity
+    new                      Create a new KES identity
     of                       Compute a KES identity
     ls                       List KES identities
     rm                       Remove a KES identity
