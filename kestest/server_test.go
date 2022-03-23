@@ -10,14 +10,82 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/kestest"
 )
+
+var serverAPIs = []kes.API{
+	{Method: http.MethodGet, Path: "/version", MaxBody: 0, Timeout: 15 * time.Second},    // 0
+	{Method: http.MethodGet, Path: "/v1/status", MaxBody: 0, Timeout: 15 * time.Second},  // 1
+	{Method: http.MethodGet, Path: "/v1/metrics", MaxBody: 0, Timeout: 15 * time.Second}, // 2
+	{Method: http.MethodGet, Path: "/v1/api", MaxBody: 0, Timeout: 15 * time.Second},     // 3
+
+	{Method: http.MethodPost, Path: "/v1/key/create/", MaxBody: 0, Timeout: 15 * time.Second},             // 4
+	{Method: http.MethodPost, Path: "/v1/key/import/", MaxBody: 1 << 20, Timeout: 15 * time.Second},       // 5
+	{Method: http.MethodDelete, Path: "/v1/key/delete/", MaxBody: 0, Timeout: 15 * time.Second},           // 6
+	{Method: http.MethodPost, Path: "/v1/key/generate/", MaxBody: 1 << 20, Timeout: 15 * time.Second},     // 7
+	{Method: http.MethodPost, Path: "/v1/key/encrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second},      // 8
+	{Method: http.MethodPost, Path: "/v1/key/decrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second},      // 9
+	{Method: http.MethodPost, Path: "/v1/key/bulk/decrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 10
+	{Method: http.MethodGet, Path: "/v1/key/list/", MaxBody: 0, Timeout: 15 * time.Second},                // 11
+
+	{Method: http.MethodGet, Path: "/v1/policy/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 12
+	{Method: http.MethodPost, Path: "/v1/policy/assign/", MaxBody: 1024, Timeout: 15 * time.Second},   // 13
+	{Method: http.MethodGet, Path: "/v1/policy/read/", MaxBody: 0, Timeout: 15 * time.Second},         // 14
+	{Method: http.MethodPost, Path: "/v1/policy/write/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 15
+	{Method: http.MethodGet, Path: "/v1/policy/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 16
+	{Method: http.MethodDelete, Path: "/v1/policy/delete/", MaxBody: 0, Timeout: 15 * time.Second},    // 17
+
+	{Method: http.MethodGet, Path: "/v1/identity/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 18
+	{Method: http.MethodGet, Path: "/v1/identity/self/describe", MaxBody: 0, Timeout: 15 * time.Second}, // 19
+	{Method: http.MethodGet, Path: "/v1/identity/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 20
+	{Method: http.MethodDelete, Path: "/v1/identity/delete/", MaxBody: 0, Timeout: 15 * time.Second},    // 21
+
+	{Method: http.MethodGet, Path: "/v1/log/error", MaxBody: 0, Timeout: 0}, // 22
+	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 23
+
+	{Method: http.MethodPost, Path: "/v1/enclave/create/", MaxBody: 0, Timeout: 15 * time.Second},   // 24
+	{Method: http.MethodDelete, Path: "/v1/enclave/delete/", MaxBody: 0, Timeout: 15 * time.Second}, // 25
+}
+
+func TestAPIs(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewServer()
+	defer server.Close()
+
+	client := server.Client()
+
+	apis, err := client.APIs(ctx)
+	if err != nil {
+		t.Fatalf("Failed fetch server APIs: %v", err)
+	}
+	if len(apis) != len(serverAPIs) {
+		t.Fatalf("API mismatch: got len '%d' - want len '%d'", len(apis), len(serverAPIs))
+	}
+	for i := range apis {
+		if apis[i].Method != serverAPIs[i].Method {
+			t.Fatalf("API %d: method mismatch: got '%s' - want '%s'", i, apis[i].Method, serverAPIs[i].Method)
+		}
+		if apis[i].Path != serverAPIs[i].Path {
+			t.Fatalf("API %d: path mismatch: got '%s' - want '%s'", i, apis[i].Path, serverAPIs[i].Path)
+		}
+		if apis[i].MaxBody != serverAPIs[i].MaxBody {
+			t.Fatalf("API %d: max body mismatch: got '%d' - want '%d'", i, apis[i].MaxBody, serverAPIs[i].MaxBody)
+		}
+		if apis[i].Timeout != serverAPIs[i].Timeout {
+			t.Fatalf("API %d: timeout mismatch: got '%v' - want '%v'", i, apis[i].Timeout, serverAPIs[i].Timeout)
+		}
+	}
+}
 
 var createKeyTests = []struct {
 	Name       string

@@ -67,7 +67,7 @@ func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
 
 func deleteEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	const (
-		Method  = http.MethodPost
+		Method  = http.MethodDelete
 		APIPath = "/v1/enclave/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
