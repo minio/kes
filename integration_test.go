@@ -459,9 +459,6 @@ func TestAssignPolicy(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
 	}
-	if *Endpoint == "https://play.min.io:7373" {
-		t.SkipNow() // TODO: enable CI/CD check once it supports the new /v1/policy/assign API.
-	}
 
 	client, err := newClient()
 	if err != nil {
@@ -483,9 +480,6 @@ func TestAssignPolicy(t *testing.T) {
 func TestDeleteIdentity(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
-	}
-	if *Endpoint == "https://play.min.io:7373" {
-		t.SkipNow() // TODO: enable CI/CD check once it supports the new /v1/identity/delete API.
 	}
 
 	client, err := newClient()

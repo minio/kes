@@ -17,7 +17,7 @@ import (
 
 func describePolicy(mux *http.ServeMux, config *ServerConfig) API {
 	const (
-		Method      = http.MethodHead
+		Method      = http.MethodGet
 		APIPath     = "/v1/policy/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
@@ -80,7 +80,7 @@ func assignPolicy(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/policy/assign/"
-		MaxBody = 1 << 20
+		MaxBody = 1024 // 1 KB
 		Timeout = 15 * time.Second
 	)
 	type Request struct {

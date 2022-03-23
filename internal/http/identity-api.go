@@ -162,7 +162,7 @@ func selfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 func deleteIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodDelete
-		APIPath = "/v1/identity/forget/"
+		APIPath = "/v1/identity/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
 	)
