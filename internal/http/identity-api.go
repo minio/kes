@@ -24,7 +24,6 @@ func describeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		ContentType = "application/json"
 	)
 	type Response struct {
-		Identity  kes.Identity `json:"identity"`
 		IsAdmin   bool         `json:"admin,omitempty"`
 		Policy    string       `json:"policy"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
@@ -66,7 +65,7 @@ func describeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		w.Header().Set("Content-Type", ContentType)
 		json.NewEncoder(w).Encode(Response{
-			Identity:  kes.Identity(name),
+			IsAdmin:   info.IsAdmin,
 			Policy:    info.Policy,
 			CreatedAt: info.CreatedAt,
 			CreatedBy: info.CreatedBy,

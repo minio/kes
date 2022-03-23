@@ -477,7 +477,6 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 		MaxResponseSize = 1 << 20 // 1 MiB
 	)
 	type Response struct {
-		Identity  Identity  `json:"identity"`
 		IsAdmin   bool      `json:"admin"`
 		Policy    string    `json:"policy"`
 		CreatedAt time.Time `json:"created_at"`
