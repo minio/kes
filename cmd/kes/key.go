@@ -315,7 +315,7 @@ func encryptKeyCmd(args []string) {
 	}
 
 	if isTerm(os.Stdout) {
-		fmt.Printf("\n  ciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
+		fmt.Printf("\nciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
 	} else {
 		fmt.Printf(`{"ciphertext":"%s"}`, base64.StdEncoding.EncodeToString(ciphertext))
 	}
@@ -382,7 +382,7 @@ func decryptKeyCmd(args []string) {
 	}
 
 	if isTerm(os.Stdout) {
-		fmt.Printf("\n  plaintext: %s\n", base64.StdEncoding.EncodeToString(plaintext))
+		fmt.Printf("\nplaintext: %s\n", base64.StdEncoding.EncodeToString(plaintext))
 	} else {
 		fmt.Printf(`{"plaintext":"%s"}`, base64.StdEncoding.EncodeToString(plaintext))
 	}
@@ -446,10 +446,10 @@ func dekCmd(args []string) {
 		ciphertext = base64.StdEncoding.EncodeToString(key.Ciphertext)
 	)
 	if isTerm(os.Stdout) {
-		const format = "{\n  plaintext : %s\n  ciphertext: %s\n}\n"
+		const format = "\nplaintext:  %s\nciphertext: %s\n"
 		fmt.Printf(format, plaintext, ciphertext)
 	} else {
-		const format = `{"plaintext":"%x","ciphertext":"%x"}`
+		const format = `{"plaintext":"%s","ciphertext":"%s"}`
 		fmt.Printf(format, plaintext, ciphertext)
 	}
 }
