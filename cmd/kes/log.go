@@ -27,7 +27,7 @@ const logCmdUsage = `Usage:
 Options:
     --audit                  Print audit logs. (default)
     --error                  Print error logs.
-	--json                   Print log events as JSON.
+    --json                   Print log events as JSON.
 
     -k, --insecure           Skip TLS certificate validation.
     -h, --help               Print command line options.
