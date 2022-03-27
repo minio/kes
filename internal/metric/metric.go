@@ -7,6 +7,7 @@ package metric
 import (
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -71,6 +72,20 @@ func New() *Metrics {
 			Name:      "up_time",
 			Help:      "The time the server has been up and running in seconds.",
 		}),
+
+		numCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "num_cpu",
+			Help:      "The number of logical CPUs usable by the server.",
+		}),
+
+		numThreads: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "num_threads",
+			Help:      "The number of concurrent co-routines/threads that currently exists.",
+		}),
 	}
 
 	metrics.registry.MustRegister(metrics.requestSucceeded)
@@ -81,6 +96,8 @@ func New() *Metrics {
 	metrics.registry.MustRegister(metrics.errorLogEvents)
 	metrics.registry.MustRegister(metrics.auditLogEvents)
 	metrics.registry.MustRegister(metrics.upTimeInSeconds)
+	metrics.registry.MustRegister(metrics.numCPUs)
+	metrics.registry.MustRegister(metrics.numThreads)
 	return metrics
 }
 
@@ -100,12 +117,16 @@ type Metrics struct {
 
 	startTime       time.Time // Used to compute the up time as upTime = now - startTime
 	upTimeInSeconds prometheus.Gauge
+	numCPUs         prometheus.Gauge
+	numThreads      prometheus.Gauge
 }
 
 // EncodeTo collects all outstanding metrics information
 // about the application and writes it to encoder.
 func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 	m.upTimeInSeconds.Set(time.Since(m.startTime).Truncate(10 * time.Millisecond).Seconds())
+	m.numCPUs.Set(float64(runtime.NumCPU()))
+	m.numThreads.Set(float64(runtime.NumGoroutine()))
 
 	metrics, err := m.registry.Gather()
 	if err != nil {

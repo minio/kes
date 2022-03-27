@@ -523,6 +523,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		MetricErrorEvents   = "kes_log_error_events"
 		MetricResponseTime  = "kes_http_response_time"
 		MetricSystemUpTme   = "kes_system_up_time"
+		MetricSystemCPUs    = "kes_system_num_cpu"
+		MetricSystemThreads = "kes_system_num_threads"
 	)
 
 	var (
@@ -573,6 +575,10 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
 		case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
 			metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
+		case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
+			metric.CPUs = int(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
+			metric.Threads = int(rawMetric.GetGauge().GetValue())
 		}
 	}
 	return metric, nil

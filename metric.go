@@ -41,6 +41,14 @@ type Metric struct {
 	LatencyHistogram map[time.Duration]uint64 `json:"kes_http_response_time"`
 
 	UpTime time.Duration `json:"kes_system_up_time"` // The time the KES server has been up and running
+
+	// The number of logical CPU cores usable by the server.
+	CPUs int `json:"kes_system_num_cpu"`
+
+	// The number of concurrent co-routines/threads that currently exists.
+	//
+	// It may not correspond to the number of OS threads.
+	Threads int `json:"kes_system_num_threads"`
 }
 
 // RequestN returns the total number of received requests.
