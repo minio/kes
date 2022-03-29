@@ -524,6 +524,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		MetricResponseTime      = "kes_http_response_time"
 		MetricSystemUpTme       = "kes_system_up_time"
 		MetricSystemCPUs        = "kes_system_num_cpu"
+		MetricSystemUsableCPUs  = "kes_system_num_cpu_used"
 		MetricSystemThreads     = "kes_system_num_threads"
 		MetricSystemHeapUsed    = "kes_system_mem_heap_used"
 		MetricSystemHeapObjects = "kes_system_mem_heap_objects"
@@ -580,6 +581,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
 		case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
 			metric.CPUs = int(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricSystemUsableCPUs:
+			metric.UsableCPUs = int(rawMetric.GetGauge().GetValue())
 		case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
 			metric.Threads = int(rawMetric.GetGauge().GetValue())
 		case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
