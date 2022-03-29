@@ -77,7 +77,13 @@ func New() *Metrics {
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_cpu",
-			Help:      "The number of logical CPUs usable by the server.",
+			Help:      "The number of logical CPUs available on the system. It may be larger than the number of usable CPUs.",
+		}),
+		numUsableCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "num_cpu_used",
+			Help:      "The number of logical CPUs usable by the server. It may be smaller than the number of available CPUs.",
 		}),
 		numThreads: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
@@ -115,6 +121,7 @@ func New() *Metrics {
 	metrics.registry.MustRegister(metrics.auditLogEvents)
 	metrics.registry.MustRegister(metrics.upTimeInSeconds)
 	metrics.registry.MustRegister(metrics.numCPUs)
+	metrics.registry.MustRegister(metrics.numUsableCPUs)
 	metrics.registry.MustRegister(metrics.numThreads)
 	metrics.registry.MustRegister(metrics.memHeapUsed)
 	metrics.registry.MustRegister(metrics.memHeapObjects)
@@ -140,6 +147,7 @@ type Metrics struct {
 	startTime       time.Time // Used to compute the up time as upTime = now - startTime
 	upTimeInSeconds prometheus.Gauge
 	numCPUs         prometheus.Gauge
+	numUsableCPUs   prometheus.Gauge
 	numThreads      prometheus.Gauge
 
 	memHeapUsed    prometheus.Gauge
@@ -155,6 +163,7 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 
 	m.upTimeInSeconds.Set(time.Since(m.startTime).Truncate(10 * time.Millisecond).Seconds())
 	m.numCPUs.Set(float64(runtime.NumCPU()))
+	m.numUsableCPUs.Set(float64(runtime.GOMAXPROCS(0)))
 	m.numThreads.Set(float64(runtime.NumGoroutine()))
 	m.memHeapUsed.Set(float64(memStats.HeapAlloc))
 	m.memHeapObjects.Set(float64(memStats.HeapObjects))

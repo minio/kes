@@ -42,8 +42,22 @@ type Metric struct {
 
 	UpTime time.Duration `json:"kes_system_up_time"` // The time the KES server has been up and running
 
-	// The number of logical CPU cores usable by the server.
+	// The number of logical CPU cores available on the system.
+	//
+	// The number of available CPU cores may be larger than
+	// the number of cores usable by the server.
+	//
+	// If CPUs == UsableCPUs then the server can use the entire
+	// computing power available on the system.
 	CPUs int `json:"kes_system_num_cpu"`
+
+	// The number of logical CPU cores usable by the server.
+	//
+	// The number of usable CPU cores may be smaller than
+	// the number of available CPUs on the system. For
+	// instance, a set of CPU cores may be reserved for
+	// other tasks.
+	UsableCPUs int `json:"kes_system_num_cpu_used"`
 
 	// The number of concurrent co-routines/threads that currently exists.
 	//
