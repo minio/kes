@@ -79,12 +79,30 @@ func New() *Metrics {
 			Name:      "num_cpu",
 			Help:      "The number of logical CPUs usable by the server.",
 		}),
-
 		numThreads: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_threads",
 			Help:      "The number of concurrent co-routines/threads that currently exists.",
+		}),
+
+		memHeapUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "mem_heap_used",
+			Help:      "The number of bytes that are currently allocated on the heap memory.",
+		}),
+		memHeapObjects: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "mem_heap_objects",
+			Help:      "The number of objects that are currently allocated on the heap memory.",
+		}),
+		memStackUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "kes",
+			Subsystem: "system",
+			Name:      "mem_stack_used",
+			Help:      "The bytes of stack memory obtained from the OS.",
 		}),
 	}
 
@@ -98,6 +116,10 @@ func New() *Metrics {
 	metrics.registry.MustRegister(metrics.upTimeInSeconds)
 	metrics.registry.MustRegister(metrics.numCPUs)
 	metrics.registry.MustRegister(metrics.numThreads)
+	metrics.registry.MustRegister(metrics.memHeapUsed)
+	metrics.registry.MustRegister(metrics.memHeapObjects)
+	metrics.registry.MustRegister(metrics.memStackUsed)
+
 	return metrics
 }
 
@@ -119,14 +141,24 @@ type Metrics struct {
 	upTimeInSeconds prometheus.Gauge
 	numCPUs         prometheus.Gauge
 	numThreads      prometheus.Gauge
+
+	memHeapUsed    prometheus.Gauge
+	memHeapObjects prometheus.Gauge
+	memStackUsed   prometheus.Gauge
 }
 
 // EncodeTo collects all outstanding metrics information
 // about the application and writes it to encoder.
 func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
 	m.upTimeInSeconds.Set(time.Since(m.startTime).Truncate(10 * time.Millisecond).Seconds())
 	m.numCPUs.Set(float64(runtime.NumCPU()))
 	m.numThreads.Set(float64(runtime.NumGoroutine()))
+	m.memHeapUsed.Set(float64(memStats.HeapAlloc))
+	m.memHeapObjects.Set(float64(memStats.HeapObjects))
+	m.memStackUsed.Set(float64(memStats.StackSys))
 
 	metrics, err := m.registry.Gather()
 	if err != nil {

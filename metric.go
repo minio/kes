@@ -49,6 +49,24 @@ type Metric struct {
 	//
 	// It may not correspond to the number of OS threads.
 	Threads int `json:"kes_system_num_threads"`
+
+	// HeapAlloc is the number of bytes currently allocated on the heap memory.
+	//
+	// It increases as the server allocates objects living on the heap and
+	// decreases as allocated objects get freed.
+	HeapAlloc uint64 `json:"kes_system_mem_heap_used"`
+
+	// HeapObjects is the number of currently allocated objects on th heap memory.
+	//
+	// Similar to HeapAlloc, it increases as objects are allocated and decreases
+	// as they get freed.
+	HeapObjects uint64 `json:"kes_system_mem_heap_objects"`
+
+	// StackAlloc is the number of bytes currently used on the OS stack memory.
+	//
+	// It increases as the server starts more co-routines / threads, invokes
+	// functions, etc. and decreases as spawned co-routines / threads terminate.
+	StackAlloc uint64 `json:"kes_system_mem_stack_used"`
 }
 
 // RequestN returns the total number of received requests.

@@ -515,16 +515,19 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 	defer resp.Body.Close()
 
 	const (
-		MetricRequestOK     = "kes_http_request_success"
-		MetricRequestErr    = "kes_http_request_error"
-		MetricRequestFail   = "kes_http_request_failure"
-		MetricRequestActive = "kes_http_request_active"
-		MetricAuditEvents   = "kes_log_audit_events"
-		MetricErrorEvents   = "kes_log_error_events"
-		MetricResponseTime  = "kes_http_response_time"
-		MetricSystemUpTme   = "kes_system_up_time"
-		MetricSystemCPUs    = "kes_system_num_cpu"
-		MetricSystemThreads = "kes_system_num_threads"
+		MetricRequestOK         = "kes_http_request_success"
+		MetricRequestErr        = "kes_http_request_error"
+		MetricRequestFail       = "kes_http_request_failure"
+		MetricRequestActive     = "kes_http_request_active"
+		MetricAuditEvents       = "kes_log_audit_events"
+		MetricErrorEvents       = "kes_log_error_events"
+		MetricResponseTime      = "kes_http_response_time"
+		MetricSystemUpTme       = "kes_system_up_time"
+		MetricSystemCPUs        = "kes_system_num_cpu"
+		MetricSystemThreads     = "kes_system_num_threads"
+		MetricSystemHeapUsed    = "kes_system_mem_heap_used"
+		MetricSystemHeapObjects = "kes_system_mem_heap_objects"
+		MetricSystemStackUsed   = "kes_system_mem_stack_used"
 	)
 
 	var (
@@ -579,6 +582,12 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			metric.CPUs = int(rawMetric.GetGauge().GetValue())
 		case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
 			metric.Threads = int(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
+			metric.HeapAlloc = uint64(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricSystemHeapObjects:
+			metric.HeapObjects = uint64(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_GAUGE && name == MetricSystemStackUsed:
+			metric.StackAlloc = uint64(rawMetric.GetGauge().GetValue())
 		}
 	}
 	return metric, nil
