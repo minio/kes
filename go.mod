@@ -14,7 +14,7 @@ require (
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hashicorp/vault/api v1.1.1
 	github.com/minio/selfupdate v0.4.0
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.30.0
 	github.com/secure-io/sio-go v0.3.1
