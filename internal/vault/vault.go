@@ -132,6 +132,21 @@ var (
 // Status returns the current state of the Hashicorp Vault instance.
 // In particular, whether it is reachable and the network latency.
 func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
+	if s.client == nil {
+		return key.StoreState{State: key.StoreUnreachable}, nil
+	}
+
+	// This is a workaround for https://github.com/hashicorp/vault/issues/14934
+	// The Vault SDK should not set the X-Vault-Namespace header
+	// for root-only API paths.
+	// Otherwise, Vault may respond with: 404 - unsupported path
+	client, err := s.client.Clone()
+	if err != nil {
+		s.logf("vault: failed to fetch health status information: %v", err)
+		return key.StoreState{State: key.StoreUnreachable}, nil
+	}
+	client.ClearNamespace()
+
 	state, err := key.DialStore(ctx, s.config.Endpoint)
 	if err != nil {
 		return key.StoreState{}, err
@@ -142,20 +157,8 @@ func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
 
 	// Vault is reachable over the network. Now, we fetch Vault health
 	// information to check whether it can serve requests.
-	// We use a custom version of the Client.Sys().Health() SDK function
-	// since we cannot pass our context.
 
-	req := s.client.NewRequest(http.MethodGet, "/v1/sys/health")
-	// If the code is 400 or above it will automatically turn into an error,
-	// but the sys/health API defaults to returning 5xx when not sealed or
-	// initialized, so we force this code to be something else so we parse correctly
-	req.Params.Add("uninitcode", "299")
-	req.Params.Add("sealedcode", "299")
-	req.Params.Add("standbycode", "299")
-	req.Params.Add("drsecondarycode", "299")
-	req.Params.Add("performancestandbycode", "299")
-
-	resp, err := s.client.RawRequestWithContext(ctx, req)
+	health, err := client.Sys().HealthWithContext(ctx)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return state, nil
 	}
@@ -163,14 +166,7 @@ func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
 		s.logf("vault: failed to fetch health status information: %v", err)
 		return state, nil
 	}
-	defer resp.Body.Close()
-
-	var response vaultapi.HealthResponse
-	if err = resp.DecodeJSON(&response); err != nil {
-		s.logf("vault: failed to fetch health status information: %v", err)
-		return state, nil
-	}
-	if response.Initialized && !response.Sealed {
+	if health.Initialized && !health.Sealed {
 		state.State = key.StoreAvailable
 	}
 	return state, nil

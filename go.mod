@@ -12,7 +12,7 @@ require (
 	github.com/cheggaaa/pb/v3 v3.0.5
 	github.com/fatih/color v1.13.0
 	github.com/gizak/termui/v3 v3.1.0
-	github.com/hashicorp/vault/api v1.1.1
+	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/selfupdate v0.4.0
 	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
@@ -24,6 +24,6 @@ require (
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	google.golang.org/api v0.31.0
 	google.golang.org/genproto v0.0.0-20200901141002-b3bf27a9dbd1
-	google.golang.org/grpc v1.31.1
+	google.golang.org/grpc v1.41.0
 	gopkg.in/yaml.v2 v2.4.0
 )
