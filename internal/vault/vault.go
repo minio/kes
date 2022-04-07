@@ -291,12 +291,15 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 	if resp != nil && resp.Body != nil {
 		defer resp.Body.Close()
 	}
-	if resp.StatusCode != http.StatusNoContent {
+
+	// Vault returns 204 No Content for K/V v1 and 200 OK for K/V v2.
+	// We have to check both status codes. Ref: https://github.com/minio/kes/issues/224
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		if _, err = vaultapi.ParseSecret(resp.Body); err != nil {
 			s.logf("vault: failed to create %q: %v", location, err)
 			return err
 		}
-		err = fmt.Errorf("expected response %s (%d) but received %s (%d)", resp.Status, resp.StatusCode, http.StatusText(http.StatusNoContent), http.StatusNoContent)
+		err = fmt.Errorf("server responded with: %s (%d)", resp.Status, resp.StatusCode)
 		s.logf("vault: failed to create %q: %v", location, err)
 		return err
 	}
