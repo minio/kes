@@ -332,7 +332,7 @@ func serverCmd(args []string) {
 	const margin = 10 // len("Endpoint: ")
 	quiet := quiet(quietFlag)
 	quiet.Print(blue.Sprint("Endpoint: "))
-	quiet.Println(bold.Sprint(alignEndpoints(margin, interfaceIP4Addrs(), port)))
+	quiet.Println(bold.Sprint(alignEndpoints(margin, listeningOnV4(ip), port)))
 	quiet.Println()
 
 	if r, err := hex.DecodeString(config.Admin.Identity.Value().String()); err == nil && len(r) == sha256.Size {
@@ -481,9 +481,21 @@ func alignEndpoints(leftMargin int, IPs []net.IP, port string) string {
 	return endpoints
 }
 
-// interfaceIP4Addrs returns a list of the system's unicast
-// IPv4 interface addresses.
-func interfaceIP4Addrs() []net.IP {
+// listeningOnV4 returns a list of the system IPv4 interface
+// addresses an TCP/IP listener with the given IP is listening
+// on.
+//
+// In particular, a TCP/IP listener listening on the pseudo
+// address 0.0.0.0 listens on all network interfaces while
+// a listener on a specific IP only listens on the network
+// interface with that IP address.
+func listeningOnV4(ip net.IP) []net.IP {
+	if !ip.IsUnspecified() {
+		return []net.IP{ip}
+	}
+	// We listen on the pseudo-address: 0.0.0.0
+	// The TCP/IP listener is listening on all available
+	// network interfaces.
 	interfaces, err := net.InterfaceAddrs()
 	if err != nil {
 		return []net.IP{}
@@ -522,9 +534,6 @@ func serverAddr(addr string) (ip net.IP, port string) {
 	ip = net.ParseIP(host)
 	if ip == nil {
 		cli.Fatalf("invalid server address: %q", addr)
-	}
-	if ip.IsUnspecified() {
-		ip = net.IPv4(127, 0, 0, 1)
 	}
 	return ip, port
 }
