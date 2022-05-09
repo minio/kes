@@ -337,23 +337,6 @@ var listKeysTests = []struct {
 			{Name: "my-key3"},
 		},
 	},
-	{
-		Keys:    []string{"my-key", "my-key1", "my-key2", "my-key3"},
-		Pattern: "my-key?",
-		Listing: []kes.KeyInfo{
-			{Name: "my-key1"},
-			{Name: "my-key2"},
-			{Name: "my-key3"},
-		},
-	},
-	{
-		Keys:    []string{"my-key_2020-02-12", "my-key_2020-03-01", "my-key_2020-03-27", "my-key_2020-05-01"},
-		Pattern: "my-key_2020-0[1-4]-[0-1][0-9]", // All keys from Jan. to Apr. within the first 20 days of each month.
-		Listing: []kes.KeyInfo{
-			{Name: "my-key_2020-02-12"},
-			{Name: "my-key_2020-03-01"},
-		},
-	},
 }
 
 func TestListKeys(t *testing.T) {

@@ -147,29 +147,27 @@ func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
 	}
 	client.ClearNamespace()
 
-	state, err := key.DialStore(ctx, s.config.Endpoint)
-	if err != nil {
-		return key.StoreState{}, err
-	}
-	if state.State == key.StoreUnreachable {
-		return state, nil
-	}
+	// First, we try to fetch the Vault health information.
+	// Only if this fails we try to dial Vault directly over
+	// a TCP connection. See: https://github.com/minio/kes/issues/230
 
-	// Vault is reachable over the network. Now, we fetch Vault health
-	// information to check whether it can serve requests.
-
+	start := time.Now()
 	health, err := client.Sys().HealthWithContext(ctx)
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil {
+		state := key.StoreState{
+			Latency: time.Since(start),
+			State:   key.StoreReachable,
+		}
+		if health.Initialized && !health.Sealed {
+			state.State = key.StoreAvailable
+		}
 		return state, nil
 	}
-	if err != nil {
+
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		s.logf("vault: failed to fetch health status information: %v", err)
-		return state, nil
 	}
-	if health.Initialized && !health.Sealed {
-		state.State = key.StoreAvailable
-	}
-	return state, nil
+	return key.DialStore(ctx, s.config.Endpoint)
 }
 
 // Create creates the given key-value pair at Vault if and only
