@@ -138,9 +138,17 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
 		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", config.KeyStore.GCP.SecretManager.ProjectID.Value())
 		quiet.Print(msg)
+
+		scopes := make([]string, 0, len(config.KeyStore.GCP.SecretManager.Scopes))
+		for _, scope := range config.KeyStore.GCP.SecretManager.Scopes {
+			if scope.Value() != "" {
+				scopes = append(scopes, scope.Value())
+			}
+		}
 		gcpStore, err := gcp.Connect(context.Background(), &gcp.Config{
 			Endpoint:  config.KeyStore.GCP.SecretManager.Endpoint.Value(),
 			ProjectID: config.KeyStore.GCP.SecretManager.ProjectID.Value(),
+			Scopes:    scopes,
 			Credentials: gcp.Credentials{
 				ClientID: config.KeyStore.GCP.SecretManager.Credentials.ClientID.Value(),
 				Client:   config.KeyStore.GCP.SecretManager.Credentials.Client.Value(),

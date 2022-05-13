@@ -257,6 +257,10 @@ keystore:
       project_id: ""
       # An optional GCP SecretManager endpoint. If not set, defaults to: secretmanager.googleapis.com:443
       endpoint: ""
+      # An optional list of GCP OAuth2 scopes. For a list of GCP scopes refer to: https://developers.google.com/identity/protocols/oauth2/scopes
+      # If not set, the GCP default scopes are used.
+      scopes: 
+      - ""
       # The credentials for your GCP service account. If running inside GCP (app engine) the credentials
       # can be empty and will be fetched from the app engine environment automatically.
       credentials:

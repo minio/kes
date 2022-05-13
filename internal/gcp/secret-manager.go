@@ -77,6 +77,9 @@ func Connect(ctx context.Context, c *Config) (*SecretManager, error) {
 		}
 		options = append(options, option.WithCredentialsJSON(credentialsJSON))
 	}
+	if len(c.Scopes) != 0 {
+		options = append(options, option.WithScopes(c.Scopes...))
+	}
 
 	client, err := secretmanager.NewClient(ctx, options...)
 	if err != nil {
