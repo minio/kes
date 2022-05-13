@@ -129,8 +129,9 @@ type ServerConfig struct {
 
 		GCP struct {
 			SecretManager struct {
-				ProjectID   String `yaml:"project_id"`
-				Endpoint    String `yaml:"endpoint"`
+				ProjectID   String   `yaml:"project_id"`
+				Endpoint    String   `yaml:"endpoint"`
+				Scopes      []String `yaml:"scopes"`
 				Credentials struct {
 					Client   String `yaml:"client_email"`
 					ClientID String `yaml:"client_id"`

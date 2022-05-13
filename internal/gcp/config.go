@@ -72,6 +72,12 @@ type Config struct {
 	// access the SecretManager.
 	Credentials Credentials
 
+	// Scopes are GCP OAuth2 scopes for accessing GCP APIs.
+	// If not set, defaults to the GCP default scopes.
+	//
+	// Ref: https://developers.google.com/identity/protocols/oauth2/scopes
+	Scopes []string
+
 	// ErrorLog is an optional logger for errors
 	// that may occur when interacting with GCP
 	// SecretManager.
@@ -90,11 +96,17 @@ func (c *Config) Clone() *Config {
 
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return &Config{
-		Endpoint:  c.Endpoint,
-		ProjectID: c.ProjectID,
-		ErrorLog:  c.ErrorLog,
+	clone := &Config{
+		Endpoint:    c.Endpoint,
+		ProjectID:   c.ProjectID,
+		Credentials: c.Credentials,
+		ErrorLog:    c.ErrorLog,
 	}
+	if len(c.Scopes) > 0 {
+		clone.Scopes = make([]string, 0, len(c.Scopes))
+		clone.Scopes = append(clone.Scopes, c.Scopes...)
+	}
+	return clone
 }
 
 func (c *Config) setDefaults() {
