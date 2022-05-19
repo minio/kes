@@ -65,7 +65,7 @@ Options:
     -h, --help               Show list of command-line options
 
 Starts a KES server. The server address can be specified in the config file but
-may be overwriten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
+may be overwritten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
 the PORT to 7373.
 
 The client TLS verification can be disabled by setting --auth=off. The server then
