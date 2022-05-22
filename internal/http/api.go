@@ -31,10 +31,6 @@ type API struct {
 // A ServerConfig structure is used to configure a
 // KES server.
 type ServerConfig struct {
-	// Version is the KES server version.
-	// If empty, it defaults to v0.0.0-dev.
-	Version string
-
 	// Certificate is TLS server certificate.
 	Certificate *Certificate
 

@@ -230,7 +230,6 @@ func serverCmd(args []string) {
 	server := http.Server{
 		Addr: config.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
-			Version:  version,
 			Vault:    sys.NewStatelessVault(config.Admin.Identity.Value(), cache, policySet, identitySet),
 			Proxy:    proxy,
 			AuditLog: auditLog,
