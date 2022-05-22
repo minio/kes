@@ -121,7 +121,6 @@ func (s *Server) start() {
 
 	serverCert := issueCertificate("kestest: server", s.caCertificate, s.caPrivateKey, x509.ExtKeyUsageServerAuth)
 	s.server = httptest.NewUnstartedServer(xhttp.NewServerMux(&xhttp.ServerConfig{
-		Version:  "v0.0.0-dev",
 		Vault:    sys.NewStatelessVault(Identify(&adminCert), store, s.policies.policySet(), s.policies.identitySet()),
 		Proxy:    nil,
 		AuditLog: auditLog,

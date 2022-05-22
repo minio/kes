@@ -16,13 +16,10 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/sys"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
-
-// Use e.g.: go build -ldflags "-X main.version=v1.0.0"
-// to set the binary version.
-var version = "0.0.0-dev"
 
 type commands = map[string]func([]string)
 
@@ -89,7 +86,8 @@ func main() {
 		cli.Fatalf("%q is not a kes command. See 'kes --help'", cmd.Arg(1))
 	}
 	if showVersion {
-		fmt.Println("kes version", version)
+		buildInfo := sys.BinaryInfo()
+		fmt.Printf("kes %s (commit=%s)\n", buildInfo.Version, buildInfo.CommitID)
 		return
 	}
 	cmd.Usage()

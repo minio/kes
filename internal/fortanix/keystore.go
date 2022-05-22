@@ -43,7 +43,6 @@ func (k APIKey) String() string { return "Basic " + string(k) }
 // KeyStore is a key store that persists and fetches
 // cryptographic keys from a Fortanix SDKMS.
 type KeyStore struct {
-
 	// Endpoint is the Fortanix SDKMS instance endpoint.
 	Endpoint string
 

@@ -19,6 +19,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kes/internal/sys"
 	"github.com/minio/selfupdate"
 	flag "github.com/spf13/pflag"
 )
@@ -121,6 +122,7 @@ func updateInplace() error {
 		return err
 	}
 
+	version := sys.BinaryInfo().Version
 	current, err := semver.Make(version)
 	if err != nil {
 		return err

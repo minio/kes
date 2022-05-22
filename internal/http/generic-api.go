@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/minio/kes/internal/sys"
 	"github.com/prometheus/common/expfmt"
 )
 
@@ -26,7 +27,7 @@ func version(mux *http.ServeMux, config *ServerConfig) API {
 			return
 		}
 		json.NewEncoder(w).Encode(Response{
-			Version: config.Version,
+			Version: sys.BinaryInfo().Version,
 		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
@@ -75,7 +76,7 @@ func status(mux *http.ServeMux, config *ServerConfig) API {
 
 		w.Header().Set("Content-Type", ContentType)
 		json.NewEncoder(w).Encode(Response{
-			Version: config.Version,
+			Version: sys.BinaryInfo().Version,
 			UpTime:  time.Since(startTime).Round(time.Second),
 		})
 	}
