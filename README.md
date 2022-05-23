@@ -40,7 +40,7 @@ docker pull minio/kes
 GO111MODULE=on go get github.com/minio/kes/cmd/kes
 ```
 > You will need a working Go environment. Therefore, please follow [How to install Go](https://golang.org/doc/install).
-> Minimum version required is go1.14
+> Minimum version required is go1.18
 
 </details>
    
