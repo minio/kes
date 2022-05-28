@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // ReadServerConfig reads file named by filename and returns

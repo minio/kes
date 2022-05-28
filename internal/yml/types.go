@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Identity is a KES identity. It supports YAML
@@ -41,9 +41,9 @@ func (i Identity) MarshalYAML() (interface{}, error) { return i.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the Identity.
-func (i *Identity) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (i *Identity) UnmarshalYAML(node *yaml.Node) error {
 	var raw string
-	if err := unmarshal(&raw); err != nil {
+	if err := node.Decode(&raw); err != nil {
 		return err
 	}
 	i.raw, i.value = raw, kes.Identity(replace(raw, os.Getenv))
@@ -81,9 +81,9 @@ func (s String) MarshalYAML() (interface{}, error) { return s.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the String.
-func (s *String) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (s *String) UnmarshalYAML(node *yaml.Node) error {
 	var raw string
-	if err := unmarshal(&raw); err != nil {
+	if err := node.Decode(&raw); err != nil {
 		return err
 	}
 	s.raw, s.value = raw, replace(raw, os.Getenv)
@@ -119,9 +119,9 @@ func (d Duration) MarshalYAML() (interface{}, error) { return d.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the Duration.
-func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	var raw string
-	if err := unmarshal(&raw); err != nil {
+	if err := node.Decode(&raw); err != nil {
 		return err
 	}
 	value, err := time.ParseDuration(replace(raw, os.Getenv))
