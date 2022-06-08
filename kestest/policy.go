@@ -175,6 +175,10 @@ type identitySet struct {
 
 func (i *identitySet) Admin(ctx context.Context) (kes.Identity, error) { return i.admin, nil }
 
+func (i *identitySet) SetAdmin(context.Context, kes.Identity) error {
+	return kes.NewError(http.StatusNotImplemented, "cannot set admin identity")
+}
+
 func (i *identitySet) Assign(_ context.Context, policy string, identity kes.Identity) error {
 	if i.admin == identity {
 		return kes.NewError(http.StatusBadRequest, "identity is root")

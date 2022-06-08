@@ -13,6 +13,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var ( // compiler checks
+	_ yaml.Marshaler   = Identity{}
+	_ yaml.Unmarshaler = (*Identity)(nil)
+
+	_ yaml.Marshaler   = String{}
+	_ yaml.Unmarshaler = (*String)(nil)
+
+	_ yaml.Marshaler   = Duration{}
+	_ yaml.Unmarshaler = (*Duration)(nil)
+
+	_ yaml.Marshaler   = Bool{}
+	_ yaml.Unmarshaler = (*Bool)(nil)
+)
+
 // Identity is a KES identity. It supports YAML
 // serialization and deserialization.
 //
@@ -28,16 +42,14 @@ type Identity struct {
 	value kes.Identity
 }
 
-var ( // compiler check
-	_ yaml.Marshaler   = Identity{}
-	_ yaml.Unmarshaler = (*Identity)(nil)
-)
-
 // Value returns the KES identity.
 func (i *Identity) Value() kes.Identity { return i.value }
 
+// Set sets the Identity value.
+func (i *Identity) Set(value kes.Identity) { i.value = value }
+
 // MarshalYAML returns the Identity's YAML representation.
-func (i Identity) MarshalYAML() (interface{}, error) { return i.raw, nil }
+func (i Identity) MarshalYAML() (any, error) { return i.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the Identity.
@@ -46,7 +58,7 @@ func (i *Identity) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&raw); err != nil {
 		return err
 	}
-	i.raw, i.value = raw, kes.Identity(replace(raw, os.Getenv))
+	i.raw, i.value = raw, kes.Identity(replace(raw))
 	return nil
 }
 
@@ -65,19 +77,14 @@ type String struct {
 	value string
 }
 
-var ( // compiler check
-	_ yaml.Marshaler   = String{}
-	_ yaml.Unmarshaler = (*String)(nil)
-)
-
 // Value returns the plain string value.
 func (s *String) Value() string { return s.value }
 
-// Set sets the String value to v.
-func (s *String) Set(v string) { s.value = v }
+// Set sets the String value.
+func (s *String) Set(value string) { s.value = value }
 
 // MarshalYAML returns the String's YAML representation.
-func (s String) MarshalYAML() (interface{}, error) { return s.raw, nil }
+func (s String) MarshalYAML() (any, error) { return s.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the String.
@@ -86,7 +93,7 @@ func (s *String) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&raw); err != nil {
 		return err
 	}
-	s.raw, s.value = raw, replace(raw, os.Getenv)
+	s.raw, s.value = raw, replace(raw)
 	return nil
 }
 
@@ -106,16 +113,14 @@ type Duration struct {
 	value time.Duration
 }
 
-var ( // compiler check
-	_ yaml.Marshaler   = Duration{}
-	_ yaml.Unmarshaler = (*Duration)(nil)
-)
-
 // Value returns the time duration value.
 func (d *Duration) Value() time.Duration { return d.value }
 
+// Set sets the Duration value.
+func (d *Duration) Set(value time.Duration) { d.value = value }
+
 // MarshalYAML returns the Duration's YAML representation.
-func (d Duration) MarshalYAML() (interface{}, error) { return d.raw, nil }
+func (d Duration) MarshalYAML() (any, error) { return d.raw, nil }
 
 // UnmarshalYAML uses the unmarhsal function to unmarshal
 // a YAML block into the Duration.
@@ -124,7 +129,7 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&raw); err != nil {
 		return err
 	}
-	value, err := time.ParseDuration(replace(raw, os.Getenv))
+	value, err := time.ParseDuration(replace(raw))
 	if err != nil {
 		return &yaml.TypeError{Errors: []string{err.Error()}}
 	}
@@ -132,9 +137,52 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-func replace(s string, mapping func(string) string) string {
+// Bool is a YAML bool. It supports YAML
+// serialization and deserialization.
+//
+// During deserialization it replaces env. variable
+// references with the corresponding values from
+// the environment.
+//
+// However, it preserves the YAML representation
+// and does not serialize any value from the
+// environment.
+type Bool struct {
+	raw   string
+	value bool
+}
+
+// Value returns the boolean value, either true or false.
+func (b *Bool) Value() bool { return b.value }
+
+// Set sets the boolean value.
+func (b *Bool) Set(value bool) { b.value = value }
+
+// MarshalYAML returns the Bool's YAML representation.
+func (b Bool) MarshalYAML() (any, error) { return b.raw, nil }
+
+// UnmarshalYAML uses the unmarhsal function to unmarshal
+// a YAML block into the Bool.
+func (b *Bool) UnmarshalYAML(node *yaml.Node) error {
+	var raw string
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(replace(raw))) {
+	case "on", "true":
+		b.raw, b.value = raw, true
+		return nil
+	case "off", "false", "":
+		b.raw, b.value = raw, false
+		return nil
+	default:
+		return &yaml.TypeError{Errors: []string{"invalid value for bool"}}
+	}
+}
+
+func replace(s string) string {
 	if t := strings.TrimSpace(s); strings.HasPrefix(t, "${") && strings.HasSuffix(t, "}") {
-		s = os.Expand(t, mapping)
+		s = os.ExpandEnv(t)
 	}
 	return s
 }

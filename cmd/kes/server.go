@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -33,6 +34,7 @@ import (
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
+	"github.com/minio/kes/internal/sys/fs"
 	"github.com/minio/kes/internal/yml"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
@@ -76,6 +78,16 @@ Examples:
     $ kes server --config config.yml --auth =off
 `
 
+type serverConfig struct {
+	Address        string
+	ConfigPath     string
+	UseMLock       bool
+	TLSPrivateKey  string
+	TLSCertificate string
+	TLSAuth        string
+	Quiet          bool
+}
+
 func serverCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, serverCmdUsage) }
@@ -103,13 +115,30 @@ func serverCmd(args []string) {
 		cli.Fatalf("%v. See 'kes server --help'", err)
 	}
 
-	if cmd.NArg() > 0 {
+	if cmd.NArg() > 1 {
 		cli.Fatal("too many arguments. See 'kes server --help'")
 	}
+	config := serverConfig{
+		Address:        addrFlag,
+		ConfigPath:     configFlag,
+		UseMLock:       mlockFlag,
+		TLSPrivateKey:  tlsKeyFlag,
+		TLSCertificate: tlsCertFlag,
+		TLSAuth:        mtlsAuthFlag,
+		Quiet:          quietFlag,
+	}
+	if cmd.NArg() == 0 {
+		statelessServer(config)
+	} else {
+		statefullServer(cmd.Arg(0), config)
+	}
+}
+
+func statelessServer(serverConfig serverConfig) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelCtx()
 
-	if mlockFlag {
+	if serverConfig.UseMLock {
 		if runtime.GOOS != "linux" {
 			cli.Fatal("cannot lock memory: syscall requires a linux system")
 		}
@@ -118,18 +147,18 @@ func serverCmd(args []string) {
 		}
 	}
 
-	config, err := yml.ReadServerConfig(configFlag)
+	config, err := yml.ReadServerConfig(serverConfig.ConfigPath)
 	if err != nil {
 		cli.Fatalf("failed to read config file: %v", err)
 	}
 	if config.Address.Value() == "" {
-		config.Address.Set(addrFlag)
+		config.Address.Set(serverConfig.Address)
 	}
 	if config.TLS.PrivateKey.Value() == "" {
-		config.TLS.PrivateKey.Set(tlsKeyFlag)
+		config.TLS.PrivateKey.Set(serverConfig.TLSPrivateKey)
 	}
 	if config.TLS.Certificate.Value() == "" {
-		config.TLS.Certificate.Set(tlsCertFlag)
+		config.TLS.Certificate.Set(serverConfig.TLSCertificate)
 	}
 	if config.Admin.Identity.Value().IsUnknown() {
 		cli.Fatal("no admin identity specified")
@@ -171,7 +200,7 @@ func serverCmd(args []string) {
 		proxy = &auth.TLSProxy{
 			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert.Value()),
 		}
-		if strings.ToLower(mtlsAuthFlag) != "off" {
+		if strings.ToLower(serverConfig.TLSAuth) != "off" {
 			proxy.VerifyOptions = new(x509.VerifyOptions)
 		}
 		for _, identity := range config.TLS.Proxy.Identities {
@@ -189,7 +218,7 @@ func serverCmd(args []string) {
 	if err != nil {
 		cli.Fatal(err)
 	}
-	store, err := connect(config, quiet(quietFlag), errorLog.Log())
+	store, err := connect(config, quiet(serverConfig.Quiet), errorLog.Log())
 	if err != nil {
 		cli.Fatal(err)
 	}
@@ -249,13 +278,13 @@ func serverCmd(args []string) {
 		IdleTimeout:       90 * time.Second,
 	}
 
-	switch strings.ToLower(mtlsAuthFlag) {
+	switch strings.ToLower(serverConfig.TLSAuth) {
 	case "on":
 		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	case "off":
 		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
 	default:
-		cli.Fatalf("invalid option for --auth: %q", mtlsAuthFlag)
+		cli.Fatalf("invalid option for --auth: %q", serverConfig.TLSAuth)
 	}
 
 	go func() {
@@ -306,7 +335,7 @@ func serverCmd(args []string) {
 	}
 
 	const margin = 10 // len("Endpoint: ")
-	quiet := quiet(quietFlag)
+	quiet := quiet(serverConfig.Quiet)
 	quiet.Print(blue.Sprint("Endpoint: "))
 	quiet.Println(bold.Sprint(alignEndpoints(margin, listeningOnV4(ip), port)))
 	quiet.Println()
@@ -316,7 +345,7 @@ func serverCmd(args []string) {
 	} else {
 		quiet.Println(blue.Sprint("Admin:   "), "_     [ disabled ]")
 	}
-	if auth := strings.ToLower(mtlsAuthFlag); auth == "on" {
+	if auth := strings.ToLower(serverConfig.TLSAuth); auth == "on" {
 		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))
 	} else {
 		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgYellow).Sprint("off"), color.YellowString("  [ any client can connect but policies still apply ]"))
@@ -347,6 +376,129 @@ func serverCmd(args []string) {
 	}
 }
 
+func statefullServer(path string, serverConfig serverConfig) {
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelCtx()
+
+	init, err := fs.ReadInitConfig(filepath.Join(path, ".init"))
+	if err != nil {
+		cli.Fatalf("failed to initialize vault: %v", err)
+	}
+	if serverConfig.Address == "" {
+		serverConfig.Address = init.Address.Value()
+	}
+	if serverConfig.TLSPrivateKey == "" {
+		serverConfig.TLSPrivateKey = init.PrivateKey.Value()
+	}
+	if serverConfig.TLSCertificate == "" {
+		serverConfig.TLSCertificate = init.Certificate.Value()
+	}
+
+	var (
+		errorLog *xlog.Target
+		auditLog = xlog.NewTarget(ioutil.Discard)
+	)
+	if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
+		errorLog = xlog.NewTarget(os.Stderr)
+	} else {
+		errorLog = xlog.NewTarget(xlog.NewErrEncoder(os.Stderr))
+	}
+	auditLog.Log().SetFlags(0)
+
+	certificate, err := xhttp.LoadCertificate(serverConfig.TLSCertificate, serverConfig.TLSPrivateKey, init.Password.Value())
+	if err != nil {
+		cli.Fatalf("failed to load TLS certificate: %v", err)
+	}
+	certificate.ErrorLog = errorLog
+
+	vault, err := fs.Open(path, errorLog.Log())
+	if err != nil {
+		cli.Fatalf("failed to initialize vault: %v", err)
+	}
+
+	metrics := metric.New()
+	errorLog.Add(metrics.ErrorEventCounter())
+	auditLog.Add(metrics.AuditEventCounter())
+
+	clientAuth := tls.RequireAnyClientCert
+	if init.VerifyClientCerts.Value() {
+		clientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	server := http.Server{
+		Addr: serverConfig.Address,
+		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
+			Vault:    vault,
+			Proxy:    nil,
+			AuditLog: auditLog,
+			ErrorLog: errorLog,
+			Metrics:  metrics,
+		}),
+		TLSConfig: &tls.Config{
+			MinVersion:       tls.VersionTLS12,
+			GetCertificate:   certificate.GetCertificate,
+			CipherSuites:     fips.TLSCiphers(),
+			CurvePreferences: fips.TLSCurveIDs(),
+			ClientAuth:       clientAuth,
+		},
+		ErrorLog: errorLog.Log(),
+
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - see timeout handler.
+		IdleTimeout:       90 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
+		err := server.Shutdown(shutdownContext)
+		if cancelShutdown(); err == context.DeadlineExceeded {
+			err = server.Close()
+		}
+		if err != nil {
+			cli.Fatalf("abnormal server shutdown: %v", err)
+		}
+	}()
+	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
+
+	var (
+		blue   = color.New(color.FgBlue)
+		bold   = color.New(color.Bold)
+		italic = color.New(color.Italic)
+	)
+	ip, port := serverAddr(serverConfig.Address)
+
+	const margin = 10 // len("Endpoint: ")
+	quiet := quiet(serverConfig.Quiet)
+	quiet.Print(blue.Sprint("Endpoint: "))
+	quiet.Println(bold.Sprint(alignEndpoints(margin, listeningOnV4(ip), port)))
+	quiet.Println()
+
+	if init.VerifyClientCerts.Value() {
+		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgGreen).Sprint("on "), color.GreenString("  [ only clients with trusted certificates can connect ]"))
+	} else {
+		quiet.Println(blue.Sprint("Auth:    "), color.New(color.Bold, color.FgYellow).Sprint("off"), color.YellowString("  [ any client can connect but policies still apply ]"))
+	}
+	quiet.Println()
+
+	if runtime.GOOS == "windows" {
+		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("set KES_SERVER=https://%v:%s", ip, port))
+		quiet.Println("         ", bold.Sprint("set KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+`   // e.g. root.key`)
+		quiet.Println("         ", bold.Sprint("set KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+`  // e.g. root.cert`)
+		quiet.Println("         ", bold.Sprint("kes --help"))
+	} else {
+		quiet.Println(blue.Sprint("CLI:     "), bold.Sprintf("export KES_SERVER=https://%v:%s", ip, port))
+		quiet.Println("         ", bold.Sprint("export KES_CLIENT_KEY=")+italic.Sprint("<client-private-key>")+"   // e.g. $HOME/root.key")
+		quiet.Println("         ", bold.Sprint("export KES_CLIENT_CERT=")+italic.Sprint("<client-certificate>")+"  // e.g. $HOME/root.cert")
+		quiet.Println("         ", bold.Sprint("kes --help"))
+	}
+
+	if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+		cli.Fatalf("failed to start server: %v", err)
+	}
+}
+
 // quiet is a boolean flag.Value that can print
 // to STDOUT.
 //
@@ -357,7 +509,7 @@ type quiet bool
 
 // Print behaves as fmt.Print if quiet is false.
 // Otherwise, Print does nothing.
-func (q quiet) Print(a ...interface{}) {
+func (q quiet) Print(a ...any) {
 	if !q {
 		fmt.Print(a...)
 	}
@@ -365,7 +517,7 @@ func (q quiet) Print(a ...interface{}) {
 
 // Printf behaves as fmt.Printf if quiet is false.
 // Otherwise, Printf does nothing.
-func (q quiet) Printf(format string, a ...interface{}) {
+func (q quiet) Printf(format string, a ...any) {
 	if !q {
 		fmt.Printf(format, a...)
 	}
@@ -373,7 +525,7 @@ func (q quiet) Printf(format string, a ...interface{}) {
 
 // Println behaves as fmt.Println if quiet is false.
 // Otherwise, Println does nothing.
-func (q quiet) Println(a ...interface{}) {
+func (q quiet) Println(a ...any) {
 	if !q {
 		fmt.Println(a...)
 	}

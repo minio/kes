@@ -13,6 +13,27 @@ import (
 	"sync"
 )
 
+// Print either writes the values to out, if non-nil,
+// or to the standard logger otherwise.
+func Print(out *log.Logger, values ...any) {
+	if out == nil {
+		log.Print(values...)
+	} else {
+		out.Print(values...)
+	}
+}
+
+// Printf formats the values using the format string
+// and either writes to out, if non-nil, or to the
+// standard logger otherwise.
+func Printf(out *log.Logger, format string, values ...any) {
+	if out == nil {
+		log.Printf(format, values...)
+	} else {
+		out.Printf(format, values...)
+	}
+}
+
 // Target groups a set of logging targets.
 //
 // A message that gets written to the Target.Log

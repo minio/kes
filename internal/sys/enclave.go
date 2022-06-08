@@ -5,26 +5,127 @@
 package sys
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
 )
 
-// NewEnclave returns a new Enclave with the
-// given key store, policy set and identity set.
-func NewEnclave(keys key.Store, policies auth.PolicySet, identities auth.IdentitySet) *Enclave {
-	return &Enclave{
-		keys:       keys,
-		policies:   policies,
-		identities: identities,
+// DefaultEnclaveName is the default Enclave name used
+// when the client does not specify the Enclave name
+// explicitly.
+const DefaultEnclaveName = "default"
+
+// EnclaveInfo contains information about an Enclave.
+type EnclaveInfo struct {
+	// Name is the Enclave's name.
+	Name string
+
+	// KeyStoreKey is the root encryption key used to
+	// en/decrypt the key store.
+	KeyStoreKey key.Key
+
+	// PolicyKey is the root encryption key used to
+	// en/decrypt the policy set.
+	PolicyKey key.Key
+
+	// IdentityKey is the root encryption key used to
+	// en/decrypt the identity set.
+	IdentityKey key.Key
+
+	// CreatedAt is the point in time when the Enclave
+	// got created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created the Enclave.
+	CreatedBy kes.Identity
+}
+
+// MarshalBinary returns the EnclaveInfo's binary representation.
+func (e EnclaveInfo) MarshalBinary() ([]byte, error) {
+	type GOB struct {
+		Name        string
+		KeyStoreKey key.Key
+		PolicyKey   key.Key
+		IdentityKey key.Key
+		CreatedAt   time.Time
+		CreatedBy   kes.Identity
 	}
+
+	var buffer bytes.Buffer
+	if err := gob.NewEncoder(&buffer).Encode(GOB(e)); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalBinary unmarshals the EnclaveInfo's binary representation.
+func (e *EnclaveInfo) UnmarshalBinary(b []byte) error {
+	type GOB struct {
+		Name        string
+		KeyStoreKey key.Key
+		PolicyKey   key.Key
+		IdentityKey key.Key
+		CreatedAt   time.Time
+		CreatedBy   kes.Identity
+	}
+
+	var value GOB
+	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
+		return err
+	}
+	e.Name = value.Name
+	e.KeyStoreKey = value.KeyStoreKey
+	e.PolicyKey = value.PolicyKey
+	e.IdentityKey = value.IdentityKey
+	e.CreatedAt = value.CreatedAt
+	e.CreatedBy = value.CreatedBy
+	return nil
+}
+
+// VerifyEnclaveName returns an error if name is not
+// a valid identifier for an Enclave.
+func VerifyEnclaveName(name string) error {
+	const MaxLength = 80 // Some arbitrary but reasonable limit
+
+	const ( // Valid characters are: { 0-9 , A-Z , a-z , - , _ }
+		ASCIINumberStart    = 0x30
+		ASCIINumberEnd      = 0x39
+		ASCIIUpperCaseStart = 0x41
+		ASCIIUpperCaseEnd   = 0x5a
+		ASCIILowerCaseStart = 0x61
+		ASCIILowerCaseEnd   = 0x7a
+
+		ASCIIHyphen     = 0x2d
+		ASCIIUnderscore = 0x5f
+	)
+	if name == "" {
+		return kes.NewError(http.StatusBadRequest, "enclave name is empty")
+	}
+	if len(name) > MaxLength {
+		return kes.NewError(http.StatusBadRequest, "enclave name is too long")
+	}
+	for _, r := range name {
+		switch {
+		case r >= ASCIINumberStart && r <= ASCIINumberEnd:
+		case r >= ASCIIUpperCaseStart && r <= ASCIIUpperCaseEnd:
+		case r >= ASCIILowerCaseStart && r <= ASCIILowerCaseEnd:
+		case r == ASCIIHyphen:
+		case r == ASCIIUnderscore:
+		default:
+			return kes.NewError(http.StatusBadRequest, "enclave name contains invalid character")
+		}
+	}
+	return nil
 }
 
 // An Enclave is shielded environment with a Vault that
@@ -35,6 +136,16 @@ type Enclave struct {
 	policies auth.PolicySet
 
 	identities auth.IdentitySet
+}
+
+// NewEnclave returns a new Enclave with the
+// given key store, policy set and identity set.
+func NewEnclave(keys key.Store, policies auth.PolicySet, identities auth.IdentitySet) *Enclave {
+	return &Enclave{
+		keys:       keys,
+		policies:   policies,
+		identities: identities,
+	}
 }
 
 // Status returns the current state of the key store.
@@ -173,6 +284,9 @@ func (e *Enclave) VerifyRequest(r *http.Request) error {
 		return err
 	}
 	policy, err := e.GetPolicy(r.Context(), info.Policy)
+	if errors.Is(err, kes.ErrPolicyNotFound) {
+		return kes.ErrNotAllowed
+	}
 	if err != nil {
 		return err
 	}

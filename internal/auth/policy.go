@@ -5,7 +5,10 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"encoding"
+	"encoding/gob"
 	"net/http"
 	"path"
 	"time"
@@ -87,6 +90,47 @@ type Policy struct {
 
 	// CreatedBy is the identity that created the policy.
 	CreatedBy kes.Identity
+}
+
+var (
+	_ encoding.BinaryMarshaler   = Policy{}
+	_ encoding.BinaryUnmarshaler = (*Policy)(nil)
+)
+
+// MarshalBinary returns the Policy's binary representation.
+func (p Policy) MarshalBinary() ([]byte, error) {
+	type GOB struct {
+		Allow     []string
+		Deny      []string
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
+
+	var buffer bytes.Buffer
+	if err := gob.NewEncoder(&buffer).Encode(GOB(p)); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalBinary unmarshals the Policy's binary representation.
+func (p *Policy) UnmarshalBinary(b []byte) error {
+	type GOB struct {
+		Allow     []string
+		Deny      []string
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
+
+	var value GOB
+	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
+		return err
+	}
+	p.Allow = value.Allow
+	p.Deny = value.Deny
+	p.CreatedAt = value.CreatedAt
+	p.CreatedBy = value.CreatedBy
+	return nil
 }
 
 // Verify reports whether the given HTTP request is allowed.

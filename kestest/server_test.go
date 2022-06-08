@@ -51,8 +51,10 @@ var serverAPIs = []kes.API{
 	{Method: http.MethodGet, Path: "/v1/log/error", MaxBody: 0, Timeout: 0}, // 22
 	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 23
 
-	{Method: http.MethodPost, Path: "/v1/enclave/create/", MaxBody: 0, Timeout: 15 * time.Second},   // 24
-	{Method: http.MethodDelete, Path: "/v1/enclave/delete/", MaxBody: 0, Timeout: 15 * time.Second}, // 25
+	{Method: http.MethodPost, Path: "/v1/enclave/create/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 24
+	{Method: http.MethodDelete, Path: "/v1/enclave/delete/", MaxBody: 0, Timeout: 15 * time.Second},     // 25
+
+	{Method: http.MethodPost, Path: "/v1/sys/seal", MaxBody: 0, Timeout: 15 * time.Second}, // 26
 }
 
 func TestAPIs(t *testing.T) {
