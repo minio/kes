@@ -5,12 +5,15 @@
 package key
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding"
+	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -109,6 +112,13 @@ type Key struct {
 	createdBy kes.Identity
 }
 
+var (
+	_ encoding.TextMarshaler     = Key{}
+	_ encoding.BinaryMarshaler   = Key{}
+	_ encoding.TextUnmarshaler   = (*Key)(nil)
+	_ encoding.BinaryUnmarshaler = (*Key)(nil)
+)
+
 // Algorithm returns the cryptographic algorithm for which the
 // key can be used.
 func (k *Key) Algorithm() Algorithm { return k.algorithm }
@@ -147,7 +157,7 @@ func (k *Key) Equal(other Key) bool {
 }
 
 // MarshalText returns the key's text representation.
-func (k *Key) MarshalText() ([]byte, error) {
+func (k Key) MarshalText() ([]byte, error) {
 	type JSON struct {
 		Bytes     []byte       `json:"bytes"`
 		Algorithm Algorithm    `json:"algorithm,omitempty"`
@@ -172,6 +182,45 @@ func (k *Key) UnmarshalText(text []byte) error {
 	}
 	var value JSON
 	if err := json.Unmarshal(text, &value); err != nil {
+		return err
+	}
+	k.bytes = value.Bytes
+	k.algorithm = value.Algorithm
+	k.createdAt = value.CreatedAt
+	k.createdBy = value.CreatedBy
+	return nil
+}
+
+// MarshalBinary returns the Key's binary representation.
+func (k Key) MarshalBinary() ([]byte, error) {
+	type GOB struct {
+		Bytes     []byte
+		Algorithm Algorithm
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
+
+	var buffer bytes.Buffer
+	err := gob.NewEncoder(&buffer).Encode(GOB{
+		Bytes:     k.bytes,
+		Algorithm: k.Algorithm(),
+		CreatedAt: k.CreatedAt(),
+		CreatedBy: k.CreatedBy(),
+	})
+	return buffer.Bytes(), err
+}
+
+// UnmarshalBinary unmarshals the Key's binary representation.
+func (k *Key) UnmarshalBinary(b []byte) error {
+	type GOB struct {
+		Bytes     []byte
+		Algorithm Algorithm
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
+
+	var value GOB
+	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
 		return err
 	}
 	k.bytes = value.Bytes

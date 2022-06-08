@@ -98,6 +98,8 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	config.APIs = append(config.APIs, createEnclave(mux, config))
 	config.APIs = append(config.APIs, deleteEnclave(mux, config))
 
+	config.APIs = append(config.APIs, sealVault(mux, config))
+
 	mux.HandleFunc("/", timeout(10*time.Second, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotImplemented)
 	}))

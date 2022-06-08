@@ -17,33 +17,33 @@ import (
 // that uses the given key store, policy set and identity set.
 //
 // The Vault is not able to create or delete enclaves.
-func NewStatelessVault(operator kes.Identity, keys key.Store, policies auth.PolicySet, identites auth.IdentitySet) Vault {
+func NewStatelessVault(sysAdmin kes.Identity, keys key.Store, policies auth.PolicySet, identites auth.IdentitySet) Vault {
 	return &statelessVault{
 		enclave: &Enclave{
 			keys:       keys,
 			policies:   policies,
 			identities: identites,
 		},
-		operator: operator,
+		sysAdmin: sysAdmin,
 	}
 }
 
 type statelessVault struct {
 	enclave  *Enclave
-	operator kes.Identity
+	sysAdmin kes.Identity
 }
 
 var _ Vault = (*statelessVault)(nil) // compiler check
 
 func (v *statelessVault) Seal(ctx context.Context) error { return nil }
 
-func (v *statelessVault) Unseal(context.Context) error { return nil }
+func (v *statelessVault) Unseal(context.Context, ...UnsealKey) error { return nil }
 
-func (v *statelessVault) Operator(_ context.Context) (kes.Identity, error) {
-	return v.operator, nil
+func (v *statelessVault) SysAdmin(_ context.Context) (kes.Identity, error) {
+	return v.sysAdmin, nil
 }
 
-func (v *statelessVault) CreateEnclave(_ context.Context, _ string) (*Enclave, error) {
+func (v *statelessVault) CreateEnclave(context.Context, string, kes.Identity) (*EnclaveInfo, error) {
 	return nil, kes.NewError(http.StatusNotImplemented, "creating encalves is not supported")
 }
 

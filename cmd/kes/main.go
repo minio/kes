@@ -28,6 +28,7 @@ const usage = `Usage:
 
 Commands:
     server                   Start a KES server.
+    init                     Initialize a stateful KES server or cluster.
 
     key                      Manage cryptographic keys.
     policy                   Manage KES policies.
@@ -51,6 +52,7 @@ func main() {
 
 	subCmds := commands{
 		"server": serverCmd,
+		"init":   initCmd,
 
 		"key":      keyCmd,
 		"policy":   policyCmd,

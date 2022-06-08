@@ -5,6 +5,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -17,9 +18,12 @@ func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/enclave/create/"
-		MaxBody = 0
+		MaxBody = 1 << 20
 		Timeout = 15 * time.Second
 	)
+	type Request struct {
+		Admin kes.Identity `json:"admin"`
+	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
 
@@ -35,12 +39,12 @@ func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		operator, err := config.Vault.Operator(r.Context())
+		sysAdmin, err := config.Vault.SysAdmin(r.Context())
 		if err != nil {
 			Error(w, err)
 			return
 		}
-		if identity := auth.Identify(r); identity != operator {
+		if identity := auth.Identify(r); identity != sysAdmin {
 			Error(w, kes.ErrNotAllowed)
 			return
 		}
@@ -50,7 +54,21 @@ func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		if _, err := config.Vault.CreateEnclave(r.Context(), name); err != nil {
+
+		var req Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			Error(w, err)
+			return
+		}
+		if err = validateName(req.Admin.String()); err != nil {
+			Error(w, err)
+			return
+		}
+		if req.Admin == sysAdmin {
+			Error(w, kes.ErrNotAllowed)
+			return
+		}
+		if _, err := config.Vault.CreateEnclave(r.Context(), name, req.Admin); err != nil {
 			Error(w, err)
 			return
 		}
@@ -87,12 +105,12 @@ func deleteEnclave(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		operator, err := config.Vault.Operator(r.Context())
+		sysAdmin, err := config.Vault.SysAdmin(r.Context())
 		if err != nil {
 			Error(w, err)
 			return
 		}
-		if identity := auth.Identify(r); identity != operator {
+		if identity := auth.Identify(r); identity != sysAdmin {
 			Error(w, kes.ErrNotAllowed)
 			return
 		}

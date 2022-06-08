@@ -5,9 +5,11 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/gob"
 	"encoding/hex"
 	"net/http"
 	"time"
@@ -59,6 +61,12 @@ type IdentitySet interface {
 	// The admin is never assigned to any policy
 	// and can perform any operation.
 	Admin(ctx context.Context) (kes.Identity, error)
+
+	// SetAdmin sets the identity of the admin.
+	//
+	// The admin is never assigned to any policy
+	// and can perform any operation.
+	SetAdmin(ctx context.Context, admin kes.Identity) error
 
 	// Assign assigns the policy to the given identity.
 	//
@@ -134,29 +142,38 @@ type IdentityInfo struct {
 	CreatedBy kes.Identity
 }
 
-// ROIdentitySet wraps i and returns a readonly IdentitySet.
-func ROIdentitySet(i IdentitySet) IdentitySet { return roIdentitySet{set: i} }
+// MarshalBinary returns the IdentityInfo's binary representation.
+func (i IdentityInfo) MarshalBinary() ([]byte, error) {
+	type GOB struct {
+		Policy    string
+		IsAdmin   bool
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
 
-type roIdentitySet struct{ set IdentitySet }
-
-var _ IdentitySet = roIdentitySet{} // compiler check
-
-func (r roIdentitySet) Admin(ctx context.Context) (kes.Identity, error) {
-	return r.set.Admin(ctx)
+	var buffer bytes.Buffer
+	if err := gob.NewEncoder(&buffer).Encode(GOB(i)); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
-func (r roIdentitySet) Assign(context.Context, string, kes.Identity) error {
-	return kes.NewError(http.StatusNotImplemented, "readonly identity: assigning an identity is not supported")
-}
+// UnmarshalBinary unmarshals the IdentityInfo's binary representation.
+func (i *IdentityInfo) UnmarshalBinary(b []byte) error {
+	type GOB struct {
+		Policy    string
+		IsAdmin   bool
+		CreatedAt time.Time
+		CreatedBy kes.Identity
+	}
 
-func (r roIdentitySet) Get(ctx context.Context, identity kes.Identity) (IdentityInfo, error) {
-	return r.set.Get(ctx, identity)
-}
-
-func (r roIdentitySet) Delete(context.Context, kes.Identity) error {
-	return kes.NewError(http.StatusNotImplemented, "readonly identity: deleting an identity is not supported")
-}
-
-func (r roIdentitySet) List(ctx context.Context) (IdentityIterator, error) {
-	return r.set.List(ctx)
+	var value GOB
+	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
+		return err
+	}
+	i.Policy = value.Policy
+	i.IsAdmin = value.IsAdmin
+	i.CreatedAt = value.CreatedAt
+	i.CreatedBy = value.CreatedBy
+	return nil
 }
