@@ -402,7 +402,12 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 		StatusOK        = http.StatusOK
 		MaxResponseSize = 1 << 20 // 1 MiB
 	)
-
+	type Response struct {
+		Allow     []string  `json:"allow"`
+		Deny      []string  `json:"deny"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+	}
 	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return nil, err
@@ -411,11 +416,20 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 		return nil, parseErrorResponse(resp)
 	}
 
-	var policy Policy
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&policy); err != nil {
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
-	return &policy, nil
+	policy := &Policy{
+		Allow: response.Allow,
+		Deny:  response.Deny,
+		Info: PolicyInfo{
+			Name:      name,
+			CreatedAt: response.CreatedAt,
+			CreatedBy: response.CreatedBy,
+		},
+	}
+	return policy, nil
 }
 
 // DeletePolicy deletes the policy with the given name. Any

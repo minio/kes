@@ -39,6 +39,8 @@ import (
 type Policy struct {
 	Allow []string // Set of allow patterns
 	Deny  []string // Set of deny patterns
+
+	Info PolicyInfo // Info contains metadata for the Policy.
 }
 
 // PolicyInfo describes a KES policy.

@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
@@ -89,9 +91,9 @@ func createPolicyCmd(args []string) {
 
 	switch {
 	case cmd.NArg() == 0:
-		cli.Fatal("no key name specified. See 'kes policy create --help'")
+		cli.Fatal("no policy name specified. See 'kes policy create --help'")
 	case cmd.NArg() == 1:
-		cli.Fatal("no crypto key specified. See 'kes policy create --help'")
+		cli.Fatal("no policy file specified. See 'kes policy create --help'")
 	case cmd.NArg() > 2:
 		cli.Fatal("too many arguments. See 'kes policy create --help'")
 	}
@@ -275,6 +277,7 @@ const showPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+        --json               Print policy in JSON format.
     -h, --help               Print command line options.
 
 Examples:
@@ -285,7 +288,11 @@ func showPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, showPolicyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		jsonFlag           bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print policy in JSON format.")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -308,11 +315,63 @@ func showPolicyCmd(args []string) {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
-		cli.Fatalf("failed to show policy %q: %v", name, err)
+		cli.Fatalf("failed to show policy '%s': %v", name, err)
 	}
-	encoder := json.NewEncoder(os.Stdout)
-	if isTerm(os.Stdout) {
-		encoder.SetIndent("", "  ")
+	if !isTerm(os.Stdout) || jsonFlag {
+		type Response struct {
+			Allow     []string     `json:"allow,omitempty"`
+			Deny      []string     `json:"deny,omitempty"`
+			CreatedAt time.Time    `json:"created_at,omitempty"`
+			CreatedBy kes.Identity `json:"created_by,omitempty"`
+		}
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) {
+			encoder.SetIndent("", "  ")
+		}
+		err = encoder.Encode(Response{
+			Allow:     policy.Allow,
+			Deny:      policy.Deny,
+			CreatedAt: policy.Info.CreatedAt,
+			CreatedBy: policy.Info.CreatedBy,
+		})
+		if err != nil {
+			cli.Fatalf("failed to show policy '%s': %v", name, err)
+		}
+	} else {
+		const (
+			Red   tui.Color = "#d70000"
+			Green tui.Color = "#00a700"
+			Cyan  tui.Color = "#00afaf"
+		)
+		if len(policy.Allow) > 0 {
+			header := tui.NewStyle().Bold(true).Foreground(Green)
+			fmt.Println(header.Render("Allow:"))
+			for _, rule := range policy.Allow {
+				fmt.Println("  · " + rule)
+			}
+		}
+		if len(policy.Deny) > 0 {
+			if len(policy.Allow) > 0 {
+				fmt.Println()
+			}
+			header := tui.NewStyle().Bold(true).Foreground(Red)
+			fmt.Println(header.Render("Deny:"))
+			for _, rule := range policy.Deny {
+				fmt.Println("  · " + rule)
+			}
+		}
+
+		fmt.Println()
+		header := tui.NewStyle().Bold(true).Foreground(Cyan)
+		if !policy.Info.CreatedAt.IsZero() {
+			year, month, day := policy.Info.CreatedAt.Local().Date()
+			hour, min, sec := policy.Info.CreatedAt.Local().Clock()
+			fmt.Printf("\n%s %04d-%02d-%02d %02d:%02d:%02d\n", header.Render("Created at:"), year, month, day, hour, min, sec)
+		}
+		if !policy.Info.CreatedBy.IsUnknown() {
+			fmt.Println(header.Render("Created by:"), policy.Info.CreatedBy)
+		} else {
+			fmt.Println(header.Render("Created by:"), "<unknown>")
+		}
 	}
-	encoder.Encode(policy)
 }
