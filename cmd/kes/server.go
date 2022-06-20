@@ -237,8 +237,10 @@ func serverCmd(args []string) {
 			Metrics:  metrics,
 		}),
 		TLSConfig: &tls.Config{
-			MinVersion:     tls.VersionTLS12,
-			GetCertificate: certificate.GetCertificate,
+			MinVersion:       tls.VersionTLS12,
+			GetCertificate:   certificate.GetCertificate,
+			CipherSuites:     fips.TLSCiphers(),
+			CurvePreferences: fips.TLSCurveIDs(),
 		},
 		ErrorLog: errorLog.Log(),
 
@@ -247,31 +249,6 @@ func serverCmd(args []string) {
 		IdleTimeout:       90 * time.Second,
 	}
 
-	// Limit the supported cipher suites to the secure TLS 1.2/1.3 subset - i.e. only ECDHE key exchange and only AEAD ciphers.
-	if fips.Enabled {
-		server.TLSConfig.CipherSuites = []uint16{
-			tls.TLS_AES_128_GCM_SHA256, // TLS 1.3
-			tls.TLS_AES_256_GCM_SHA384,
-
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS 1.2
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-		}
-	} else {
-		server.TLSConfig.CipherSuites = []uint16{
-			tls.TLS_AES_128_GCM_SHA256, // TLS 1.3
-			tls.TLS_AES_256_GCM_SHA384,
-			tls.TLS_CHACHA20_POLY1305_SHA256,
-
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS 1.2
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-		}
-	}
 	switch strings.ToLower(mtlsAuthFlag) {
 	case "on":
 		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
