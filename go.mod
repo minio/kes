@@ -11,7 +11,6 @@ require (
 	github.com/charmbracelet/lipgloss v0.5.0
 	github.com/cheggaaa/pb/v3 v3.0.5
 	github.com/fatih/color v1.13.0
-	github.com/gizak/termui/v3 v3.1.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/selfupdate v0.4.0
 	github.com/prometheus/client_golang v1.11.1
@@ -75,12 +74,10 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
-	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/muesli/reflow v0.2.1-0.20210115123740-9e1d0d53df68 // indirect
 	github.com/muesli/termenv v0.11.1-0.20220204035834-5ac8409525e0 // indirect
-	github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect

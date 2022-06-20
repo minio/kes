@@ -15,8 +15,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fatih/color"
-	ui "github.com/gizak/termui/v3"
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
@@ -82,94 +81,71 @@ func metricCmd(args []string) {
 // traceMetricsWithUI iterates scraps the KES metrics
 // and prints a table-like UI to STDOUT.
 func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Duration) {
-	draw := func(version string, table *cli.Table, metric *kes.Metric, reqRate float64) {
-		var (
-			green  = color.New(color.FgGreen)
-			yellow = color.New(color.FgYellow)
-			red    = color.New(color.FgRed)
-			bold   = color.New(color.Bold)
-		)
-
-		table.SetRow(0, &cli.Cell{Text: "Success", Color: green}, &cli.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestOK)/float64(metric.RequestN())), Color: green}, &cli.Cell{Text: strconv.FormatUint(metric.RequestOK, 10), Color: green})
-		table.SetRow(1, &cli.Cell{Text: "Error  ", Color: yellow}, &cli.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestErr)/float64(metric.RequestN())), Color: yellow}, &cli.Cell{Text: strconv.FormatUint(metric.RequestErr, 10), Color: yellow})
-		table.SetRow(2, &cli.Cell{Text: "Failure", Color: red}, &cli.Cell{Text: fmt.Sprintf("%05.2f%%", 100*float64(metric.RequestFail)/float64(metric.RequestN())), Color: red}, &cli.Cell{Text: strconv.FormatUint(metric.RequestFail, 10), Color: red})
-		table.SetRow(3, cli.NewCell("Active "), cli.NewCell(""), cli.NewCell(strconv.FormatUint(metric.RequestActive, 10)))
-		table.SetRow(4, cli.NewCell("Rate   "), cli.NewCell(""), cli.NewCell(fmt.Sprintf("%6.1f R/s", reqRate)))
-		table.SetRow(5, cli.NewCell("Latency"), cli.NewCell(""), cli.NewCell(avgLatency(metric.LatencyHistogram).Round(time.Millisecond).String()+" Ø"))
-
-		table.Draw()
-		fmt.Println()
-		if len(client.Endpoints) == 1 {
-			fmt.Println(bold.Sprint(" Endpoint:     "), client.Endpoints[0])
-		} else {
-			fmt.Println(bold.Sprint(" Endpoints:    "), client.Endpoints)
-		}
-		fmt.Println(bold.Sprint(" Version:      "), version)
-		fmt.Println()
-		fmt.Println(bold.Sprint(" UpTime:       "), metric.UpTime)
-		fmt.Println(bold.Sprint(" Audit Events: "), metric.AuditEvents)
-		fmt.Println(bold.Sprint(" Error Events: "), metric.ErrorEvents)
-	}
-	var (
-		metric     kes.Metric
-		version, _ = client.Version(ctx)
-		table      = cli.NewTable("Request", "Percentage", "Total")
-		requestN   uint64
-		reqRate    float64
+	const (
+		EraseLine  = "\033[2K" + "\033[F" + "\r"
+		ShowCursor = "\x1b[?25h"
+		HideCursor = "\x1b[?25l"
 	)
-	table.Header()[0].Width = 0.333
-	table.Header()[1].Width = 0.333
-	table.Header()[2].Width = 0.333
-
-	table.Header()[0].Alignment = cli.AlignCenter
-	table.Header()[1].Alignment = cli.AlignCenter
-	table.Header()[2].Alignment = cli.AlignCenter
-
-	// Initialize the terminal UI and listen on resize
-	// events and Ctrl-C / Escape key events.
-	if err := ui.Init(); err != nil {
-		cli.Fatal(err)
+	var (
+		header = tui.NewStyle().Bold(true).Faint(true)
+		green  = tui.NewStyle().Bold(true).Foreground(tui.Color("#00fe00"))
+		yellow = tui.NewStyle().Bold(true).Foreground(tui.Color("#fede00"))
+		red    = tui.NewStyle().Bold(true).Foreground(tui.Color("#fe0000"))
+	)
+	draw := func(metric *kes.Metric, reqRate float64) {
+		fmt.Println(header.Render("\nRequest    OK [2xx]       Err [4xx]       Err [5xx]      Req/s        Latency"))
+		fmt.Printf("%s%s%s%s%s\n",
+			green.Render(fmt.Sprintf("%19d", metric.RequestOK)),
+			yellow.Render(fmt.Sprintf("%16d", metric.RequestErr)),
+			red.Render(fmt.Sprintf("%16d", metric.RequestFail)),
+			fmt.Sprintf("%11.2f", reqRate),
+			fmt.Sprintf("%15s", avgLatency(metric.LatencyHistogram).Round(time.Millisecond)),
+		)
+		fmt.Printf("%35s%33s%33s\n\n",
+			green.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestOK)/float64(metric.RequestN()))),
+			yellow.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestErr)/float64(metric.RequestN()))),
+			red.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestFail)/float64(metric.RequestN()))),
+		)
+		fmt.Println(header.Render("System       UpTime            Heap           Stack       CPUs        Threads"))
+		fmt.Printf("%19s%16s%16s%11d%15d\n\n", metric.UpTime, formatMemory(metric.HeapAlloc), formatMemory(metric.StackAlloc), metric.UsableCPUs, metric.Threads)
 	}
-	defer draw(version, table, &metric, 0) // Draw the table AFTER closing the UI one more time.
-	defer ui.Close()                       // Closing the UI cleans the screen.
+	clearScreen := func() {
+		fmt.Print(EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine)
+	}
+
+	var (
+		metric   kes.Metric
+		requestN uint64
+		reqRate  float64
+		drawn    bool
+	)
+	fmt.Print(HideCursor)
+	defer fmt.Print(ShowCursor)
 
 	ticker := time.NewTicker(rate)
-	go func() {
-		for {
-			var err error
-			metric, err = client.Metrics(ctx)
-			if err != nil {
-				continue
-			}
-
-			// Compute the current request rate
-			if requestN == 0 {
-				requestN = metric.RequestN()
-			}
-			reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
-			requestN = metric.RequestN()
-
-			draw(version, table, &metric, reqRate)
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-
-	events := ui.PollEvents()
 	for {
+		var err error
+		metric, err = client.Metrics(ctx)
+		if err != nil {
+			continue
+		}
+
+		// Compute the current request rate
+		if requestN == 0 {
+			requestN = metric.RequestN()
+		}
+		reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
+		requestN = metric.RequestN()
+
+		if drawn {
+			clearScreen()
+		}
+		draw(&metric, reqRate)
+		drawn = true
 		select {
-		case event := <-events:
-			switch {
-			case event.Type == ui.ResizeEvent:
-				draw(version, table, &metric, reqRate)
-			case event.ID == "<C-c>" || event.ID == "<Escape>":
-				return
-			}
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
 		}
 	}
 }
@@ -197,4 +173,25 @@ func avgLatency(histogram map[time.Duration]uint64) time.Duration {
 		n += histogram[l] - n
 	}
 	return time.Duration(avg)
+}
+
+func formatMemory(size uint64) string {
+	const (
+		KiB = 1024
+		MiB = 1024 * KiB
+		GiB = 1024 * MiB
+		TiB = 1024 * GiB
+	)
+	switch {
+	case size < KiB:
+		return strconv.FormatUint(size, 10) + " B"
+	case size < MiB:
+		return strconv.FormatUint(size/KiB, 10) + " KiB"
+	case size < GiB:
+		return strconv.FormatUint(size/MiB, 10) + " MiB"
+	case size < TiB:
+		return strconv.FormatUint(size/GiB, 10) + " GiB"
+	default:
+		return strconv.FormatUint(size/TiB, 10) + " TiB"
+	}
 }
