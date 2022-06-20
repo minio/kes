@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
@@ -372,29 +373,50 @@ func lsIdentityCmd(args []string) {
 		cli.Fatalf("failed to list identities: %v", err)
 	}
 	defer identities.Close()
-
-	if isTerm(os.Stdout) {
-		sorted := make([]kes.IdentityInfo, 0, 100)
+	if !isTerm(os.Stdout) {
+		if _, err = identities.WriteTo(os.Stdout); err != nil {
+			cli.Fatal(err)
+		}
+		if err = identities.Close(); err != nil {
+			cli.Fatal(err)
+		}
+	} else {
+		sortedInfos := make([]kes.IdentityInfo, 0, 100)
 		for identities.Next() {
-			sorted = append(sorted, identities.Value())
+			sortedInfos = append(sortedInfos, identities.Value())
 		}
 		if err = identities.Close(); err != nil {
 			cli.Fatalf("failed to list identities: %v", err)
 		}
-		sort.Slice(sorted, func(i, j int) bool {
-			return strings.Compare(sorted[i].Identity.String(), sorted[j].Identity.String()) < 0
-		})
+		if len(sortedInfos) > 0 {
+			sort.Slice(sortedInfos, func(i, j int) bool {
+				return strings.Compare(sortedInfos[i].Policy, sortedInfos[j].Policy) < 0
+			})
 
-		for _, id := range sorted {
-			fmt.Printf("%s => %s\n", id.Identity, id.Policy)
+			const (
+				Date   tui.Color = "#00D700"
+				Policy tui.Color = "#2E42D1"
+			)
+			headerStyle := tui.NewStyle().Underline(true).Bold(true)
+			dateStyle := tui.NewStyle().Foreground(Date)
+			policyStyle := tui.NewStyle().Foreground(Policy)
+
+			fmt.Printf("%s %s %s\n",
+				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
+				headerStyle.Render(fmt.Sprintf("%-64s", "Identity")),
+				headerStyle.Render("Policy"),
+			)
+			for _, info := range sortedInfos {
+				year, month, day := info.CreatedAt.Local().Date()
+				hour, min, sec := info.CreatedAt.Local().Clock()
+
+				fmt.Printf("%s %s %s\n",
+					dateStyle.Render(fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)),
+					fmt.Sprintf("%-64s", info.Identity.String()),
+					policyStyle.Render(fmt.Sprintf("%-15s", info.Policy)),
+				)
+			}
 		}
-	} else {
-		if _, err = identities.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
-		}
-	}
-	if err = identities.Close(); err != nil {
-		cli.Fatalf("failed to list identities: %v", err)
 	}
 }
 
