@@ -138,6 +138,8 @@ log:
   # {
   #   "time": "2006-01-02T15:04:05Z07:00",
   #   "request": {
+  #     "ip":       "87.149.99.199",
+  #     "enclave":  "default",
   #     "path":     "/v1/key/create/my-app-key",
   #     "identity": "4067503933d4a78358f908a2df7ec14e554c612acf8a9d1aa29b7da4aa018ec9",
   #   },

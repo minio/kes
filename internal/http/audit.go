@@ -48,6 +48,7 @@ var (
 func (w *AuditResponseWriter) WriteHeader(statusCode int) {
 	type RequestInfo struct {
 		IP       net.IP       `json:"ip,omitempty"`
+		Enclave  string       `json:"enclave,omitempty"`
 		APIPath  string       `json:"path"`
 		Identity kes.Identity `json:"identity,omitempty"`
 	}
@@ -68,6 +69,7 @@ func (w *AuditResponseWriter) WriteHeader(statusCode int) {
 			Timestamp: w.CreatedAt,
 			Request: RequestInfo{
 				IP:       w.IP,
+				Enclave:  w.URL.Query().Get("enclave"),
 				APIPath:  w.URL.Path,
 				Identity: w.Identity,
 			},
