@@ -12,10 +12,12 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
+	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )
@@ -24,7 +26,11 @@ const statusCmdUsage = `Usage:
     kes status [options]
 
 Options:
-    -k, --insecure           Skip TLS certificate validation
+    -k, --insecure           Skip TLS certificate validation.
+    -s, --short              Print status information in a short summary format.
+        --api                List all server APIs.
+        --json               Print status information in JSON format.
+
     -h, --help               Print command line options.
 `
 
@@ -32,7 +38,15 @@ func statusCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, statusCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		jsonFlag           bool
+		shortFlag          bool
+		apiFlag            bool
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print status information in JSON format")
+	cmd.BoolVar(&apiFlag, "api", false, "List all server APIs")
+	cmd.BoolVarP(&shortFlag, "short", "s", false, "Print status information in a short summary format")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -58,22 +72,104 @@ func statusCmd(args []string) {
 	}
 	latency := time.Since(start)
 
-	if isTerm(os.Stdout) {
-		boldBlue := color.New(color.Bold, color.FgBlue)
-		fmt.Println(color.GreenString("●  ") + boldBlue.Sprint(strings.TrimPrefix(client.Endpoints[0], "https://")))
+	var APIs []kes.API
+	if apiFlag {
+		APIs, err = client.APIs(ctx)
+		if err != nil {
+			cli.Fatal(err)
+		}
+	}
+
+	if !isTerm(os.Stdout) || jsonFlag {
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) && !shortFlag {
+			encoder.SetIndent("", "  ")
+		}
+		if apiFlag {
+			if err = encoder.Encode(APIs); err != nil {
+				cli.Fatal(err)
+			}
+		} else {
+			if err = encoder.Encode(status); err != nil {
+				cli.Fatal(err)
+			}
+		}
+		return
+	}
+
+	faint := tui.NewStyle().Faint(true)
+	dotStyle := tui.NewStyle().Foreground(tui.Color("#00F700")).Bold(true)
+	endpointStyle := tui.NewStyle().Foreground(tui.Color("#00AFAF")).Bold(true)
+
+	fmt.Println(dotStyle.Render("●"), endpointStyle.Render(strings.TrimPrefix(client.Endpoints[0], "https://")))
+	if !shortFlag {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("  %-8s", "Version")),
+			status.Version,
+		)
 		switch {
 		case status.UpTime > 24*time.Hour:
-			fmt.Printf("   UpTime:  %.f days %.f hours\n", status.UpTime.Hours()/24, math.Mod(status.UpTime.Hours(), 24))
+			fmt.Println(
+				faint.Render(fmt.Sprintf("  %-8s", "Uptime")),
+				fmt.Sprintf("%.f days %.f hours", status.UpTime.Hours()/24, math.Mod(status.UpTime.Hours(), 24)),
+			)
 		case status.UpTime > 1*time.Hour:
-			fmt.Printf("   UpTime:  %.f hours\n", status.UpTime.Hours())
+			fmt.Println(
+				faint.Render(fmt.Sprintf("  %-8s", "Uptime")),
+				fmt.Sprintf("%.f hours", status.UpTime.Hours()),
+			)
 		case status.UpTime > 1*time.Minute:
-			fmt.Printf("   UpTime:  %.f minutes\n", status.UpTime.Minutes())
+			fmt.Println(
+				faint.Render(fmt.Sprintf("  %-8s", "Uptime")),
+				fmt.Sprintf("%.f minutes", status.UpTime.Minutes()),
+			)
 		default:
-			fmt.Printf("   UpTime: %.f seconds\n", status.UpTime.Seconds())
+			fmt.Println(
+				faint.Render(fmt.Sprintf("  %-8s", "Uptime")),
+				fmt.Sprintf("%.f seconds", status.UpTime.Seconds()),
+			)
 		}
-		fmt.Println("   Latency:", latency.Round(time.Millisecond))
-		fmt.Println("   Version:", status.Version)
-	} else {
-		json.NewEncoder(os.Stdout).Encode(status)
+		fmt.Println(
+			faint.Render(fmt.Sprintf("  %-8s", "Latency")),
+			latency.Round(time.Millisecond),
+		)
+		fmt.Println(
+			faint.Render(fmt.Sprintf("  %-8s", "CPUs")),
+			strconv.Itoa(status.UsableCPUs),
+		)
+		fmt.Println(faint.Render(fmt.Sprintf("  %-8s", "Memory")))
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%3s %-6s", "·", "Heap")),
+			formatMemory(status.HeapAlloc),
+		)
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%3s %-6s", "·", "Stack")),
+			formatMemory(status.StackAlloc),
+		)
+	}
+
+	if apiFlag {
+		header := tui.NewStyle().Faint(true).Underline(true).UnderlineSpaces(false)
+		pathStyle := tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Inline(true)
+		fmt.Println()
+		fmt.Println(
+			" ",
+			header.Render(fmt.Sprintf("%-7s", "Method")),
+			header.Render(fmt.Sprintf("%-28s", "API")),
+			header.Render("Timeout"),
+		)
+
+		for _, api := range APIs {
+			timeout := "Inf"
+			if api.Timeout > 0 {
+				timeout = api.Timeout.String()
+			}
+			fmt.Println(
+				" ",
+				fmt.Sprintf("%-7s", api.Method),
+				pathStyle.Render(fmt.Sprintf("%-28s", api.Path)),
+				timeout,
+			)
+		}
 	}
 }
