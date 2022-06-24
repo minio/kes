@@ -8,9 +8,17 @@ import "time"
 
 // State is a KES server status snapshot.
 type State struct {
-	Version string // The KES server version
+	Version string `json:"version"` // The KES server version
 
-	UpTime time.Duration // The time the KES server has been up and running
+	UpTime time.Duration `json:"uptime"` // The time the KES server has been up and running
+
+	CPUs int `json:"num_cpu"`
+
+	UsableCPUs int `json:"num_cpu_used"`
+
+	HeapAlloc uint64 `json:"num_heap_used"`
+
+	StackAlloc uint64 `json:"num_stack_used"`
 }
 
 // API describes a KES server API.

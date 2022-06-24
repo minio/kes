@@ -164,6 +164,11 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 	type Response struct {
 		Version string        `json:"version"`
 		UpTime  time.Duration `json:"uptime"`
+
+		CPUs       int    `json:"num_cpu"`
+		UsableCPUs int    `json:"num_cpu_used"`
+		HeapAlloc  uint64 `json:"mem_heap_used"`
+		StackAlloc uint64 `json:"mem_stack_used"`
 	}
 	var response Response
 	if err = json.NewDecoder(limitBody(resp, MaxResponseSize)).Decode(&response); err != nil {
