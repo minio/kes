@@ -157,6 +157,43 @@ func (i *PolicyIterator) WriteTo(w io.Writer) (int64, error) {
 	}
 }
 
+// Values returns up to the next n PolicyInfo values. Subsequent
+// calls will yield further PolicyInfos if there are any.
+//
+// If n > 0, Values returns at most n PolicyInfo structs. In this case,
+// if Values returns an empty slice, it will return an error explaining
+// why. At the end of the listing, the error is io.EOF.
+//
+// If n <= 0, Values returns all remaining PolicyInfo records. In this
+// case, Values always closes the PolicyIterator. When it succeeds, it
+// returns a nil error, not io.EOF.
+func (i *PolicyIterator) Values(n int) ([]PolicyInfo, error) {
+	values := []PolicyInfo{}
+	if n > 0 && i.closed {
+		return values, io.EOF // Return early, don't alloc a slice
+	}
+	if n > 0 {
+		values = make([]PolicyInfo, 0, n)
+	}
+
+	var count int
+	for i.Next() {
+		values = append(values, i.Value())
+		count++
+
+		if n > 0 && count >= n {
+			return values, nil
+		}
+	}
+	if err := i.Close(); err != nil {
+		return values, err
+	}
+	if n > 0 && len(values) == 0 { // As by doc contract
+		return values, io.EOF
+	}
+	return values, nil
+}
+
 // Close closes the PolicyIterator and releases
 // any associated resources.
 func (i *PolicyIterator) Close() error {

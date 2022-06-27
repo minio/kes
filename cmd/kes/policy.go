@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
@@ -174,6 +176,13 @@ const lsPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+        --json               Print policies in JSON format.
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -185,7 +194,13 @@ func lsPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprintf(os.Stderr, lsPolicyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -216,17 +231,45 @@ func lsPolicyCmd(args []string) {
 	}
 	defer policies.Close()
 
-	if isTerm(os.Stdout) {
-		for policies.Next() {
-			fmt.Println(policies.Name())
-		}
-	} else {
+	if jsonFlag {
 		if _, err = policies.WriteTo(os.Stdout); err != nil {
 			cli.Fatal(err)
 		}
-	}
-	if err = policies.Close(); err != nil {
-		cli.Fatalf("failed to list policies: %v", err)
+		if err = policies.Close(); err != nil {
+			cli.Fatal(err)
+		}
+	} else {
+		sortedInfos, err := policies.Values(0)
+		if err != nil {
+			cli.Fatalf("failed to list policies: %v", err)
+		}
+		if len(sortedInfos) > 0 {
+			sort.Slice(sortedInfos, func(i, j int) bool {
+				return strings.Compare(sortedInfos[i].Name, sortedInfos[j].Name) < 0
+			})
+
+			headerStyle := tui.NewStyle()
+			dateStyle := tui.NewStyle()
+			if colorFlag.Colorize() {
+				const ColorDate tui.Color = "#5f8700"
+				headerStyle = headerStyle.Underline(true).Bold(true)
+				dateStyle = dateStyle.Foreground(ColorDate)
+			}
+
+			fmt.Println(
+				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
+				headerStyle.Render("Policy"),
+			)
+			for _, info := range sortedInfos {
+				year, month, day := info.CreatedAt.Local().Date()
+				hour, min, sec := info.CreatedAt.Local().Clock()
+
+				fmt.Printf("%s %s\n",
+					dateStyle.Render(fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)),
+					info.Name,
+				)
+			}
+		}
 	}
 }
 
