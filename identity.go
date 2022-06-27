@@ -156,6 +156,43 @@ func (i *IdentityIterator) WriteTo(w io.Writer) (int64, error) {
 	}
 }
 
+// Values returns up to the next n IdentityInfo values. Subsequent
+// calls will yield further IdentityInfos if there are any.
+//
+// If n > 0, Values returns at most n IdentityInfo structs. In this case,
+// if Values returns an empty slice, it will return an error explaining
+// why. At the end of the listing, the error is io.EOF.
+//
+// If n <= 0, Values returns all remaining IdentityInfo records. In this
+// case, Values always closes the IdentityIterator. When it succeeds, it
+// returns a nil error, not io.EOF.
+func (i *IdentityIterator) Values(n int) ([]IdentityInfo, error) {
+	values := []IdentityInfo{}
+	if n > 0 && i.closed {
+		return values, io.EOF // Return early, don't alloc a slice
+	}
+	if n > 0 {
+		values = make([]IdentityInfo, 0, n)
+	}
+
+	var count int
+	for i.Next() {
+		values = append(values, i.Value())
+		count++
+
+		if n > 0 && count >= n {
+			return values, nil
+		}
+	}
+	if err := i.Close(); err != nil {
+		return values, err
+	}
+	if n > 0 && len(values) == 0 { // As by doc contract
+		return values, io.EOF
+	}
+	return values, nil
+}
+
 // Close closes the IdentityIterator and releases
 // any associated resources
 func (i *IdentityIterator) Close() error {

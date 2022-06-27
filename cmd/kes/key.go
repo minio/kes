@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )
@@ -168,6 +171,13 @@ const lsKeyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+        --json               Print keys in JSON format. 
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -179,7 +189,13 @@ func lsKeyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, lsKeyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -210,17 +226,52 @@ func lsKeyCmd(args []string) {
 	}
 	defer iterator.Close()
 
-	if isTerm(os.Stdout) {
-		for iterator.Next() {
-			fmt.Println(iterator.Value().Name)
-		}
-	} else {
+	if jsonFlag {
 		if _, err = iterator.WriteTo(os.Stdout); err != nil {
 			cli.Fatal(err)
 		}
-	}
-	if err = iterator.Close(); err != nil {
-		cli.Fatal(err)
+		if err = iterator.Close(); err != nil {
+			cli.Fatal(err)
+		}
+	} else {
+		keys, err := iterator.Values(0)
+		if err != nil {
+			cli.Fatalf("failed to list keys: %v", err)
+		}
+		if err = iterator.Close(); err != nil {
+			cli.Fatalf("failed to list keys: %v", err)
+		}
+
+		if len(keys) > 0 {
+			sort.Slice(keys, func(i, j int) bool {
+				return strings.Compare(keys[i].Name, keys[j].Name) < 0
+			})
+
+			headerStyle := tui.NewStyle()
+			dateStyle := tui.NewStyle()
+			if colorFlag.Colorize() {
+				const ColorDate tui.Color = "#5f8700"
+				headerStyle = headerStyle.Underline(true).Bold(true)
+				dateStyle = dateStyle.Foreground(ColorDate)
+			}
+
+			fmt.Println(
+				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
+				headerStyle.Render("Key"),
+			)
+			for _, key := range keys {
+				var date string
+				if key.CreatedAt.IsZero() {
+					date = fmt.Sprintf("%5s%s%5s", " ", "<unknown>", " ")
+				} else {
+					year, month, day := key.CreatedAt.Local().Date()
+					hour, min, sec := key.CreatedAt.Local().Clock()
+					date = fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)
+				}
+				fmt.Printf("%s %s\n", dateStyle.Render(date), key.Name)
+			}
+		}
+
 	}
 }
 

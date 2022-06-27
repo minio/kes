@@ -331,6 +331,13 @@ const lsIdentityCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+        --json               Print identities in JSON format.
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -342,7 +349,13 @@ func lsIdentityCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, lsIdentityCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -373,7 +386,7 @@ func lsIdentityCmd(args []string) {
 		cli.Fatalf("failed to list identities: %v", err)
 	}
 	defer identities.Close()
-	if !isTerm(os.Stdout) {
+	if jsonFlag {
 		if _, err = identities.WriteTo(os.Stdout); err != nil {
 			cli.Fatal(err)
 		}
@@ -381,11 +394,8 @@ func lsIdentityCmd(args []string) {
 			cli.Fatal(err)
 		}
 	} else {
-		sortedInfos := make([]kes.IdentityInfo, 0, 100)
-		for identities.Next() {
-			sortedInfos = append(sortedInfos, identities.Value())
-		}
-		if err = identities.Close(); err != nil {
+		sortedInfos, err := identities.Values(0)
+		if err != nil {
 			cli.Fatalf("failed to list identities: %v", err)
 		}
 		if len(sortedInfos) > 0 {
@@ -393,13 +403,18 @@ func lsIdentityCmd(args []string) {
 				return strings.Compare(sortedInfos[i].Policy, sortedInfos[j].Policy) < 0
 			})
 
-			const (
-				Date   tui.Color = "#00D700"
-				Policy tui.Color = "#2E42D1"
-			)
-			headerStyle := tui.NewStyle().Underline(true).Bold(true)
-			dateStyle := tui.NewStyle().Foreground(Date)
-			policyStyle := tui.NewStyle().Foreground(Policy)
+			headerStyle := tui.NewStyle()
+			dateStyle := tui.NewStyle()
+			policyStyle := tui.NewStyle()
+			if colorFlag.Colorize() {
+				const (
+					ColorDate   tui.Color = "#5f8700"
+					ColorPolicy tui.Color = "#2E42D1"
+				)
+				headerStyle = headerStyle.Underline(true).Bold(true)
+				dateStyle = dateStyle.Foreground(ColorDate)
+				policyStyle = policyStyle.Foreground(ColorPolicy)
+			}
 
 			fmt.Printf("%s %s %s\n",
 				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),

@@ -30,6 +30,11 @@ Options:
     -s, --short              Print status information in a short summary format.
         --api                List all server APIs.
         --json               Print status information in JSON format.
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
 
     -h, --help               Print command line options.
 `
@@ -42,10 +47,12 @@ func statusCmd(args []string) {
 		jsonFlag           bool
 		shortFlag          bool
 		apiFlag            bool
+		colorFlag          colorOption
 		insecureSkipVerify bool
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print status information in JSON format")
 	cmd.BoolVar(&apiFlag, "api", false, "List all server APIs")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&shortFlag, "short", "s", false, "Print status information in a short summary format")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	if err := cmd.Parse(args[1:]); err != nil {
@@ -80,7 +87,7 @@ func statusCmd(args []string) {
 		}
 	}
 
-	if !isTerm(os.Stdout) || jsonFlag {
+	if jsonFlag {
 		encoder := json.NewEncoder(os.Stdout)
 		if isTerm(os.Stdout) && !shortFlag {
 			encoder.SetIndent("", "  ")
@@ -97,9 +104,18 @@ func statusCmd(args []string) {
 		return
 	}
 
-	faint := tui.NewStyle().Faint(true)
-	dotStyle := tui.NewStyle().Foreground(tui.Color("#00F700")).Bold(true)
-	endpointStyle := tui.NewStyle().Foreground(tui.Color("#00AFAF")).Bold(true)
+	faint := tui.NewStyle()
+	dotStyle := tui.NewStyle()
+	endpointStyle := tui.NewStyle()
+	if colorFlag.Colorize() {
+		const (
+			ColorDot      = tui.Color("#00f700")
+			ColorEndpoint = tui.Color("#00afaf")
+		)
+		faint = faint.Faint(true)
+		dotStyle = dotStyle.Foreground(ColorDot).Bold(true)
+		endpointStyle = endpointStyle.Foreground(ColorEndpoint).Bold(true)
+	}
 
 	fmt.Println(dotStyle.Render("●"), endpointStyle.Render(strings.TrimPrefix(client.Endpoints[0], "https://")))
 	if !shortFlag {
@@ -149,8 +165,12 @@ func statusCmd(args []string) {
 	}
 
 	if apiFlag {
-		header := tui.NewStyle().Faint(true).Underline(true).UnderlineSpaces(false)
-		pathStyle := tui.NewStyle().Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Inline(true)
+		header := tui.NewStyle()
+		pathStyle := tui.NewStyle()
+		if colorFlag.Colorize() {
+			header = header.Faint(true).Underline(true).UnderlineSpaces(false)
+			pathStyle = pathStyle.Foreground(tui.AdaptiveColor{Light: "#2E42D1", Dark: "#2e8bc0"}).Inline(true)
+		}
 		fmt.Println()
 		fmt.Println(
 			" ",
