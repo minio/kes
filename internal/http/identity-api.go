@@ -88,17 +88,17 @@ func selfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type InlinePolicy struct {
-		Allow []string
-		Deny  []string
-	}
-	type Response struct {
-		Identity kes.Identity `json:"identity"`
-
-		IsAdmin    bool   `json:"admin"`
-		PolicyName string `json:"policy_name,omitempty"`
-
+		Allow     []string     `json:"allow,omitempty"`
+		Deny      []string     `json:"deny,omitempty"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
+	}
+	type Response struct {
+		Identity   kes.Identity `json:"identity"`
+		IsAdmin    bool         `json:"admin,omitempty"`
+		PolicyName string       `json:"policy_name,omitempty"`
+		CreatedAt  time.Time    `json:"created_at,omitempty"`
+		CreatedBy  kes.Identity `json:"created_by,omitempty"`
 
 		Policy InlinePolicy `json:"policy"`
 	}
@@ -144,8 +144,10 @@ func selfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 			CreatedAt:  info.CreatedAt,
 			CreatedBy:  info.CreatedBy,
 			Policy: InlinePolicy{
-				Allow: policy.Allow,
-				Deny:  policy.Deny,
+				Allow:     policy.Allow,
+				Deny:      policy.Deny,
+				CreatedAt: policy.CreatedAt,
+				CreatedBy: policy.CreatedBy,
 			},
 		})
 	}

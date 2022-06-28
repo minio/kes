@@ -531,8 +531,10 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 		MaxResponseSize = 1 << 20 // 1 MiB
 	)
 	type InlinePolicy struct {
-		Allow []string `json:"allow"`
-		Deny  []string `json:"deny"`
+		Allow     []string  `json:"allow"`
+		Deny      []string  `json:"deny"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
 	}
 	type Response struct {
 		Identity   Identity     `json:"identity"`
@@ -564,6 +566,11 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 	policy := &Policy{
 		Allow: response.Policy.Allow,
 		Deny:  response.Policy.Deny,
+		Info: PolicyInfo{
+			Name:      response.PolicyName,
+			CreatedAt: response.Policy.CreatedAt,
+			CreatedBy: response.Policy.CreatedBy,
+		},
 	}
 	return info, policy, nil
 }

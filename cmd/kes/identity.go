@@ -41,13 +41,14 @@ const identityCmdUsage = `Usage:
     kes identity <command>
 
 Commands:
-    new                      Create a new KES identity
-    of                       Compute a KES identity
-    ls                       List KES identities
-    rm                       Remove a KES identity
+    new                      Create a new KES identity.
+    of                       Compute a KES identity from a certificate.
+    info                     Get information about a KES identity.
+    ls                       List KES identities.
+    rm                       Remove a KES identity.
 
 Options:
-    -h, --help               Print command line options
+    -h, --help               Print command line options.
 `
 
 func identityCmd(args []string) {
@@ -55,10 +56,11 @@ func identityCmd(args []string) {
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
 
 	subCmds := commands{
-		"new": newIdentityCmd,
-		"of":  ofIdentityCmd,
-		"ls":  lsIdentityCmd,
-		"rm":  rmIdentityCmd,
+		"new":  newIdentityCmd,
+		"of":   ofIdentityCmd,
+		"info": infoIdentityCmd,
+		"ls":   lsIdentityCmd,
+		"rm":   rmIdentityCmd,
 	}
 
 	if len(args) < 2 {
@@ -322,6 +324,144 @@ func ofIdentityCmd(args []string) {
 				Name:     filename,
 				Identity: identity,
 			})
+		}
+	}
+}
+
+const infoIdentityCmdUsage = `Usage:
+    kes identity info [options] [<identity>]
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+        --json               Print identity information in JSON format.
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes identity info
+    $ kes identity info 3ecfcdf38fcbe141ae26a1030f81e96b753365a46760ae6b578698a97c59fd22
+`
+
+func infoIdentityCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprintf(os.Stderr, infoIdentityCmdUsage) }
+
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print policy information in JSON format")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes policy ls --help'", err)
+	}
+
+	if cmd.NArg() > 1 {
+		cli.Fatal("too many arguments. See 'kes identity info --help'")
+	}
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	var faint, identityStyle, policyStyle, dotAllowStyle, dotDenyStyle tui.Style
+	if colorFlag.Colorize() {
+		const (
+			ColorIdentity tui.Color = "#2e42d1"
+			ColorPolicy   tui.Color = "#d1bd2e"
+			ColorDotAllow tui.Color = "#00d700"
+			ColorDotDeny  tui.Color = "#d70000"
+		)
+		faint = faint.Faint(true).Bold(true)
+		identityStyle = identityStyle.Foreground(ColorIdentity)
+		policyStyle = policyStyle.Foreground(ColorPolicy)
+		dotAllowStyle = dotAllowStyle.Foreground(ColorDotAllow)
+		dotDenyStyle = dotDenyStyle.Foreground(ColorDotDeny)
+	}
+
+	client := newClient(insecureSkipVerify)
+	if cmd.NArg() == 0 {
+		info, policy, err := client.DescribeSelf(ctx)
+		if err != nil {
+			cli.Fatal(err)
+		}
+		year, month, day := info.CreatedAt.Date()
+		hour, min, sec := info.CreatedAt.Clock()
+
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Identity")),
+			identityStyle.Render(info.Identity.String()),
+		)
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Created At")),
+			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+		)
+		if info.IsAdmin {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "Admin")
+		} else {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "User")
+		}
+		if !info.CreatedBy.IsUnknown() {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Created By")), info.CreatedBy)
+		}
+		if info.Policy != "" {
+			year, month, day := policy.Info.CreatedAt.Date()
+			hour, min, sec := policy.Info.CreatedAt.Clock()
+
+			fmt.Println()
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Policy")), policyStyle.Render(info.Policy))
+			fmt.Println(
+				faint.Render(fmt.Sprintf("%-11s", "Created At")),
+				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+			)
+			if len(policy.Allow) > 0 {
+				fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Allow")))
+				for _, allow := range policy.Allow {
+					fmt.Println(fmt.Sprintf("%-11s", " "), dotAllowStyle.Render("·"), allow)
+				}
+			}
+			if len(policy.Deny) > 0 {
+				fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Deny")))
+				for _, deny := range policy.Deny {
+					fmt.Println(fmt.Sprintf("%-11s", " "), dotDenyStyle.Render("·"), deny)
+				}
+			}
+		}
+	} else {
+		info, err := client.DescribeIdentity(ctx, kes.Identity(cmd.Arg(0)))
+		if err != nil {
+			cli.Fatal(err)
+		}
+		year, month, day := info.CreatedAt.Date()
+		hour, min, sec := info.CreatedAt.Clock()
+
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Identity")),
+			identityStyle.Render(info.Identity.String()),
+		)
+		if info.Policy != "" {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Policy")), policyStyle.Render(info.Policy))
+		}
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Created At")),
+			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+		)
+		if info.IsAdmin {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "Admin")
+		} else {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "User")
+		}
+		if !info.CreatedBy.IsUnknown() {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Created By")), info.CreatedBy)
 		}
 	}
 }
