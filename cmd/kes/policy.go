@@ -27,6 +27,7 @@ const policyCmdUsage = `Usage:
 Commands:
     create                   Create a new policy.
     assign                   Assign a policy to identities.
+    info                     Get information about a policy.
     ls                       List policies.
     rm                       Remove a policy.
     show                     Display a policy.
@@ -42,6 +43,7 @@ func policyCmd(args []string) {
 	subCmds := commands{
 		"create": createPolicyCmd,
 		"assign": assignPolicyCmd,
+		"info":   infoPolicyCmd,
 		"ls":     lsPolicyCmd,
 		"rm":     rmPolicyCmd,
 		"show":   showPolicyCmd,
@@ -311,6 +313,88 @@ func rmPolicyCmd(args []string) {
 				os.Exit(1)
 			}
 			cli.Fatalf("failed to delete policy %q: %v", name, err)
+		}
+	}
+}
+
+const infoPolicyCmdUsage = `Usage:
+    kes policy info [options] <name>
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+        --json               Print policy in JSON format.
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes policy info my-policy
+`
+
+func infoPolicyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, infoPolicyCmdUsage) }
+
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print policy in JSON format.")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes policy show --help'", err)
+	}
+	if cmd.NArg() == 0 {
+		cli.Fatal("no policy name specified. See 'kes policy show --help'")
+	}
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancelCtx()
+
+	name := cmd.Arg(0)
+	client := newClient(insecureSkipVerify)
+	info, err := client.DescribePolicy(ctx, name)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatal(err)
+	}
+	if jsonFlag {
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) {
+			encoder.SetIndent("", "  ")
+		}
+		if err = encoder.Encode(info); err != nil {
+			cli.Fatal(err)
+		}
+	} else {
+		var faint, policyStyle tui.Style
+		if colorFlag.Colorize() {
+			const ColorPolicy tui.Color = "#2e42d1"
+			faint = faint.Faint(true)
+			policyStyle = policyStyle.Foreground(ColorPolicy)
+		}
+		fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Name")), policyStyle.Render(name))
+		if !info.CreatedAt.IsZero() {
+			year, month, day := info.CreatedAt.Local().Date()
+			hour, min, sec := info.CreatedAt.Local().Clock()
+			fmt.Println(
+				faint.Render(fmt.Sprintf("%-11s", "Date")),
+				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+			)
+		}
+		if !info.CreatedBy.IsUnknown() {
+			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Created by")), info.CreatedBy)
 		}
 	}
 }

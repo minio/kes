@@ -442,6 +442,106 @@ func TestSetPolicy(t *testing.T) {
 	}
 }
 
+var getPolicyTests = []struct {
+	Name   string
+	Policy *kes.Policy
+}{
+	{Name: "my-policy", Policy: &kes.Policy{}},
+	{
+		Name: "my-policy2",
+		Policy: &kes.Policy{
+			Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"},
+		},
+	},
+	{
+		Name: "my-policy2",
+		Policy: &kes.Policy{
+			Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"},
+			Deny:  []string{"/v1/key/create/my-key2"},
+		},
+	},
+}
+
+func TestDescribePolicy(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewServer()
+	defer server.Close()
+
+	client := server.Client()
+	for i, test := range getPolicyTests {
+		if err := client.SetPolicy(ctx, test.Name, test.Policy); err != nil {
+			t.Fatalf("Test %d: failed to create policy: %v", i, err)
+		}
+		info, err := client.DescribePolicy(ctx, test.Name)
+		if err != nil {
+			t.Fatalf("Test %d: failed to describe policy: %v", i, err)
+		}
+		if info.Name != test.Name {
+			t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, info.Name, test.Name)
+		}
+		if info.CreatedAt.IsZero() {
+			t.Fatalf("Test %d: created_at timestamp not set", i)
+		}
+		if info.CreatedBy.IsUnknown() {
+			t.Fatalf("Test %d: created_by identity not set", i)
+		}
+	}
+}
+
+func TestGetPolicy(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewServer()
+	defer server.Close()
+
+	client := server.Client()
+	for i, test := range getPolicyTests {
+		if err := client.SetPolicy(ctx, test.Name, test.Policy); err != nil {
+			t.Fatalf("Test %d: failed to create policy: %v", i, err)
+		}
+		policy, err := client.GetPolicy(ctx, test.Name)
+		if err != nil {
+			t.Fatalf("Test %d: failed to describe policy: %v", i, err)
+		}
+		if policy.Info.Name != test.Name {
+			t.Fatalf("Policy name mismatch: got '%s' - want '%s'", policy.Info.Name, test.Name)
+		}
+		if policy.Info.Name != test.Name {
+			t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, policy.Info.Name, test.Name)
+		}
+		if policy.Info.CreatedAt.IsZero() {
+			t.Fatalf("Test %d: created_at timestamp not set", i)
+		}
+		if policy.Info.CreatedBy.IsUnknown() {
+			t.Fatalf("Test %d: created_by identity not set", i)
+		}
+
+		if len(policy.Allow) != len(test.Policy.Allow) {
+			t.Fatalf("Test %d: allow policy mismatch: got len %d - want len %d", i, len(policy.Allow), len(test.Policy.Allow))
+		}
+		sort.Strings(test.Policy.Allow)
+		sort.Strings(policy.Allow)
+		for j := range policy.Allow {
+			if policy.Allow[j] != test.Policy.Allow[j] {
+				t.Fatalf("Test %d: allow policy mismatch: got '%s' - want '%s'", i, policy.Allow[j], test.Policy.Allow[j])
+			}
+		}
+		if len(policy.Deny) != len(test.Policy.Deny) {
+			t.Fatalf("Test %d: deny policy mismatch: got len %d - want len %d", i, len(policy.Deny), len(test.Policy.Deny))
+		}
+		sort.Strings(test.Policy.Deny)
+		sort.Strings(policy.Deny)
+		for j := range policy.Deny {
+			if policy.Deny[j] != test.Policy.Deny[j] {
+				t.Fatalf("Test %d: deny policy mismatch: got '%s' - want '%s'", i, policy.Deny[j], test.Policy.Deny[j])
+			}
+		}
+	}
+}
+
 var selfDescribeTests = []struct {
 	Policy kes.Policy
 }{
