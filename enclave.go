@@ -392,6 +392,38 @@ func (e *Enclave) SetPolicy(ctx context.Context, name string, policy *Policy) er
 	return nil
 }
 
+// DescribePolicy returns the PolicyInfo for the given policy.
+// It returns ErrPolicyNotFound if no such policy exists.
+func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo, error) {
+	const (
+		APIPath         = "/v1/policy/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MiB
+	)
+	type Response struct {
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+	}
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &PolicyInfo{
+		Name:      name,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
 // GetPolicy returns the policy with the given name.
 // It returns ErrPolicyNotFound if no such policy
 // exists.
@@ -420,7 +452,7 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
-	policy := &Policy{
+	return &Policy{
 		Allow: response.Allow,
 		Deny:  response.Deny,
 		Info: PolicyInfo{
@@ -428,8 +460,7 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 			CreatedAt: response.CreatedAt,
 			CreatedBy: response.CreatedBy,
 		},
-	}
-	return policy, nil
+	}, nil
 }
 
 // DeletePolicy deletes the policy with the given name. Any

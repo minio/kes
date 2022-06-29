@@ -513,11 +513,10 @@ func lsIdentityCmd(args []string) {
 		pattern = cmd.Arg(0)
 	}
 
-	client := newClient(insecureSkipVerify)
-
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
+	client := newClient(insecureSkipVerify)
 	identities, err := client.ListIdentities(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -526,6 +525,7 @@ func lsIdentityCmd(args []string) {
 		cli.Fatalf("failed to list identities: %v", err)
 	}
 	defer identities.Close()
+
 	if jsonFlag {
 		if _, err = identities.WriteTo(os.Stdout); err != nil {
 			cli.Fatal(err)
