@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -58,6 +59,21 @@ func withHeader(key, value string) requestOption {
 	}
 }
 
+type retryError int
+
+const (
+	retryErrGeneric retryError = iota
+	retryErrDeadline
+)
+
+type endpointMetric struct {
+	errors, deadline uint64
+}
+
+func (e endpointMetric) Clone() endpointMetric {
+	return e
+}
+
 // retry is an http.Client that implements
 // a retry mechanism for requests that fail
 // due to a temporary network error.
@@ -66,7 +82,40 @@ func withHeader(key, value string) requestOption {
 // but requires that the request body implements io.Seeker.
 // Otherwise, it cannot guarantee that the entire request
 // body gets sent when retrying a request.
-type retry http.Client
+type retry struct {
+	httpClient      http.Client
+	endpointMetrics map[string]*endpointMetric
+	mu              sync.Mutex
+}
+
+func (r *retry) getMetrics() map[string]endpointMetric {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m := make(map[string]endpointMetric)
+	for endpoint, metrics := range r.endpointMetrics {
+		m[endpoint] = metrics.Clone()
+	}
+	return m
+}
+
+func (r *retry) updateMetrics(endpoint string, err retryError) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	m := r.endpointMetrics[endpoint]
+	if m == nil {
+		m = &endpointMetric{}
+	}
+
+	switch err {
+	case retryErrGeneric:
+		m.errors++
+	case retryErrDeadline:
+		m.deadline++
+	}
+
+	r.endpointMetrics[endpoint] = m
+}
 
 // Send creates a new HTTP request with the given method, context
 // request body and request options, if any. It randomly iterates
@@ -103,8 +152,11 @@ func (r *retry) Send(ctx context.Context, method string, endpoints []string, pat
 			return nil, err
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
+			r.updateMetrics(nextEndpoint, retryErrDeadline)
 			return nil, err
 		}
+
+		r.updateMetrics(nextEndpoint, retryErrGeneric)
 	}
 	return response, err
 }
@@ -182,7 +234,7 @@ func (r *retry) Do(req *http.Request) (*http.Response, error) {
 	)
 	var (
 		retry  = 2 // For now, we retry 2 times before we give up
-		client = (*http.Client)(r)
+		client = r.httpClient
 	)
 	resp, err := client.Do(req)
 	for retry > 0 && (isTemporary(err) || (resp != nil && resp.StatusCode == http.StatusServiceUnavailable)) {

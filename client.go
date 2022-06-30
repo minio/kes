@@ -68,7 +68,7 @@ type Client struct {
 	// to send requests resp. receive responses.
 	//
 	// It must not be modified concurrently.
-	HTTPClient http.Client
+	HTTPClient retry
 }
 
 // NewClient returns a new KES client with the given
@@ -95,9 +95,9 @@ func NewClient(endpoint string, cert tls.Certificate) *Client {
 // NewClientWithConfig uses an http.Transport with reasonable
 // defaults.
 func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
-	return &Client{
-		Endpoints: []string{endpoint},
-		HTTPClient: http.Client{
+	r := retry{
+		endpointMetrics: make(map[string]*endpointMetric),
+		httpClient: http.Client{
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				DialContext: (&net.Dialer{
@@ -114,6 +114,10 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 			},
 		},
 	}
+	return &Client{
+		Endpoints:  []string{endpoint},
+		HTTPClient: r,
+	}
 }
 
 // Version tries to fetch the version information from the
@@ -125,7 +129,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 		StatusOK       = http.StatusOK
 		MaxResponeSize = 1024 // 1 KB
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return "", err
@@ -152,7 +156,7 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		StatusOK        = http.StatusOK
 		MaxResponseSize = 1 << 20 // 1 MB
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return State{}, err
@@ -177,6 +181,30 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 	return State(response), nil
 }
 
+// EndpointMetric holds metrics information
+// about a specific KES endpoint
+type EndpointMetric struct {
+	Deadline, Errors uint64
+}
+
+// ClientMetrics holds metrics information
+// of all KES endpoints
+type ClientMetrics struct {
+	Endpoints map[string]EndpointMetric
+}
+
+// ClientMetrics returns KES endpoints metrics
+func (c *Client) ClientMetrics() ClientMetrics {
+	m := make(map[string]EndpointMetric)
+	for endpoint, metrics := range c.HTTPClient.getMetrics() {
+		m[endpoint] = EndpointMetric{
+			Deadline: metrics.deadline,
+			Errors:   metrics.errors,
+		}
+	}
+	return ClientMetrics{Endpoints: m}
+}
+
 // APIs returns a list of all API endpoints supported
 // by the KES server.
 //
@@ -190,7 +218,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 		StatusOK        = http.StatusOK
 		MaxResponseSize = 1 << 20 // 1 MB
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
@@ -230,7 +258,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 func (c *Client) CreateKey(ctx context.Context, name string) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.CreateKey(ctx, name)
 }
@@ -241,7 +269,7 @@ func (c *Client) CreateKey(ctx context.Context, name string) error {
 func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.ImportKey(ctx, name, key)
 }
@@ -251,7 +279,7 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 func (c *Client) DeleteKey(ctx context.Context, name string) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DeleteKey(ctx, name)
 }
@@ -277,7 +305,7 @@ func (c *Client) DeleteKey(ctx context.Context, name string) error {
 func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (DEK, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.GenerateKey(ctx, name, context)
 }
@@ -292,7 +320,7 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []byte) ([]byte, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.Encrypt(ctx, name, plaintext, context)
 }
@@ -307,7 +335,7 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context []byte) ([]byte, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
@@ -322,7 +350,7 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP) ([]PCP, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DecryptAll(ctx, name, ciphertexts...)
 }
@@ -336,7 +364,7 @@ func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP
 func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.ListKeys(ctx, pattern)
 }
@@ -348,7 +376,7 @@ func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, er
 func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.SetPolicy(ctx, name, policy)
 }
@@ -359,7 +387,7 @@ func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) err
 func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.GetPolicy(ctx, name)
 }
@@ -371,7 +399,7 @@ func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DeletePolicy(ctx, name)
 }
@@ -384,7 +412,7 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyIterator, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.ListPolicies(ctx, pattern)
 }
@@ -397,7 +425,7 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyItera
 func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Identity) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.AssignPolicy(ctx, policy, identity)
 }
@@ -406,7 +434,7 @@ func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Ident
 func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*IdentityInfo, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DescribeIdentity(ctx, identity)
 }
@@ -420,7 +448,7 @@ func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*Iden
 func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DescribeSelf(ctx)
 }
@@ -433,7 +461,7 @@ func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, erro
 func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.DeleteIdentity(ctx, identity)
 }
@@ -445,7 +473,7 @@ func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityIterator, error) {
 	enclave := Enclave{
 		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		client:    c.HTTPClient,
 	}
 	return enclave.ListIdentities(ctx, pattern)
 }
@@ -463,7 +491,7 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 		Method   = http.MethodGet
 		StatusOK = http.StatusOK
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
@@ -487,7 +515,7 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 		Method   = http.MethodGet
 		StatusOK = http.StatusOK
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
@@ -509,7 +537,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		StatusOK       = http.StatusOK
 		MaxResponeSize = 1 << 20 // 1 MB
 	)
-	client := retry(c.HTTPClient)
+	client := c.HTTPClient
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return Metric{}, err
