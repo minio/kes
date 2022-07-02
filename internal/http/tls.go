@@ -89,12 +89,15 @@ func (c *Certificate) ReloadAfter(ctx context.Context, interval time.Duration) {
 		return
 	}
 
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	var lastReloadErr error
 	for {
-		timer := time.NewTimer(interval)
+		timer.Reset(interval) // Set reload interval.
+
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return
 		case <-timer.C:
 		}

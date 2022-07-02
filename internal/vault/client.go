@@ -46,7 +46,10 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 	if delay == 0 {
 		delay = 10 * time.Second
 	}
-	var timer *time.Timer
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	for {
 		status, err := c.Sys().Health()
 		if err == nil {
@@ -57,14 +60,11 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 			}
 		}
 
-		if timer == nil {
-			timer = time.NewTimer(delay)
-		} else {
-			timer.Reset(delay)
-		}
+		// Add the delay to wait before next health check.
+		timer.Reset(delay)
+
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return
 		case <-timer.C:
 		}
@@ -168,6 +168,10 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 	if retry == 0 {
 		retry = 5 * time.Second
 	}
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	for {
 		// If Vault is sealed we have to wait
 		// until it is unsealed again.
@@ -176,10 +180,10 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 		// another go routine to unblock this for-loop
 		// once vault becomes unsealed again.
 		for c.Sealed() {
-			timer := time.NewTimer(1 * time.Second)
+			timer.Reset(time.Second)
+
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
 			case <-timer.C:
 			}
@@ -197,10 +201,9 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 			token, ttl, err = authenticate()
 			if err != nil {
 				ttl = 0 // On error, set the TTL again to 0 to re-auth. again.
-				timer := time.NewTimer(retry)
+				timer.Reset(retry)
 				select {
 				case <-ctx.Done():
-					timer.Stop()
 					return
 				case <-timer.C:
 				}
@@ -213,11 +216,11 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 		// such tht we can renew it. We repeat that until
 		// the renewable process fails once. In this case
 		// we try to re-authenticate again.
-		timer := time.NewTimer(ttl / 2)
 		for {
+			timer.Reset(ttl / 2)
+
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
 			case <-timer.C:
 			}
@@ -232,7 +235,6 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 			if err != nil || ttl == 0 {
 				break
 			}
-			timer.Reset(ttl / 2)
 		}
 		// If we exit the for-loop above set the TTL to 0 to trigger
 		// a re-authentication.
