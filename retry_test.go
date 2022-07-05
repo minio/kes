@@ -33,20 +33,28 @@ func TestRetryBody(t *testing.T) {
 	}
 }
 
-var isTemporaryTests = []struct {
-	Err         error
-	IsTemporary bool
+var isNetworkErrorTests = []struct {
+	Err            error
+	IsNetworkError bool
 }{
-	{Err: nil, IsTemporary: false},
-	{Err: io.EOF, IsTemporary: false},
-	{Err: url.InvalidHostError(""), IsTemporary: false},
+	{Err: nil, IsNetworkError: false},
+	{Err: io.EOF, IsNetworkError: false},
+	{Err: url.InvalidHostError(""), IsNetworkError: false},
 	{
 		Err: &url.Error{
 			Op:  "GET",
 			URL: "http://127.0.0.1",
 			Err: net.UnknownNetworkError("unknown"),
 		},
-		IsTemporary: false,
+		IsNetworkError: true,
+	},
+	{
+		Err: &url.Error{
+			Op:  "GET",
+			URL: "http://127.0.0.1",
+			Err: &net.DNSError{},
+		},
+		IsNetworkError: true,
 	},
 	{
 		Err: &url.Error{
@@ -54,18 +62,18 @@ var isTemporaryTests = []struct {
 			URL: "http://127.0.0.1",
 			Err: io.EOF,
 		},
-		IsTemporary: true,
+		IsNetworkError: true,
 	},
 }
 
-func TestIsTemporary(t *testing.T) {
-	for i, test := range isTemporaryTests {
-		temp := isTemporary(test.Err)
+func TestIsNetworkError(t *testing.T) {
+	for i, test := range isNetworkErrorTests {
+		temp := isNetworkError(test.Err)
 		switch {
-		case test.IsTemporary == true && temp == false:
-			t.Fatalf("Test %d: err should be temporary but it is not", i)
-		case test.IsTemporary == false && temp == true:
-			t.Fatalf("Test %d: err should not be temporary but it is", i)
+		case test.IsNetworkError == true && temp == false:
+			t.Fatalf("Test %d: err should be a network error but it is not", i)
+		case test.IsNetworkError == false && temp == true:
+			t.Fatalf("Test %d: err should not be a network error but it is", i)
 		}
 	}
 }

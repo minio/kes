@@ -7,13 +7,13 @@ package kes
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -106,6 +106,11 @@ func (r *retry) Send(ctx context.Context, method string, endpoints []string, pat
 			return nil, err
 		}
 	}
+	if urlErr, ok := err.(*url.Error); ok {
+		if connErr, ok := urlErr.Err.(*ConnError); ok {
+			return nil, connErr
+		}
+	}
 	return response, err
 }
 
@@ -185,7 +190,7 @@ func (r *retry) Do(req *http.Request) (*http.Response, error) {
 		client = (*http.Client)(r)
 	)
 	resp, err := client.Do(req)
-	for retry > 0 && (isTemporary(err) || (resp != nil && resp.StatusCode == http.StatusServiceUnavailable)) {
+	for retry > 0 && (isNetworkError(err) || (resp != nil && resp.StatusCode == http.StatusServiceUnavailable)) {
 		randomRetryDelay := time.Duration(rand.Intn(MaxRandRetryDelay)) * time.Millisecond
 		time.Sleep(MinRetryDelay + randomRetryDelay)
 		retry--
@@ -201,40 +206,64 @@ func (r *retry) Do(req *http.Request) (*http.Response, error) {
 
 		resp, err = client.Do(req) // Now, retry.
 	}
-	if isTemporary(err) {
+	if isNetworkError(err) {
 		// If the request still fails with a temporary error
 		// we wrap the error to provide more information to the
 		// caller.
 		return nil, &url.Error{
 			Op:  req.Method,
 			URL: req.URL.String(),
-			Err: fmt.Errorf("Temporary network error: %v", err),
+			Err: &ConnError{
+				Host: req.URL.Host,
+				Err:  err,
+			},
 		}
 	}
 	return resp, err
 }
 
-// isTemporary returns true if the given error is
-// temporary - e.g. a temporary *url.Error or an
-// net.Error that indicates that a request got
-// timed-out.
+// isNetworkError reports whether err is network error.
 //
-// A nil error is not temporary.
-func isTemporary(err error) bool {
+// A network error may occur due to a timeout or other
+// network-related issues, like premature closing a
+// network connection.
+//
+// A network error may also indicate that the remote
+// peer is not reachable or not responding.
+func isNetworkError(err error) bool {
 	if err == nil { // fast path
 		return false
 	}
-	if netErr, ok := err.(net.Error); ok { // *url.Error implements net.Error
-		if netErr.Timeout() || netErr.Temporary() {
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
 			return true
 		}
 
 		// If a connection drops (e.g. server dies) while sending the request
 		// http.Do returns either io.EOF or io.ErrUnexpected. We treat that as
-		// temp. since the server may get restared such that the retry may succeed.
+		// temp. since the server may get restarted such that the retry may succeed.
 		if errors.Is(netErr, io.EOF) || errors.Is(netErr, io.ErrUnexpectedEOF) {
 			return true
 		}
+
+		// The http.Client.Do method always returns an *url.Error.
+		// In this case, we check whether its inner error is a
+		// net.Error.
+		if urlErr, ok := netErr.(*url.Error); ok {
+			if errors.As(urlErr.Err, &netErr) {
+				return true
+			}
+		}
+	}
+
+	// A best-effort attempt to detect some low-level network timeouts
+	switch msg := err.Error(); {
+	case strings.Contains(msg, "TLS handshake timeout"): // TLS handshake timeout
+		return true
+	case strings.Contains(msg, "i/o timeout"): // TCP timeout
+		return true
 	}
 	return false
 }
