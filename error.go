@@ -5,8 +5,12 @@
 package kes
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -62,6 +66,63 @@ func NewError(code int, msg string) Error {
 func (e Error) Status() int { return e.code }
 
 func (e Error) Error() string { return e.message }
+
+// IsConnError reports whether err is or wraps a
+// ConnError. In this case, it returns the ConnError.
+func IsConnError(err error) (*ConnError, bool) {
+	var cErr *ConnError
+	if errors.As(err, &cErr) {
+		return cErr, true
+	}
+	return nil, false
+}
+
+// ConnError is a network connection error. It is returned
+// by a Client or Enclave when a request fails due to a
+// network or connection issue. For example, a temporary
+// DNS error.
+//
+// Calling code may check whether a returned error is
+// of type ConnError:
+//   if cErr, ok := kes.IsConnError(err) {
+//      // TODO: handle connection error
+//   }
+type ConnError struct {
+	Host string // The host that couldn't be reached
+	Err  error  // The underlying error, if any.
+}
+
+var _ net.Error = (*ConnError)(nil) // compiler check
+
+// Error returns the string representation of the ConnError.
+func (c *ConnError) Error() string { return fmt.Sprintf("kes: connection error: %v", c.Err) }
+
+// Unwarp returns the underlying connection error.
+func (c *ConnError) Unwrap() error { return c.Err }
+
+// Timeout reports whether the error is caused
+// by a timeout.
+func (c *ConnError) Timeout() bool {
+	if c.Err == nil {
+		return false
+	}
+	if errors.Is(c.Err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(c.Err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
+}
+
+// Temporary returns false. It is implemented
+// such that ConnError implements the net.Error
+// interface.
+//
+// Deprecated: See the net.Error documentation
+func (c *ConnError) Temporary() bool { return false }
 
 // parseErrorResponse returns an error containing
 // the response status code and response body
