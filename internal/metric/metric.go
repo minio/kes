@@ -18,26 +18,28 @@ import (
 // New returns a new Metrics that gathers and exposes various
 // metrics about the application.
 func New() *Metrics {
+	requestStatusLabels := []string{"code"}
+
 	metrics := &Metrics{
 		registry: prometheus.NewRegistry(),
-		requestSucceeded: prometheus.NewCounter(prometheus.CounterOpts{
+		requestSucceeded: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_success",
 			Help:      "Number of requests that have been served successfully.",
-		}),
-		requestErrored: prometheus.NewCounter(prometheus.CounterOpts{
+		}, requestStatusLabels),
+		requestErrored: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_error",
 			Help:      "Number of request that failed due to some error. (HTTP 4xx status code)",
-		}),
-		requestFailed: prometheus.NewCounter(prometheus.CounterOpts{
+		}, requestStatusLabels),
+		requestFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_failure",
 			Help:      "Number of request that failed due to some internal failure. (HTTP 5xx status code)",
-		}),
+		}, requestStatusLabels),
 		requestActive: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "http",
@@ -135,9 +137,9 @@ func New() *Metrics {
 type Metrics struct {
 	registry *prometheus.Registry
 
-	requestSucceeded prometheus.Counter
-	requestFailed    prometheus.Counter
-	requestErrored   prometheus.Counter
+	requestSucceeded *prometheus.CounterVec
+	requestFailed    *prometheus.CounterVec
+	requestErrored   *prometheus.CounterVec
 	requestActive    prometheus.Gauge
 	requestLatency   prometheus.Histogram
 
@@ -292,10 +294,11 @@ type countResponseWriter struct {
 	http.ResponseWriter
 	flusher http.Flusher
 
-	succeeded prometheus.Counter
-	errored   prometheus.Counter
-	failed    prometheus.Counter
-	written   bool // Inidicates whether the HTTP headers have been written
+	succeeded *prometheus.CounterVec
+	errored   *prometheus.CounterVec
+	failed    *prometheus.CounterVec
+	prometheus.Metric
+	written bool // Inidicates whether the HTTP headers have been written
 }
 
 var (
@@ -307,12 +310,12 @@ func (w *countResponseWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 	if !w.written {
 		switch {
-		case status == http.StatusOK:
-			w.succeeded.Inc()
+		case status >= 200 && status < 300:
+			w.succeeded.WithLabelValues(strconv.Itoa(status)).Inc()
 		case status >= 400 && status < 500:
-			w.errored.Inc()
+			w.errored.WithLabelValues(strconv.Itoa(status)).Inc()
 		case status >= 500 && status < 600:
-			w.failed.Inc()
+			w.failed.WithLabelValues(strconv.Itoa(status)).Inc()
 		default:
 			// We panic to signal that the server returned a status code
 			// that is not tracked. If, in the future, the application
@@ -325,6 +328,8 @@ func (w *countResponseWriter) WriteHeader(status int) {
 		w.written = true
 	}
 }
+
+func (w *countResponseWriter) Write(b []byte) (int, error) { return w.ResponseWriter.Write(b) }
 
 func (w *countResponseWriter) Flush() {
 	if w.flusher != nil {

@@ -13,13 +13,14 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/selfupdate v0.4.0
-	github.com/prometheus/client_golang v1.11.1
+	github.com/muesli/termenv v0.11.1-0.20220204035834-5ac8409525e0
+	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.30.0
+	github.com/prometheus/common v0.32.1
 	github.com/spf13/pflag v1.0.5
 	github.com/tinylib/msgp v1.1.6
 	golang.org/x/crypto v0.0.0-20211209193657-4570a0811e8b
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
+	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	google.golang.org/api v0.31.0
 	google.golang.org/genproto v0.0.0-20200901141002-b3bf27a9dbd1
@@ -39,7 +40,7 @@ require (
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
-	github.com/cespare/xxhash/v2 v2.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
@@ -77,11 +78,10 @@ require (
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/muesli/reflow v0.2.1-0.20210115123740-9e1d0d53df68 // indirect
-	github.com/muesli/termenv v0.11.1-0.20220204035834-5ac8409525e0 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
-	github.com/prometheus/procfs v0.6.0 // indirect
+	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	go.opencensus.io v0.22.4 // indirect
