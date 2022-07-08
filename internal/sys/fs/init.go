@@ -42,6 +42,10 @@ type InitConfig struct {
 	Password yml.String
 
 	VerifyClientCerts yml.Bool
+
+	ProxyIdentities []yml.Identity
+
+	ProxyClientCert yml.String
 }
 
 // ReadInitConfig reads and parses the InitConfig YAML representation
@@ -62,7 +66,13 @@ func ReadInitConfig(filename string) (*InitConfig, error) {
 			PrivateKey  yml.String `yaml:"key"`
 			Certificate yml.String `yaml:"cert"`
 			Password    yml.String `yaml:"password"`
-			Client      struct {
+			Proxy       struct {
+				Identity []yml.Identity `yaml:"identity"`
+				Header   struct {
+					ClientCert yml.String `yaml:"cert"`
+				} `yaml:"header"`
+			} `yaml:"proxy"`
+			Client struct {
 				VerifyCerts yml.Bool `yaml:"verify_cert"`
 			} `yaml:"client"`
 		} `yaml:"tls"`
@@ -83,6 +93,8 @@ func ReadInitConfig(filename string) (*InitConfig, error) {
 		Certificate:       config.TLS.Certificate,
 		Password:          config.TLS.Password,
 		VerifyClientCerts: config.TLS.Client.VerifyCerts,
+		ProxyIdentities:   config.TLS.Proxy.Identity,
+		ProxyClientCert:   config.TLS.Proxy.Header.ClientCert,
 	}, nil
 }
 
@@ -104,7 +116,13 @@ func WriteInitConfig(filename string, config *InitConfig) error {
 			PrivateKey  yml.String `yaml:"key"`
 			Certificate yml.String `yaml:"cert"`
 			Password    yml.String `yaml:"password"`
-			Client      struct {
+			Proxy       struct {
+				Identity []yml.Identity `yaml:"identity"`
+				Header   struct {
+					ClientCert yml.String `yaml:"cert"`
+				} `yaml:"header"`
+			} `yaml:"proxy"`
+			Client struct {
 				VerifyCerts yml.Bool `yaml:"verify_cert"`
 			} `yaml:"client"`
 		} `yaml:"tls"`
@@ -118,6 +136,8 @@ func WriteInitConfig(filename string, config *InitConfig) error {
 	c.TLS.Certificate = config.Certificate
 	c.TLS.Password = config.Password
 	c.TLS.Client.VerifyCerts = config.VerifyClientCerts
+	c.TLS.Proxy.Identity = config.ProxyIdentities
+	c.TLS.Proxy.Header.ClientCert = config.ProxyClientCert
 	return yaml.NewEncoder(f).Encode(c)
 }
 

@@ -28,6 +28,13 @@ type InitConfig struct {
 		Certificate yml.String `yaml:"cert"`
 		Password    yml.String `yaml:"password"`
 
+		Proxy struct {
+			Identity []yml.Identity `yaml:"identity"`
+			Header   struct {
+				ClientCert yml.String `yaml:"cert"`
+			} `yaml:"header"`
+		} `yaml:"proxy"`
+
 		Client struct {
 			VerifyCerts yml.Bool `yaml:"verify_cert"`
 		} `yaml:"client"`
