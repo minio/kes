@@ -150,8 +150,13 @@ func statusCmd(args []string) {
 			latency.Round(time.Millisecond),
 		)
 		fmt.Println(
+			faint.Render(fmt.Sprintf("  %-8s", "OS")),
+			status.OS,
+		)
+		fmt.Println(
 			faint.Render(fmt.Sprintf("  %-8s", "CPUs")),
 			strconv.Itoa(status.UsableCPUs),
+			status.Arch,
 		)
 		fmt.Println(faint.Render(fmt.Sprintf("  %-8s", "Memory")))
 		fmt.Println(
