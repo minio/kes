@@ -163,6 +163,8 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 
 	type Response struct {
 		Version string        `json:"version"`
+		OS      string        `json:"os"`
+		Arch    string        `json:"arch"`
 		UpTime  time.Duration `json:"uptime"`
 
 		CPUs       int    `json:"num_cpu"`

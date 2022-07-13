@@ -50,6 +50,8 @@ func status(mux *http.ServeMux, config *ServerConfig) API {
 	)
 	type Response struct {
 		Version string        `json:"version"`
+		OS      string        `json:"os"`
+		Arch    string        `json:"arch"`
 		UpTime  time.Duration `json:"uptime"`
 
 		CPUs       int    `json:"num_cpu"`
@@ -86,6 +88,8 @@ func status(mux *http.ServeMux, config *ServerConfig) API {
 		w.Header().Set("Content-Type", ContentType)
 		json.NewEncoder(w).Encode(Response{
 			Version: sys.BinaryInfo().Version,
+			OS:      runtime.GOOS,
+			Arch:    runtime.GOARCH,
 			UpTime:  time.Since(startTime).Round(time.Second),
 
 			CPUs:       runtime.NumCPU(),
