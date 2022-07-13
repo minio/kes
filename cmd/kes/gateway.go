@@ -1,4 +1,4 @@
-// Copyright 2019 - MinIO, Inc. All rights reserved.
+// Copyright 2022 - MinIO, Inc. All rights reserved.
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
@@ -6,32 +6,333 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/aws"
 	"github.com/minio/kes/internal/azure"
+	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kes/internal/cpu"
+	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/fortanix"
 	"github.com/minio/kes/internal/fs"
 	"github.com/minio/kes/internal/gcp"
 	"github.com/minio/kes/internal/gemalto"
 	"github.com/minio/kes/internal/generic"
+	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
+	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/mem"
+	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/vault"
 	"github.com/minio/kes/internal/yml"
 )
 
+type gatewayConfig struct {
+	Address     string
+	ConfigFile  string
+	PrivateKey  string
+	Certificate string
+	TLSAuth     string
+}
+
+func startGateway(gConfig gatewayConfig) {
+	var mlock bool
+	if runtime.GOOS == "linux" {
+		mlock = mlockall() == nil
+	}
+
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelCtx()
+
+	config, err := yml.ReadServerConfig(gConfig.ConfigFile)
+	if err != nil {
+		cli.Fatalf("failed to read config file: %v", err)
+	}
+	if gConfig.Address != "" {
+		config.Address.Set(gConfig.Address)
+	}
+	if gConfig.PrivateKey != "" {
+		config.TLS.PrivateKey.Set(gConfig.PrivateKey)
+	}
+	if gConfig.Certificate != "" {
+		config.TLS.Certificate.Set(gConfig.Certificate)
+	}
+
+	if config.Address.Value() == "" {
+		config.Address.Set("0.0.0.0:7373")
+	}
+	if config.Admin.Identity.Value().IsUnknown() {
+		cli.Fatal("no admin identity specified")
+	}
+	if config.TLS.PrivateKey.Value() == "" {
+		cli.Fatal("no TLS private key specified")
+	}
+	if config.TLS.Certificate.Value() == "" {
+		cli.Fatal("no TLS certificate specified")
+	}
+
+	var errorLog *xlog.Target
+	switch strings.ToLower(config.Log.Error.Value()) {
+	case "on":
+		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
+			errorLog = xlog.NewTarget(os.Stderr)
+		} else {
+			errorLog = xlog.NewTarget(xlog.NewErrEncoder(os.Stderr))
+		}
+	case "off":
+		errorLog = xlog.NewTarget(ioutil.Discard)
+	default:
+		cli.Fatalf("%q is an invalid error log configuration", config.Log.Error.Value())
+	}
+
+	var auditLog *xlog.Target
+	switch strings.ToLower(config.Log.Audit.Value()) {
+	case "on":
+		auditLog = xlog.NewTarget(os.Stdout)
+	case "off":
+		auditLog = xlog.NewTarget(ioutil.Discard)
+	default:
+		cli.Fatalf("%q is an invalid audit log configuration", config.Log.Audit.Value())
+	}
+	auditLog.Log().SetFlags(0)
+
+	var proxy *auth.TLSProxy
+	if len(config.TLS.Proxy.Identities) != 0 {
+		proxy = &auth.TLSProxy{
+			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert.Value()),
+		}
+		if strings.ToLower(gConfig.TLSAuth) != "off" {
+			proxy.VerifyOptions = new(x509.VerifyOptions)
+		}
+		for _, identity := range config.TLS.Proxy.Identities {
+			if !identity.Value().IsUnknown() {
+				proxy.Add(identity.Value())
+			}
+		}
+	}
+
+	policySet, err := policySetFromConfig(config)
+	if err != nil {
+		cli.Fatal(err)
+	}
+	identitySet, err := identitySetFromConfig(config)
+	if err != nil {
+		cli.Fatal(err)
+	}
+	store, err := connect(config, errorLog.Log())
+	if err != nil {
+		cli.Fatal(err)
+	}
+	cache := key.NewCache(store, &key.CacheConfig{
+		Expiry:        config.Cache.Expiry.Any.Value(),
+		ExpiryUnused:  config.Cache.Expiry.Unused.Value(),
+		ExpiryOffline: config.Cache.Expiry.Offline.Value(),
+	})
+	defer cache.Stop()
+
+	for _, k := range config.Keys {
+		var algorithm key.Algorithm
+		if fips.Enabled || cpu.HasAESGCM() {
+			algorithm = key.AES256_GCM_SHA256
+		} else {
+			algorithm = key.XCHACHA20_POLY1305
+		}
+
+		key, err := key.Random(algorithm, config.Admin.Identity.Value())
+		if err != nil {
+			cli.Fatalf("failed to create key %q: %v", k.Name, err)
+		}
+		if err = store.Create(ctx, k.Name.Value(), key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
+			cli.Fatalf("failed to create key %q: %v", k.Name.Value(), err)
+		}
+	}
+
+	certificate, err := xhttp.LoadCertificate(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value())
+	if err != nil {
+		cli.Fatalf("failed to load TLS certificate: %v", err)
+	}
+	certificate.ErrorLog = errorLog
+
+	metrics := metric.New()
+	errorLog.Add(metrics.ErrorEventCounter())
+	auditLog.Add(metrics.AuditEventCounter())
+
+	server := http.Server{
+		Addr: config.Address.Value(),
+		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
+			Vault:    sys.NewStatelessVault(config.Admin.Identity.Value(), cache, policySet, identitySet),
+			Proxy:    proxy,
+			AuditLog: auditLog,
+			ErrorLog: errorLog,
+			Metrics:  metrics,
+		}),
+		TLSConfig: &tls.Config{
+			MinVersion:       tls.VersionTLS12,
+			GetCertificate:   certificate.GetCertificate,
+			CipherSuites:     fips.TLSCiphers(),
+			CurvePreferences: fips.TLSCurveIDs(),
+		},
+		ErrorLog: errorLog.Log(),
+
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - see timeout handler.
+		IdleTimeout:       90 * time.Second,
+	}
+
+	switch strings.ToLower(gConfig.TLSAuth) {
+	case "", "on":
+		server.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	case "off":
+		server.TLSConfig.ClientAuth = tls.RequireAnyClientCert
+	default:
+		cli.Fatalf("invalid option for --auth: %q", gConfig.TLSAuth)
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
+		err := server.Shutdown(shutdownContext)
+		if cancelShutdown(); err == context.DeadlineExceeded {
+			err = server.Close()
+		}
+		if err != nil {
+			cli.Fatalf("abnormal server shutdown: %v", err)
+		}
+	}()
+	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
+	go key.LogStoreStatus(ctx, cache, 1*time.Minute, errorLog.Log())
+
+	ip, port := serverAddr(config.Address.Value())
+	ifaceIPs := listeningOnV4(ip)
+	if len(ifaceIPs) == 0 {
+		cli.Fatal("failed to listen on network interfaces")
+	}
+	kmsKind, kmsEndpoint, err := description(config)
+	if err != nil {
+		cli.Fatal(err)
+	}
+
+	var faint, item, green, red, yellow tui.Style
+	if isTerm(os.Stdout) {
+		faint = faint.Faint(true)
+		item = item.Foreground(tui.Color("#2e42d1")).Bold(true)
+		green = green.Foreground(tui.Color("#00a700"))
+		red = red.Foreground(tui.Color("#a70000"))
+		yellow = yellow.Foreground(tui.Color("#fede00"))
+	}
+	cli.Println(
+		item.Render(fmt.Sprintf("%-10s", "Copyright")),
+		fmt.Sprintf("%-12s", "MinIO, Inc."),
+		faint.Render("https://min.io"),
+	)
+	cli.Println(
+		item.Render(fmt.Sprintf("%-10s", "License")),
+		fmt.Sprintf("%-12s", "GNU AGPLv3"),
+		faint.Render("https://www.gnu.org/licenses/agpl-3.0.html"),
+	)
+	cli.Println(
+		item.Render(fmt.Sprintf("%-10s", "Version")),
+		fmt.Sprintf("%-12s", sys.BinaryInfo().Version),
+		faint.Render(fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)),
+	)
+
+	cli.Println()
+	cli.Println(
+		item.Render(fmt.Sprintf("%-10s", "KMS")),
+		fmt.Sprintf("%s: %s", kmsKind, kmsEndpoint),
+	)
+	cli.Println(
+		item.Render(fmt.Sprintf("%-10s", "Endpoints")),
+		fmt.Sprintf("https://%s:%s", ifaceIPs[0], port),
+	)
+	for _, ifaceIP := range ifaceIPs[1:] {
+		cli.Println(
+			fmt.Sprintf("%-10s", " "),
+			fmt.Sprintf("https://%s:%s", ifaceIP, port),
+		)
+	}
+
+	cli.Println()
+	if r, err := hex.DecodeString(config.Admin.Identity.Value().String()); err == nil && len(r) == sha256.Size {
+		cli.Println(
+			item.Render(fmt.Sprintf("%-10s", "Admin")),
+			config.Admin.Identity.Value(),
+		)
+	} else {
+		cli.Println(
+			item.Render(fmt.Sprintf("%-10s", "Admin")),
+			fmt.Sprintf("%-12s", "_"),
+			faint.Render("[ disabled ]"),
+		)
+	}
+	if auth := server.TLSConfig.ClientAuth; auth == tls.VerifyClientCertIfGiven || auth == tls.RequireAndVerifyClientCert {
+		cli.Println(
+			item.Render(fmt.Sprintf("%-10s", "mTLS")),
+			green.Render(fmt.Sprintf("%-12s", "verify")),
+			faint.Render("Only clients with trusted certificates can connect"),
+		)
+	} else {
+		cli.Println(
+			item.Render(fmt.Sprintf("%-10s", "mTLS")),
+			yellow.Render(fmt.Sprintf("%-12s", "skip verify")),
+			faint.Render("Client certificates are not verified"),
+		)
+	}
+
+	if runtime.GOOS == "linux" {
+		if mlock {
+			cli.Println(
+				item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
+				green.Render(fmt.Sprintf("%-12s", "on")),
+				faint.Render("RAM pages will not be swapped to disk"),
+			)
+		} else {
+			cli.Println(
+				item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
+				red.Render(fmt.Sprintf("%-12s", "off")),
+				faint.Render("Failed to lock RAM pages. Consider granting CAP_IPC_LOCK"),
+			)
+		}
+	} else {
+		cli.Println(
+			item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
+			red.Render(fmt.Sprintf("%-12s", "off")),
+			faint.Render(fmt.Sprintf("Not supported on %s/%s", runtime.GOOS, runtime.GOARCH)),
+		)
+	}
+
+	// Start the HTTPS server. We pass a tls.Config.GetCertificate.
+	// Therefore, we pass no certificate or private key file.
+	// Passing the private key file here directly would break support
+	// for encrypted private keys - which must be decrypted beforehand.
+	if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+		cli.Fatalf("failed to start server: %v", err)
+	}
+}
+
 // connect tries to establish a connection to the KMS specified in the ServerConfig
-func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.Store, error) {
+func connect(config *yml.ServerConfig, errorLog *log.Logger) (key.Store, error) {
 	switch {
 	case config.KeyStore.Fs.Path.Value() != "":
 		f, err := os.Stat(config.KeyStore.Fs.Path.Value())
@@ -42,12 +343,9 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 			return nil, fmt.Errorf("%q is not a directory", config.KeyStore.Fs.Path.Value())
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			msg := fmt.Sprintf("Creating directory '%s' ... ", config.KeyStore.Fs.Path.Value())
-			quiet.Print(msg)
 			if err = os.MkdirAll(config.KeyStore.Fs.Path.Value(), 0o700); err != nil {
 				return nil, fmt.Errorf("failed to create directory %q: %v", config.KeyStore.Fs.Path.Value(), err)
 			}
-			quiet.ClearMessage(msg)
 		}
 		return &fs.Store{
 			Dir:      config.KeyStore.Fs.Path.Value(),
@@ -61,16 +359,11 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 			CAPath:   config.KeyStore.Generic.TLS.CAPath.Value(),
 			ErrorLog: errorLog,
 		}
-		msg := fmt.Sprintf("Authenticating to generic KeyStore '%s' ... ", config.KeyStore.Generic.Endpoint.Value())
-		quiet.Print(msg)
 		if err := genericStore.Authenticate(); err != nil {
 			return nil, fmt.Errorf("failed to connect to generic KeyStore: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return genericStore, nil
 	case config.KeyStore.Vault.Endpoint.Value() != "":
-		msg := fmt.Sprintf("Authenticating to Hashicorp Vault '%s' ... ", config.KeyStore.Vault.Endpoint.Value())
-		quiet.Print(msg)
 		vaultStore, err := vault.Connect(context.Background(), &vault.Config{
 			Endpoint:   config.KeyStore.Vault.Endpoint.Value(),
 			Engine:     config.KeyStore.Vault.Engine.Value(),
@@ -98,7 +391,6 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to Vault: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return vaultStore, nil
 	case config.KeyStore.Fortanix.SDKMS.Endpoint.Value() != "":
 		fortanixStore := &fortanix.KeyStore{
@@ -108,12 +400,9 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 			ErrorLog: errorLog,
 			CAPath:   config.KeyStore.Fortanix.SDKMS.TLS.CAPath.Value(),
 		}
-		msg := fmt.Sprintf("Authenticating to Fortanix SDKMS '%s' ... ", fortanixStore.Endpoint)
-		quiet.Print(msg)
 		if err := fortanixStore.Authenticate(context.Background()); err != nil {
 			return nil, fmt.Errorf("failed to connect to Fortanix SDKMS: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return fortanixStore, nil
 	case config.KeyStore.Aws.SecretsManager.Endpoint.Value() != "":
 		awsStore := &aws.SecretsManager{
@@ -127,18 +416,11 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken.Value(),
 			},
 		}
-
-		msg := fmt.Sprintf("Authenticating to AWS SecretsManager '%s' ... ", awsStore.Addr)
-		quiet.Print(msg)
 		if err := awsStore.Authenticate(); err != nil {
 			return nil, fmt.Errorf("failed to connect to AWS Secrets Manager: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return awsStore, nil
 	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
-		msg := fmt.Sprintf("Authenticating to GCP SecretManager Project: '%s' ... ", config.KeyStore.GCP.SecretManager.ProjectID.Value())
-		quiet.Print(msg)
-
 		scopes := make([]string, 0, len(config.KeyStore.GCP.SecretManager.Scopes))
 		for _, scope := range config.KeyStore.GCP.SecretManager.Scopes {
 			if scope.Value() != "" {
@@ -160,15 +442,12 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to GCP SecretManager: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return gcpStore, nil
 	case config.KeyStore.Azure.KeyVault.Endpoint.Value() != "":
 		azureStore := &azure.KeyVault{
 			Endpoint: config.KeyStore.Azure.KeyVault.Endpoint.Value(),
 			ErrorLog: errorLog,
 		}
-		msg := fmt.Sprintf("Authenticating to Azure KeyVault '%s' ... ", config.KeyStore.Azure.KeyVault.Endpoint)
-		quiet.Print(msg)
 		switch c := config.KeyStore.Azure.KeyVault.Credentials; {
 		case c.TenantID.Value() != "" || c.ClientID.Value() != "" || c.Secret.Value() != "":
 			err := azureStore.AuthenticateWithCredentials(azure.Credentials{
@@ -189,7 +468,6 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 		default:
 			return nil, errors.New("failed to connect to Azure KeyVault: no client credentials or managed identity")
 		}
-		quiet.ClearMessage(msg)
 		return azureStore, nil
 	case config.KeyStore.Gemalto.KeySecure.Endpoint.Value() != "":
 		gemaltoStore := &gemalto.KeySecure{
@@ -203,12 +481,9 @@ func connect(config *yml.ServerConfig, quiet quiet, errorLog *log.Logger) (key.S
 			},
 		}
 
-		msg := fmt.Sprintf("Authenticating to Gemalto KeySecure '%s' ... ", gemaltoStore.Endpoint)
-		quiet.Print(msg)
 		if err := gemaltoStore.Authenticate(); err != nil {
 			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
 		}
-		quiet.ClearMessage(msg)
 		return gemaltoStore, nil
 	default:
 		return &mem.Store{}, nil

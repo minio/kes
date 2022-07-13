@@ -14,10 +14,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/yml"
 	flag "github.com/spf13/pflag"
+	"golang.org/x/term"
 )
 
 const migrateCmdUsage = `Usage:
@@ -91,11 +93,11 @@ func migrateCmd(args []string) {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 
-	src, err := connect(sourceConfig, quiet, nil)
+	src, err := connect(sourceConfig, nil)
 	if err != nil {
 		cli.Fatal(err)
 	}
-	dst, err := connect(targetConfig, quiet, nil)
+	dst, err := connect(targetConfig, nil)
 	if err != nil {
 		cli.Fatal(err)
 	}
@@ -169,4 +171,82 @@ func migrateCmd(args []string) {
 	msg := fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n))
 	quiet.ClearMessage(msg)
 	quiet.Println(msg)
+}
+
+// quiet is a boolean flag.Value that can print
+// to STDOUT.
+//
+// If quiet is set to true then all quiet.Print*
+// calls become no-ops and no output is printed to
+// STDOUT.
+type quiet bool
+
+// Print behaves as fmt.Print if quiet is false.
+// Otherwise, Print does nothing.
+func (q quiet) Print(a ...any) {
+	if !q {
+		fmt.Print(a...)
+	}
+}
+
+// Printf behaves as fmt.Printf if quiet is false.
+// Otherwise, Printf does nothing.
+func (q quiet) Printf(format string, a ...any) {
+	if !q {
+		fmt.Printf(format, a...)
+	}
+}
+
+// Println behaves as fmt.Println if quiet is false.
+// Otherwise, Println does nothing.
+func (q quiet) Println(a ...any) {
+	if !q {
+		fmt.Println(a...)
+	}
+}
+
+// ClearLine clears the last line written to STDOUT if
+// STDOUT is a terminal that supports terminal control
+// sequences.
+//
+// Otherwise, ClearLine just prints a empty newline.
+func (q quiet) ClearLine() {
+	if color.NoColor {
+		q.Println()
+	} else {
+		q.Print(eraseLine)
+	}
+}
+
+const (
+	eraseLine = "\033[2K\r"
+	moveUp    = "\033[1A"
+)
+
+// ClearMessage tries to erase the given message from STDOUT
+// if STDOUT is a terminal that supports terminal control sequences.
+//
+// Otherwise, ClearMessage just prints an empty newline.
+func (q quiet) ClearMessage(msg string) {
+	if color.NoColor {
+		q.Println()
+		return
+	}
+
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil { // If we cannot get the width, just erasure one line
+		q.Print(eraseLine)
+		return
+	}
+
+	// Erase and move up one line as long as the message is not empty.
+	for len(msg) > 0 {
+		q.Print(eraseLine)
+
+		if len(msg) < width {
+			break
+		}
+		q.Print(moveUp)
+		msg = msg[width:]
+	}
 }

@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fatih/color"
+	tui "github.com/charmbracelet/lipgloss"
 )
 
-var errPrefix = color.RedString("Error: ")
+var errPrefix = tui.NewStyle().Foreground(tui.Color("#ac0000")).Render("Error: ")
 
 // Fatal writes an error prefix and the operands
 // to OS stderr. Then, Fatal terminates the program by
