@@ -175,6 +175,27 @@ func startServer(path string, sConfig serverConfig) {
 	}
 	certificate.ErrorLog = errorLog
 
+	clientAuth := tls.RequireAnyClientCert
+	if init.VerifyClientCerts.Value() {
+		clientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	var proxy *auth.TLSProxy
+	if len(init.ProxyIdentities) != 0 {
+		proxy = &auth.TLSProxy{
+			CertHeader: http.CanonicalHeaderKey(init.ProxyClientCert.Value()),
+		}
+		if clientAuth == tls.RequireAndVerifyClientCert || clientAuth == tls.VerifyClientCertIfGiven {
+			proxy.VerifyOptions = new(x509.VerifyOptions)
+		}
+		for _, identity := range init.ProxyIdentities {
+			if !identity.Value().IsUnknown() {
+				proxy.Add(identity.Value())
+			}
+		}
+	}
+	fmt.Println(proxy)
+
 	vault, err := fs.Open(path, errorLog.Log())
 	if err != nil {
 		cli.Fatalf("failed to initialize vault: %v", err)
@@ -184,16 +205,11 @@ func startServer(path string, sConfig serverConfig) {
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
 
-	clientAuth := tls.RequireAnyClientCert
-	if init.VerifyClientCerts.Value() {
-		clientAuth = tls.RequireAndVerifyClientCert
-	}
-
 	server := http.Server{
 		Addr: init.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
 			Vault:    vault,
-			Proxy:    nil,
+			Proxy:    proxy,
 			AuditLog: auditLog,
 			ErrorLog: errorLog,
 			Metrics:  metrics,
