@@ -26,9 +26,7 @@ const initCmdUsage = `Usage:
 
 Options:
     --config <PATH>          Path to the initial configuration file.
-	
     -f, --force              Overwrite any existing data.
-
     -h, --help               Print command line options.
 
 Examples:
