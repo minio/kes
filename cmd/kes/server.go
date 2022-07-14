@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
 	xhttp "github.com/minio/kes/internal/http"
