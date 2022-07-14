@@ -1,5 +1,5 @@
 # KES
-[![Go Reference](https://pkg.go.dev/badge/github.com/minio/kes.svg)](https://pkg.go.dev/github.com/minio/kes) ![build](https://github.com/minio/kes/workflows/Go/badge.svg) ![license](https://img.shields.io/badge/license-AGPL%20V3-blue) [![latest](https://badgen.net/github/tag/minio/kes)](https://github.com/minio/kes/releases/latest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/minio/kes.svg)](https://pkg.go.dev/github.com/minio/kes) ![build](https://github.com/minio/kes/workflows/Go/badge.svg) ![license](https://img.shields.io/badge/license-AGPL%20V3-blue) [![latest](https://badgen.net/github/tag/minio/kes)](https://github.com/minio/kes/releases/latest) ![GitHub Downloads][gh-downloads]
 
 KES is a stateless and distributed key-management system for high-performance applications. We built KES as the bridge between modern applications - running as containers on [Kubernetes](https://kubernetes.io) - and centralized KMS solutions. Therefore, KES has been designed to be simple, scalable and secure by default. It has just a few knobs to tweak instead of a complex configuration and does not require a deep understanding of secure key-management or cryptography.
 
@@ -152,3 +152,5 @@ If you want to learn more about KES checkout our [documentation](https://github.
 
 ## License
 Use of `KES` is governed by the AGPLv3 license that can be found in the [LICENSE](./LICENSE) file.
+
+[gh-downloads]: https://img.shields.io/github/downloads/minio/kes/total?color=pink&label=GitHub%20Downloads
