@@ -9,9 +9,7 @@ import "testing"
 var readServerConfigTests = []struct {
 	File string
 }{
-	{File: "testdata/config_v0.13.0.yml"}, // 0
-	{File: "testdata/config_v0.14.0.yml"}, // 1
-	{File: "testdata/config_v0.17.0.yml"}, // 2
+	{File: "testdata/config_v0.17.0.yml"}, // 0
 }
 
 func TestReadServerConfig(t *testing.T) {
