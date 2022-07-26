@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"time"
 
@@ -20,6 +21,61 @@ import (
 // ErrIdentityNotFound is returned by an IdentitySet if a specified
 // identity does not exist.
 var ErrIdentityNotFound = kes.NewError(http.StatusNotFound, "identity does not exist")
+
+// VerifyRequest verifies whether the request's identity is allowed to perform
+// the request based on the given policies.
+func VerifyRequest(r *http.Request, policies PolicySet, identities IdentitySet) error {
+	if r.TLS == nil {
+		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
+	}
+
+	var peerCertificates []*x509.Certificate
+	switch {
+	case len(r.TLS.PeerCertificates) <= 1:
+		peerCertificates = r.TLS.PeerCertificates
+	case len(r.TLS.PeerCertificates) > 1:
+		for _, cert := range r.TLS.PeerCertificates {
+			if cert.IsCA {
+				continue
+			}
+			peerCertificates = append(peerCertificates, cert)
+		}
+	}
+	if len(peerCertificates) == 0 {
+		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
+	}
+	if len(peerCertificates) > 1 {
+		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
+	}
+
+	var (
+		h        = sha256.Sum256(peerCertificates[0].RawSubjectPublicKeyInfo)
+		identity = kes.Identity(hex.EncodeToString(h[:]))
+	)
+	admin, err := identities.Admin(r.Context())
+	if err != nil {
+		return err
+	}
+	if identity == admin {
+		return nil
+	}
+
+	info, err := identities.Get(r.Context(), identity)
+	if errors.Is(err, ErrIdentityNotFound) {
+		return kes.ErrNotAllowed
+	}
+	if err != nil {
+		return err
+	}
+	policy, err := policies.Get(r.Context(), info.Policy)
+	if errors.Is(err, kes.ErrPolicyNotFound) {
+		return kes.ErrNotAllowed
+	}
+	if err != nil {
+		return err
+	}
+	return policy.Verify(r)
+}
 
 // Identify computes the identity of the given HTTP request.
 //

@@ -1,3 +1,7 @@
+// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package http
 
 import (
@@ -10,7 +14,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-func version(mux *http.ServeMux, config *ServerConfig) API {
+func serverVersion(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodGet
 		APIPath = "/version"
@@ -40,7 +44,7 @@ func version(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func status(mux *http.ServeMux, config *ServerConfig) API {
+func serverStatus(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/status"
@@ -107,7 +111,7 @@ func status(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func metrics(mux *http.ServeMux, config *ServerConfig) API {
+func serverMetrics(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodGet
 		APIPath = "/v1/metrics"
@@ -152,7 +156,7 @@ func metrics(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func listAPIs(mux *http.ServeMux, config *ServerConfig) API {
+func serverListAPIs(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/api"

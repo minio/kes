@@ -19,7 +19,7 @@ import (
 	"github.com/minio/kes/internal/key"
 )
 
-func createKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayCreateKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/create/"
@@ -38,20 +38,14 @@ func createKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -68,7 +62,7 @@ func createKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
+		if err = config.Keys.Create(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
 		}
@@ -83,7 +77,7 @@ func createKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func importKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/import/"
@@ -106,26 +100,20 @@ func importKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
 
 		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, err)
 			return
 		}
@@ -152,7 +140,7 @@ func importKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
+		if err = config.Keys.Create(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
 		}
@@ -167,7 +155,7 @@ func importKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func deleteKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayDeleteKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method  = http.MethodDelete
 		APIPath = "/v1/key/delete/"
@@ -186,25 +174,18 @@ func deleteKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
-
-		if err = enclave.DeleteKey(r.Context(), name); err != nil {
+		if err := config.Keys.Delete(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -219,7 +200,7 @@ func deleteKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func generateKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayGenerateKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/generate/"
@@ -246,30 +227,24 @@ func generateKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
 
 		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
+		key, err := config.Keys.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -299,7 +274,7 @@ func generateKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func encryptKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayEncryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/encrypt/"
@@ -326,30 +301,24 @@ func encryptKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
 
 		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
+		key, err := config.Keys.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -373,7 +342,7 @@ func encryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func decryptKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/decrypt/"
@@ -400,30 +369,24 @@ func decryptKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
 
 		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
+		key, err := config.Keys.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -447,7 +410,7 @@ func decryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func bulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayBulkDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/bulk/decrypt/"
@@ -475,24 +438,18 @@ func bulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
+		if err := validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
+		key, err := config.Keys.Get(r.Context(), name)
 		if err != nil {
 			Error(w, err)
 			return
@@ -534,7 +491,7 @@ func bulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func listKey(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayListKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/key/list/"
@@ -558,24 +515,18 @@ func listKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
 		pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validatePattern(pattern); err != nil {
+		if err := validatePattern(pattern); err != nil {
 			Error(w, err)
 			return
 		}
-		iterator, err := enclave.ListKeys(r.Context())
+		iterator, err := config.Keys.List(r.Context())
 		if err != nil {
 			Error(w, err)
 			return

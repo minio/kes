@@ -15,15 +15,17 @@ import (
 	"github.com/minio/kes/internal/auth"
 )
 
-func describePolicy(mux *http.ServeMux, config *ServerConfig) API {
+func serverDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodGet
-		APIPath     = "/v1/policy/describe/"
+		APIPath     = "/v1/identity/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
 	type Response struct {
+		IsAdmin   bool         `json:"admin,omitempty"`
+		Policy    string       `json:"policy"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
@@ -56,83 +58,18 @@ func describePolicy(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		policy, err := enclave.GetPolicy(r.Context(), name)
+		info, err := enclave.GetIdentity(r.Context(), kes.Identity(name))
 		if err != nil {
 			Error(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", ContentType)
 		json.NewEncoder(w).Encode(Response{
-			CreatedAt: policy.CreatedAt,
-			CreatedBy: policy.CreatedBy,
+			IsAdmin:   info.IsAdmin,
+			Policy:    info.Policy,
+			CreatedAt: info.CreatedAt,
+			CreatedBy: info.CreatedBy,
 		})
-	}
-	mux.HandleFunc(APIPath, timeout(Timeout, config.Metrics.Count(config.Metrics.Latency(handler))))
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-	}
-}
-
-func assignPolicy(mux *http.ServeMux, config *ServerConfig) API {
-	const (
-		Method  = http.MethodPost
-		APIPath = "/v1/policy/assign/"
-		MaxBody = 1024 // 1 KB
-		Timeout = 15 * time.Second
-	)
-	type Request struct {
-		Identity kes.Identity `json:"identity"`
-	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
-		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
-
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
-			return
-		}
-		if req.Identity.IsUnknown() {
-			Error(w, kes.NewError(http.StatusBadRequest, "identity is unknown"))
-			return
-		}
-		if self := auth.Identify(r); self == req.Identity {
-			Error(w, kes.NewError(http.StatusForbidden, "identity cannot assign policy to itself"))
-			return
-		}
-		if err = enclave.AssignPolicy(r.Context(), name, req.Identity); err != nil {
-			Error(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
@@ -143,20 +80,28 @@ func assignPolicy(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func readPolicy(mux *http.ServeMux, config *ServerConfig) API {
+func serverSelfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
-		Method      = http.MethodGet
-		APIPath     = "/v1/policy/read/"
-		MaxBody     = 0
-		Timeout     = 15 * time.Second
-		ContentType = "application/json"
+		Method  = http.MethodGet
+		APIPath = "/v1/identity/self/describe"
+		MaxBody = 0
+		Timeout = 15 * time.Second
 	)
-	type Response struct {
+	type InlinePolicy struct {
 		Allow     []string     `json:"allow,omitempty"`
 		Deny      []string     `json:"deny,omitempty"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
+	type Response struct {
+		Identity   kes.Identity `json:"identity"`
+		IsAdmin    bool         `json:"admin,omitempty"`
+		PolicyName string       `json:"policy_name,omitempty"`
+		CreatedAt  time.Time    `json:"created_at,omitempty"`
+		CreatedBy  kes.Identity `json:"created_by,omitempty"`
+
+		Policy InlinePolicy `json:"policy"`
+	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
 
@@ -176,27 +121,34 @@ func readPolicy(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
 
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-		policy, err := enclave.GetPolicy(r.Context(), name)
+		identity := auth.Identify(r)
+		info, err := enclave.GetIdentity(r.Context(), identity)
 		if err != nil {
 			Error(w, err)
 			return
 		}
-		w.Header().Set("Content-Type", ContentType)
+
+		policy := new(auth.Policy)
+		if !info.IsAdmin {
+			policy, err = enclave.GetPolicy(r.Context(), info.Policy)
+			if err != nil {
+				Error(w, err)
+				return
+			}
+		}
 		json.NewEncoder(w).Encode(Response{
-			Allow:     policy.Allow,
-			Deny:      policy.Deny,
-			CreatedAt: policy.CreatedAt,
-			CreatedBy: policy.CreatedBy,
+			Identity:   identity,
+			PolicyName: info.Policy,
+			IsAdmin:    info.IsAdmin,
+			CreatedAt:  info.CreatedAt,
+			CreatedBy:  info.CreatedBy,
+			Policy: InlinePolicy{
+				Allow:     policy.Allow,
+				Deny:      policy.Deny,
+				CreatedAt: policy.CreatedAt,
+				CreatedBy: policy.CreatedBy,
+			},
 		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
@@ -208,77 +160,10 @@ func readPolicy(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func writePolicy(mux *http.ServeMux, config *ServerConfig) API {
-	const (
-		Method  = http.MethodPost
-		APIPath = "/v1/policy/write/"
-		MaxBody = 1 << 20
-		Timeout = 15 * time.Second
-	)
-	type Request struct {
-		Allow []string `json:"allow,omitempty"`
-		Deny  []string `json:"deny,omitempty"`
-	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
-		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
-
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
-			return
-		}
-		policy := &auth.Policy{
-			Allow:     req.Allow,
-			Deny:      req.Deny,
-			CreatedAt: time.Now().UTC(),
-			CreatedBy: auth.Identify(r),
-		}
-		if err = enclave.SetPolicy(r.Context(), name, policy); err != nil {
-			Error(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-	}
-}
-
-func deletePolicy(mux *http.ServeMux, config *ServerConfig) API {
+func serverDeleteIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodDelete
-		APIPath = "/v1/policy/delete/"
+		APIPath = "/v1/identity/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
 	)
@@ -311,8 +196,7 @@ func deletePolicy(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-
-		if err = enclave.DeletePolicy(r.Context(), name); err != nil {
+		if err = enclave.DeleteIdentity(r.Context(), kes.Identity(name)); err != nil {
 			Error(w, err)
 			return
 		}
@@ -327,16 +211,18 @@ func deletePolicy(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func listPolicy(mux *http.ServeMux, config *ServerConfig) API {
+func serverListIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodGet
-		APIPath     = "/v1/policy/list/"
+		APIPath     = "/v1/identity/list/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
-		Name      string       `json:"name"`
+		Identity  kes.Identity `json:"identity"`
+		IsAdmin   bool         `json:"admin"`
+		Policy    string       `json:"policy"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 
@@ -371,29 +257,33 @@ func listPolicy(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		iterator, err := enclave.ListPolicies(r.Context())
+		iterator, err := enclave.ListIdentities(r.Context())
 		if err != nil {
 			Error(w, err)
 			return
 		}
-
-		var hasWritten bool
-		encoder := json.NewEncoder(w)
-		w.Header().Set("Content-Type", ContentType)
+		var (
+			encoder    = json.NewEncoder(w)
+			hasWritten bool
+		)
 		for iterator.Next() {
-			if ok, _ := path.Match(pattern, iterator.Name()); !ok {
+			if ok, _ := path.Match(pattern, iterator.Identity().String()); !ok {
 				continue
 			}
-
-			policy, err := enclave.GetPolicy(r.Context(), iterator.Name())
+			info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
 			if err != nil {
 				encoder.Encode(Response{Err: err.Error()})
 				return
 			}
+			if !hasWritten {
+				w.Header().Set("Content-Type", ContentType)
+			}
 			err = encoder.Encode(Response{
-				Name:      iterator.Name(),
-				CreatedAt: policy.CreatedAt,
-				CreatedBy: policy.CreatedBy,
+				Identity:  iterator.Identity(),
+				IsAdmin:   info.IsAdmin,
+				Policy:    info.Policy,
+				CreatedAt: info.CreatedAt,
+				CreatedBy: info.CreatedBy,
 			})
 			if err != nil {
 				return
@@ -401,7 +291,11 @@ func listPolicy(mux *http.ServeMux, config *ServerConfig) API {
 			hasWritten = true
 		}
 		if err = iterator.Close(); err != nil {
-			encoder.Encode(Response{Err: err.Error()})
+			if hasWritten {
+				encoder.Encode(Response{Err: err.Error()})
+			} else {
+				Error(w, err)
+			}
 			return
 		}
 		if !hasWritten {

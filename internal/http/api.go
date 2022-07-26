@@ -15,10 +15,10 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
-	xlog "github.com/minio/kes/internal/log"
-	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
 )
+
+var errMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
 // API describes a KES server API.
 type API struct {
@@ -27,86 +27,6 @@ type API struct {
 	MaxBody int64         // The max. body size the API accepts
 	Timeout time.Duration // The duration after which an API request times out.
 }
-
-// A ServerConfig structure is used to configure a
-// KES server.
-type ServerConfig struct {
-	// Certificate is TLS server certificate.
-	Certificate *Certificate
-
-	Vault sys.Vault
-
-	// Proxy is an optional TLS proxy that sits
-	// in-front of this server and forwards client
-	// requests.
-	//
-	// A TLS proxy is responsible for forwarding
-	// the client certificates via a request
-	// header such that this server can apply
-	// the corresponding policy.
-	Proxy *auth.TLSProxy
-
-	// AuditLog is a log target that receives
-	// audit log events.
-	AuditLog *xlog.Target
-
-	// ErrorLog is a log target that receives
-	// error log events.
-	ErrorLog *xlog.Target
-
-	// Metrics gathers various informations about
-	// the server.
-	Metrics *metric.Metrics
-
-	APIs []API
-}
-
-// NewServerMux returns a new KES server handler that
-// uses the given ServerConfig to implement the KES
-// HTTP API.
-func NewServerMux(config *ServerConfig) *http.ServeMux {
-	mux := http.NewServeMux()
-	config.APIs = append(config.APIs, version(mux, config))
-	config.APIs = append(config.APIs, status(mux, config))
-	config.APIs = append(config.APIs, metrics(mux, config))
-	config.APIs = append(config.APIs, listAPIs(mux, config))
-
-	config.APIs = append(config.APIs, createKey(mux, config))
-	config.APIs = append(config.APIs, importKey(mux, config))
-	config.APIs = append(config.APIs, deleteKey(mux, config))
-	config.APIs = append(config.APIs, generateKey(mux, config))
-	config.APIs = append(config.APIs, encryptKey(mux, config))
-	config.APIs = append(config.APIs, decryptKey(mux, config))
-	config.APIs = append(config.APIs, bulkDecryptKey(mux, config))
-	config.APIs = append(config.APIs, listKey(mux, config))
-
-	config.APIs = append(config.APIs, describePolicy(mux, config))
-	config.APIs = append(config.APIs, assignPolicy(mux, config))
-	config.APIs = append(config.APIs, readPolicy(mux, config))
-	config.APIs = append(config.APIs, writePolicy(mux, config))
-	config.APIs = append(config.APIs, listPolicy(mux, config))
-	config.APIs = append(config.APIs, deletePolicy(mux, config))
-
-	config.APIs = append(config.APIs, describeIdentity(mux, config))
-	config.APIs = append(config.APIs, selfDescribeIdentity(mux, config))
-	config.APIs = append(config.APIs, listIdentity(mux, config))
-	config.APIs = append(config.APIs, deleteIdentity(mux, config))
-
-	config.APIs = append(config.APIs, logErrorEvents(mux, config))
-	config.APIs = append(config.APIs, logAuditEvents(mux, config))
-
-	config.APIs = append(config.APIs, createEnclave(mux, config))
-	config.APIs = append(config.APIs, deleteEnclave(mux, config))
-
-	config.APIs = append(config.APIs, sealVault(mux, config))
-
-	mux.HandleFunc("/", timeout(10*time.Second, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-	}))
-	return mux
-}
-
-var errMethodNotAllowed = kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 
 // audit returns an http.ResponseWriter that wraps w
 // and logs an audit event containing some request

@@ -179,12 +179,14 @@ func startGateway(gConfig gatewayConfig) {
 
 	server := http.Server{
 		Addr: config.Address.Value(),
-		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
-			Vault:    sys.NewStatelessVault(config.Admin.Identity.Value(), cache, policySet, identitySet),
-			Proxy:    proxy,
-			AuditLog: auditLog,
-			ErrorLog: errorLog,
-			Metrics:  metrics,
+		Handler: xhttp.NewGatewayMux(&xhttp.GatewayConfig{
+			Keys:       cache,
+			Policies:   policySet,
+			Identities: identitySet,
+			Proxy:      proxy,
+			AuditLog:   auditLog,
+			ErrorLog:   errorLog,
+			Metrics:    metrics,
 		}),
 		TLSConfig: &tls.Config{
 			MinVersion:       tls.VersionTLS12,

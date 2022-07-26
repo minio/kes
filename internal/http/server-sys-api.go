@@ -12,7 +12,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 )
 
-func sealVault(mux *http.ServeMux, config *ServerConfig) API {
+func serverSealVault(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/sys/seal"
