@@ -14,7 +14,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 )
 
-func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
+func serverCreateEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/enclave/create/"
@@ -83,7 +83,7 @@ func createEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func deleteEnclave(mux *http.ServeMux, config *ServerConfig) API {
+func serverDeleteEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodDelete
 		APIPath = "/v1/enclave/delete/"

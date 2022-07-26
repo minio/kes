@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/minio/kes/internal/auth"
 	xlog "github.com/minio/kes/internal/log"
 )
 
-func logErrorEvents(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayErrorLog(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/log/error"
@@ -30,17 +31,11 @@ func logErrorEvents(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
-
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
 
 		w.Header().Set("Content-Type", ContentType)
 		w.WriteHeader(http.StatusOK)
@@ -60,7 +55,7 @@ func logErrorEvents(mux *http.ServeMux, config *ServerConfig) API {
 	}
 }
 
-func logAuditEvents(mux *http.ServeMux, config *ServerConfig) API {
+func gatewayAuditLog(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/log/audit"
@@ -79,17 +74,11 @@ func logAuditEvents(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
-
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
 
 		w.Header().Set("Content-Type", ContentType)
 		w.WriteHeader(http.StatusOK)
