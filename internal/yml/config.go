@@ -153,20 +153,6 @@ func unmarshalServerConfig(b []byte) (*ServerConfig, error) {
 			if _, ok := errV0170.(*yaml.TypeError); !ok {
 				return nil, err
 			}
-
-			var configV0140 serverConfigV0140
-			if errV0140 := yaml.Unmarshal(b, &configV0140); errV0140 != nil {
-				if _, ok := errV0140.(*yaml.TypeError); !ok {
-					return nil, err
-				}
-
-				var configV0135 serverConfigV0135
-				if errV0135 := yaml.Unmarshal(b, &configV0135); errV0135 != nil {
-					return nil, err
-				}
-				return configV0135.migrate(), nil
-			}
-			return configV0140.migrate(), nil
 		}
 		return configV0170.migrate(), nil
 	}
