@@ -14,8 +14,8 @@ import (
 	"github.com/minio/kes/kestest"
 )
 
-func ExampleServer() {
-	server := kestest.NewServer()
+func ExampleGateway() {
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	version, err := server.Client().Version(context.Background())
@@ -28,8 +28,8 @@ func ExampleServer() {
 	// v0.0.0-dev
 }
 
-func ExampleServer_IssueClientCertificate() {
-	server := kestest.NewServer()
+func ExampleGateway_IssueClientCertificate() {
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	server.Policy().Allow("test-policy",

@@ -35,8 +35,10 @@ func (p *PolicySet) Admin() kes.Identity { return p.admin }
 // Any existing policy with the same name is replaced.
 func (p *PolicySet) Add(name string, policy *kes.Policy) {
 	p.policies[name] = &auth.Policy{
-		Allow: policy.Allow,
-		Deny:  policy.Deny,
+		Allow:     policy.Allow,
+		Deny:      policy.Deny,
+		CreatedAt: time.Now().UTC(),
+		CreatedBy: p.admin,
 	}
 }
 
