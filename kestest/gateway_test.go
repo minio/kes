@@ -10,10 +10,10 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +21,7 @@ import (
 	"github.com/minio/kes/kestest"
 )
 
-var serverAPIs = []kes.API{
+var gatewayAPIs = []kes.API{
 	{Method: http.MethodGet, Path: "/version", MaxBody: 0, Timeout: 15 * time.Second},    // 0
 	{Method: http.MethodGet, Path: "/v1/status", MaxBody: 0, Timeout: 15 * time.Second},  // 1
 	{Method: http.MethodGet, Path: "/v1/metrics", MaxBody: 0, Timeout: 15 * time.Second}, // 2
@@ -36,32 +36,23 @@ var serverAPIs = []kes.API{
 	{Method: http.MethodPost, Path: "/v1/key/bulk/decrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 10
 	{Method: http.MethodGet, Path: "/v1/key/list/", MaxBody: 0, Timeout: 15 * time.Second},                // 11
 
-	{Method: http.MethodGet, Path: "/v1/policy/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 12
-	{Method: http.MethodPost, Path: "/v1/policy/assign/", MaxBody: 1024, Timeout: 15 * time.Second},   // 13
-	{Method: http.MethodGet, Path: "/v1/policy/read/", MaxBody: 0, Timeout: 15 * time.Second},         // 14
-	{Method: http.MethodPost, Path: "/v1/policy/write/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 15
-	{Method: http.MethodGet, Path: "/v1/policy/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 16
-	{Method: http.MethodDelete, Path: "/v1/policy/delete/", MaxBody: 0, Timeout: 15 * time.Second},    // 17
+	{Method: http.MethodGet, Path: "/v1/policy/describe/", MaxBody: 0, Timeout: 15 * time.Second}, // 12
+	{Method: http.MethodGet, Path: "/v1/policy/read/", MaxBody: 0, Timeout: 15 * time.Second},     // 14
+	{Method: http.MethodGet, Path: "/v1/policy/list/", MaxBody: 0, Timeout: 15 * time.Second},     // 15
 
-	{Method: http.MethodGet, Path: "/v1/identity/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 18
-	{Method: http.MethodGet, Path: "/v1/identity/self/describe", MaxBody: 0, Timeout: 15 * time.Second}, // 19
-	{Method: http.MethodGet, Path: "/v1/identity/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 20
-	{Method: http.MethodDelete, Path: "/v1/identity/delete/", MaxBody: 0, Timeout: 15 * time.Second},    // 21
+	{Method: http.MethodGet, Path: "/v1/identity/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 17
+	{Method: http.MethodGet, Path: "/v1/identity/self/describe", MaxBody: 0, Timeout: 15 * time.Second}, // 18
+	{Method: http.MethodGet, Path: "/v1/identity/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 19
 
-	{Method: http.MethodGet, Path: "/v1/log/error", MaxBody: 0, Timeout: 0}, // 22
-	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 23
-
-	{Method: http.MethodPost, Path: "/v1/enclave/create/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 24
-	{Method: http.MethodDelete, Path: "/v1/enclave/delete/", MaxBody: 0, Timeout: 15 * time.Second},     // 25
-
-	{Method: http.MethodPost, Path: "/v1/sys/seal", MaxBody: 0, Timeout: 15 * time.Second}, // 26
+	{Method: http.MethodGet, Path: "/v1/log/error", MaxBody: 0, Timeout: 0}, // 20
+	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 21
 }
 
 func TestAPIs(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -70,21 +61,21 @@ func TestAPIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed fetch server APIs: %v", err)
 	}
-	if len(apis) != len(serverAPIs) {
-		t.Fatalf("API mismatch: got len '%d' - want len '%d'", len(apis), len(serverAPIs))
+	if len(apis) != len(gatewayAPIs) {
+		t.Fatalf("API mismatch: got len '%d' - want len '%d'", len(apis), len(gatewayAPIs))
 	}
 	for i := range apis {
-		if apis[i].Method != serverAPIs[i].Method {
-			t.Fatalf("API %d: method mismatch: got '%s' - want '%s'", i, apis[i].Method, serverAPIs[i].Method)
+		if apis[i].Method != gatewayAPIs[i].Method {
+			t.Fatalf("API %d: method mismatch: got '%s' - want '%s'", i, apis[i].Method, gatewayAPIs[i].Method)
 		}
-		if apis[i].Path != serverAPIs[i].Path {
-			t.Fatalf("API %d: path mismatch: got '%s' - want '%s'", i, apis[i].Path, serverAPIs[i].Path)
+		if apis[i].Path != gatewayAPIs[i].Path {
+			t.Fatalf("API %d: path mismatch: got '%s' - want '%s'", i, apis[i].Path, gatewayAPIs[i].Path)
 		}
-		if apis[i].MaxBody != serverAPIs[i].MaxBody {
-			t.Fatalf("API %d: max body mismatch: got '%d' - want '%d'", i, apis[i].MaxBody, serverAPIs[i].MaxBody)
+		if apis[i].MaxBody != gatewayAPIs[i].MaxBody {
+			t.Fatalf("API %d: max body mismatch: got '%d' - want '%d'", i, apis[i].MaxBody, gatewayAPIs[i].MaxBody)
 		}
-		if apis[i].Timeout != serverAPIs[i].Timeout {
-			t.Fatalf("API %d: timeout mismatch: got '%v' - want '%v'", i, apis[i].Timeout, serverAPIs[i].Timeout)
+		if apis[i].Timeout != gatewayAPIs[i].Timeout {
+			t.Fatalf("API %d: timeout mismatch: got '%v' - want '%v'", i, apis[i].Timeout, gatewayAPIs[i].Timeout)
 		}
 	}
 }
@@ -102,7 +93,7 @@ func TestCreateKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -137,7 +128,7 @@ func TestImportKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -169,7 +160,7 @@ func TestGenerateKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -220,7 +211,7 @@ func TestEncryptKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -280,7 +271,7 @@ func TestDecryptKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -355,7 +346,7 @@ func TestDecryptKeyAll(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
@@ -391,57 +382,6 @@ func TestDecryptKeyAll(t *testing.T) {
 	}
 }
 
-var setPolicyTests = []struct {
-	Name       string
-	Policy     *kes.Policy
-	ShouldFail bool
-	Err        error
-}{
-	{Name: "my-policy", Policy: &kes.Policy{}},
-	{
-		Name: "my-policy2",
-		Policy: &kes.Policy{
-			Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"},
-		},
-	},
-	{
-		Name: "my-policy2",
-		Policy: &kes.Policy{
-			Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"},
-			Deny:  []string{"/v1/key/create/my-key2"},
-		},
-	},
-	{
-		Name: "fail-policy",
-		Policy: &kes.Policy{
-			Allow: []string{strings.Repeat("a", 1<<20)},
-		},
-		ShouldFail: true,
-	},
-}
-
-func TestSetPolicy(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewServer()
-	defer server.Close()
-
-	client := server.Client()
-	for i, test := range setPolicyTests {
-		err := client.SetPolicy(ctx, test.Name, test.Policy)
-		if err == nil && test.ShouldFail {
-			t.Fatalf("Test %d: should fail but succeeded", i)
-		}
-		if err != nil && !test.ShouldFail {
-			t.Fatalf("Test %d: failed to set policy: %v", i, err)
-		}
-		if test.ShouldFail && test.Err != nil && err != test.Err {
-			t.Fatalf("Test %d: expected to fail with: '%v' - got: '%v'", i, test.Err, err)
-		}
-	}
-}
-
 var getPolicyTests = []struct {
 	Name   string
 	Policy *kes.Policy
@@ -466,27 +406,28 @@ func TestDescribePolicy(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
-	defer server.Close()
-
-	client := server.Client()
 	for i, test := range getPolicyTests {
-		if err := client.SetPolicy(ctx, test.Name, test.Policy); err != nil {
-			t.Fatalf("Test %d: failed to create policy: %v", i, err)
-		}
-		info, err := client.DescribePolicy(ctx, test.Name)
-		if err != nil {
-			t.Fatalf("Test %d: failed to describe policy: %v", i, err)
-		}
-		if info.Name != test.Name {
-			t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, info.Name, test.Name)
-		}
-		if info.CreatedAt.IsZero() {
-			t.Fatalf("Test %d: created_at timestamp not set", i)
-		}
-		if info.CreatedBy.IsUnknown() {
-			t.Fatalf("Test %d: created_by identity not set", i)
-		}
+		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
+			server := kestest.NewGateway()
+			defer server.Close()
+
+			server.Policy().Add(test.Name, test.Policy)
+			client := server.Client()
+
+			info, err := client.DescribePolicy(ctx, test.Name)
+			if err != nil {
+				t.Fatalf("Test %d: failed to describe policy: %v", i, err)
+			}
+			if info.Name != test.Name {
+				t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, info.Name, test.Name)
+			}
+			if info.CreatedAt.IsZero() {
+				t.Fatalf("Test %d: created_at timestamp not set", i)
+			}
+			if info.CreatedBy.IsUnknown() {
+				t.Fatalf("Test %d: created_by identity not set", i)
+			}
+		})
 	}
 }
 
@@ -494,51 +435,52 @@ func TestGetPolicy(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
-	defer server.Close()
-
-	client := server.Client()
 	for i, test := range getPolicyTests {
-		if err := client.SetPolicy(ctx, test.Name, test.Policy); err != nil {
-			t.Fatalf("Test %d: failed to create policy: %v", i, err)
-		}
-		policy, err := client.GetPolicy(ctx, test.Name)
-		if err != nil {
-			t.Fatalf("Test %d: failed to describe policy: %v", i, err)
-		}
-		if policy.Info.Name != test.Name {
-			t.Fatalf("Policy name mismatch: got '%s' - want '%s'", policy.Info.Name, test.Name)
-		}
-		if policy.Info.Name != test.Name {
-			t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, policy.Info.Name, test.Name)
-		}
-		if policy.Info.CreatedAt.IsZero() {
-			t.Fatalf("Test %d: created_at timestamp not set", i)
-		}
-		if policy.Info.CreatedBy.IsUnknown() {
-			t.Fatalf("Test %d: created_by identity not set", i)
-		}
+		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
+			server := kestest.NewGateway()
+			defer server.Close()
 
-		if len(policy.Allow) != len(test.Policy.Allow) {
-			t.Fatalf("Test %d: allow policy mismatch: got len %d - want len %d", i, len(policy.Allow), len(test.Policy.Allow))
-		}
-		sort.Strings(test.Policy.Allow)
-		sort.Strings(policy.Allow)
-		for j := range policy.Allow {
-			if policy.Allow[j] != test.Policy.Allow[j] {
-				t.Fatalf("Test %d: allow policy mismatch: got '%s' - want '%s'", i, policy.Allow[j], test.Policy.Allow[j])
+			server.Policy().Add(test.Name, test.Policy)
+			client := server.Client()
+
+			policy, err := client.GetPolicy(ctx, test.Name)
+			if err != nil {
+				t.Fatalf("Test %d: failed to describe policy: %v", i, err)
 			}
-		}
-		if len(policy.Deny) != len(test.Policy.Deny) {
-			t.Fatalf("Test %d: deny policy mismatch: got len %d - want len %d", i, len(policy.Deny), len(test.Policy.Deny))
-		}
-		sort.Strings(test.Policy.Deny)
-		sort.Strings(policy.Deny)
-		for j := range policy.Deny {
-			if policy.Deny[j] != test.Policy.Deny[j] {
-				t.Fatalf("Test %d: deny policy mismatch: got '%s' - want '%s'", i, policy.Deny[j], test.Policy.Deny[j])
+			if policy.Info.Name != test.Name {
+				t.Fatalf("Policy name mismatch: got '%s' - want '%s'", policy.Info.Name, test.Name)
 			}
-		}
+			if policy.Info.Name != test.Name {
+				t.Fatalf("Test %d: policy name mismatch: got '%s' - want '%s'", i, policy.Info.Name, test.Name)
+			}
+			if policy.Info.CreatedAt.IsZero() {
+				t.Fatalf("Test %d: created_at timestamp not set", i)
+			}
+			if policy.Info.CreatedBy.IsUnknown() {
+				t.Fatalf("Test %d: created_by identity not set", i)
+			}
+
+			if len(policy.Allow) != len(test.Policy.Allow) {
+				t.Fatalf("Test %d: allow policy mismatch: got len %d - want len %d", i, len(policy.Allow), len(test.Policy.Allow))
+			}
+			sort.Strings(test.Policy.Allow)
+			sort.Strings(policy.Allow)
+			for j := range policy.Allow {
+				if policy.Allow[j] != test.Policy.Allow[j] {
+					t.Fatalf("Test %d: allow policy mismatch: got '%s' - want '%s'", i, policy.Allow[j], test.Policy.Allow[j])
+				}
+			}
+			if len(policy.Deny) != len(test.Policy.Deny) {
+				t.Fatalf("Test %d: deny policy mismatch: got len %d - want len %d", i, len(policy.Deny), len(test.Policy.Deny))
+			}
+			sort.Strings(test.Policy.Deny)
+			sort.Strings(policy.Deny)
+			for j := range policy.Deny {
+				if policy.Deny[j] != test.Policy.Deny[j] {
+					t.Fatalf("Test %d: deny policy mismatch: got '%s' - want '%s'", i, policy.Deny[j], test.Policy.Deny[j])
+				}
+			}
+		})
 	}
 }
 
@@ -570,7 +512,7 @@ func TestSelfDescribe(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewServer()
+	server := kestest.NewGateway()
 	defer server.Close()
 
 	client := server.Client()
