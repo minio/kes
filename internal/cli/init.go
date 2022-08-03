@@ -52,8 +52,9 @@ type InitConfig struct {
 		} `yaml:"admin"`
 
 		Policy map[string]struct {
-			Allow []string `yaml:"allow"`
-			Deny  []string `yaml:"deny"`
+			Allow    []string       `yaml:"allow"`
+			Deny     []string       `yaml:"deny"`
+			Identity []yml.Identity `yaml:"identities"`
 		} `yaml:"policy"`
 	} `yaml:"enclave"`
 }
@@ -71,5 +72,6 @@ func ReadInitConfig(filename string) (*InitConfig, error) {
 	if err := yaml.NewDecoder(f).Decode(&config); err != nil {
 		return nil, err
 	}
+
 	return &config, nil
 }

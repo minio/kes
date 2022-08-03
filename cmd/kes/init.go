@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/http"
@@ -75,6 +76,40 @@ func initCmd(args []string) {
 	if config.System.Admin.Identity.Value().IsUnknown() {
 		cli.Fatal("invalid configuration: system identity cannot be empty")
 	}
+	for enclaveName, enclave := range config.Enclave {
+		identities := map[kes.Identity]string{}
+		for policyName, policy := range enclave.Policy {
+			for _, identity := range policy.Identity {
+				if identity.Value().IsUnknown() {
+					continue
+				}
+				if identity.Value() == config.System.Admin.Identity.Value() {
+					cli.Fatalf("invalid policy assignment in enclave '%s': cannot assign '%s' to identity '%s': identity is equal to system admin",
+						enclaveName,
+						policyName,
+						identity.Value(),
+					)
+				}
+				if identity.Value() == enclave.Admin.Identity.Value() {
+					cli.Fatalf("invalid policy assignment in enclave '%s': cannot assign '%s' to identity '%s': identity is equal to enclave admin",
+						enclaveName,
+						policyName,
+						identity.Value(),
+					)
+				}
+				if name, ok := identities[identity.Value()]; ok {
+					cli.Fatalf(
+						"invalid policy assignment in enclave '%s': '%s' and '%s' are assigned to identity '%v'",
+						enclaveName,
+						policyName,
+						name,
+						identity.Value(),
+					)
+				}
+				identities[identity.Value()] = policyName
+			}
+		}
+	}
 
 	if _, err = http.LoadCertificate(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value()); err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
@@ -125,6 +160,11 @@ func initCmd(args []string) {
 			})
 			if err != nil {
 				cli.Fatalf("failed to init enclave '%s': failed to create policy '%s': %v", name, policyName, err)
+			}
+			for _, identity := range policy.Identity {
+				if err = enc.AssignPolicy(context.Background(), policyName, identity.Value()); err != nil {
+					cli.Fatalf("failed to init enclave '%s': failed to assign policy '%s' to identity '%v': %v", name, policyName, identity.Value(), err)
+				}
 			}
 		}
 	}
