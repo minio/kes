@@ -61,8 +61,15 @@ func proxy(proxy *auth.TLSProxy, f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func lookupEnclave(vault sys.Vault, req *http.Request) (*sys.Enclave, error) {
-	return vault.GetEnclave(req.Context(), req.URL.Query().Get("enclave"))
+func lookupEnclave(vault *sys.Vault, req *http.Request) (*sys.Enclave, error) {
+	name := req.URL.Query().Get("enclave")
+	if name == "" {
+		name = sys.DefaultEnclaveName
+	}
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+	return vault.GetEnclave(req.Context(), name)
 }
 
 // validateName checks whether name is a valid

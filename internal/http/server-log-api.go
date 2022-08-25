@@ -32,12 +32,16 @@ func serverErrorLog(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.RLocker(), func() error {
+				return enclave.VerifyRequest(r)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
 			Error(w, err)
 			return
 		}
@@ -81,12 +85,16 @@ func serverAuditLog(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.RLocker(), func() error {
+				return enclave.VerifyRequest(r)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
 			Error(w, err)
 			return
 		}

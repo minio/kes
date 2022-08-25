@@ -20,7 +20,7 @@ type ServerConfig struct {
 	// Certificate is TLS server certificate.
 	Certificate *Certificate
 
-	Vault sys.Vault
+	Vault *sys.Vault
 
 	// Proxy is an optional TLS proxy that sits
 	// in-front of this server and forwards client

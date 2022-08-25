@@ -39,36 +39,37 @@ func serverCreateEnclave(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		sysAdmin, err := config.Vault.SysAdmin(r.Context())
+		err := Sync(config.Vault.Locker(), func() error {
+			sysAdmin, err := config.Vault.Admin(r.Context())
+			if err != nil {
+				return err
+			}
+			if identity := auth.Identify(r); identity != sysAdmin {
+				return kes.ErrNotAllowed
+			}
+			name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+			if err = validateName(name); err != nil {
+				return err
+			}
+			var req Request
+			if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+				return err
+			}
+			if err = validateName(req.Admin.String()); err != nil {
+				return err
+			}
+			if req.Admin.IsUnknown() {
+				return kes.NewError(http.StatusBadRequest, "identity is unknown")
+			}
+			if req.Admin == sysAdmin {
+				return kes.NewError(http.StatusBadRequest, "admin identity cannot system admin")
+			}
+			if _, err = config.Vault.CreateEnclave(r.Context(), name, req.Admin); err != nil {
+				return err
+			}
+			return nil
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if identity := auth.Identify(r); identity != sysAdmin {
-			Error(w, kes.ErrNotAllowed)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err := validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var req Request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
-			return
-		}
-		if err = validateName(req.Admin.String()); err != nil {
-			Error(w, err)
-			return
-		}
-		if req.Admin == sysAdmin {
-			Error(w, kes.ErrNotAllowed)
-			return
-		}
-		if _, err := config.Vault.CreateEnclave(r.Context(), name, req.Admin); err != nil {
 			Error(w, err)
 			return
 		}
@@ -105,22 +106,21 @@ func serverDeleteEnclave(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		sysAdmin, err := config.Vault.SysAdmin(r.Context())
+		err := Sync(config.Vault.Locker(), func() error {
+			sysAdmin, err := config.Vault.Admin(r.Context())
+			if err != nil {
+				return err
+			}
+			if identity := auth.Identify(r); identity != sysAdmin {
+				return kes.ErrNotAllowed
+			}
+			name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+			if err = validateName(name); err != nil {
+				return err
+			}
+			return config.Vault.DeleteEnclave(r.Context(), name)
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if identity := auth.Identify(r); identity != sysAdmin {
-			Error(w, kes.ErrNotAllowed)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err := validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-		if err := config.Vault.DeleteEnclave(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}

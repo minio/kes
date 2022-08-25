@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/minio/kes"
@@ -92,61 +93,40 @@ func (e *EnclaveInfo) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-// VerifyEnclaveName returns an error if name is not
-// a valid identifier for an Enclave.
-func VerifyEnclaveName(name string) error {
-	const MaxLength = 80 // Some arbitrary but reasonable limit
-
-	const ( // Valid characters are: { 0-9 , A-Z , a-z , - , _ }
-		ASCIINumberStart    = 0x30
-		ASCIINumberEnd      = 0x39
-		ASCIIUpperCaseStart = 0x41
-		ASCIIUpperCaseEnd   = 0x5a
-		ASCIILowerCaseStart = 0x61
-		ASCIILowerCaseEnd   = 0x7a
-
-		ASCIIHyphen     = 0x2d
-		ASCIIUnderscore = 0x5f
-	)
-	if name == "" {
-		return kes.NewError(http.StatusBadRequest, "enclave name is empty")
-	}
-	if len(name) > MaxLength {
-		return kes.NewError(http.StatusBadRequest, "enclave name is too long")
-	}
-	for _, r := range name {
-		switch {
-		case r >= ASCIINumberStart && r <= ASCIINumberEnd:
-		case r >= ASCIIUpperCaseStart && r <= ASCIIUpperCaseEnd:
-		case r >= ASCIILowerCaseStart && r <= ASCIILowerCaseEnd:
-		case r == ASCIIHyphen:
-		case r == ASCIIUnderscore:
-		default:
-			return kes.NewError(http.StatusBadRequest, "enclave name contains invalid character")
-		}
-	}
-	return nil
-}
-
-// An Enclave is shielded environment with a Vault that
-// stores keys, policies and identities.
-type Enclave struct {
-	keys key.Store
-
-	policies auth.PolicySet
-
-	identities auth.IdentitySet
-}
-
 // NewEnclave returns a new Enclave with the
 // given key store, policy set and identity set.
-func NewEnclave(keys key.Store, policies auth.PolicySet, identities auth.IdentitySet) *Enclave {
+func NewEnclave(keys KeyFS, policies PolicyFS, identities IdentityFS) *Enclave {
 	return &Enclave{
 		keys:       keys,
 		policies:   policies,
 		identities: identities,
+
+		keyCache:      map[string]key.Key{},
+		policyCache:   map[string]auth.Policy{},
+		identityCache: map[kes.Identity]auth.IdentityInfo{},
 	}
 }
+
+// An Enclave is a shielded environment within a Vault that
+// stores keys, policies and identities.
+type Enclave struct {
+	keys       KeyFS
+	policies   PolicyFS
+	identities IdentityFS
+	lock       sync.RWMutex
+
+	cacheLock     sync.Mutex
+	admin         kes.Identity
+	keyCache      map[string]key.Key
+	policyCache   map[string]auth.Policy
+	identityCache map[kes.Identity]auth.IdentityInfo
+}
+
+// Locker returns a sync.Locker that locks the Enclave for writes.
+func (e *Enclave) Locker() sync.Locker { return &e.lock }
+
+// RLocker returns a sync.Locker that locks the Enclave for reads.
+func (e *Enclave) RLocker() sync.Locker { return e.lock.RLocker() }
 
 // Status returns the current state of the key store.
 //
@@ -154,26 +134,45 @@ func NewEnclave(keys key.Store, policies auth.PolicySet, identities auth.Identit
 // due to a network error - it returns a
 // StoreState with StoreUnreachable and no
 // error.
-func (e *Enclave) Status(ctx context.Context) (key.StoreState, error) { return e.keys.Status(ctx) }
+func (e *Enclave) Status(ctx context.Context) (key.StoreState, error) { return key.StoreState{}, nil }
 
 // CreateKey stores the given key if and only if no entry with
 // the given name exists.
 //
 // It returns kes.ErrKeyExists if such an entry exists.
 func (e *Enclave) CreateKey(ctx context.Context, name string, key key.Key) error {
-	return e.keys.Create(ctx, name, key)
+	if _, ok := e.keyCache[name]; ok {
+		return kes.ErrKeyExists
+	}
+	return e.keys.CreateKey(ctx, name, key)
 }
 
 // DeleteKey deletes the key associated with the given name.
 func (e *Enclave) DeleteKey(ctx context.Context, name string) error {
-	return e.keys.Delete(ctx, name)
+	delete(e.keyCache, name)
+	return e.keys.DeleteKey(ctx, name)
 }
 
 // GetKey returns the key associated with the given name.
 //
 // It returns kes.ErrKeyNotFound if no such entry exists.
 func (e *Enclave) GetKey(ctx context.Context, name string) (key.Key, error) {
-	return e.keys.Get(ctx, name)
+	if k, ok := e.keyCache[name]; ok {
+		return k, nil
+	}
+
+	e.cacheLock.Lock()
+	defer e.cacheLock.Unlock()
+
+	if k, ok := e.keyCache[name]; ok {
+		return k, nil
+	}
+	k, err := e.keys.GetKey(ctx, name)
+	if err != nil {
+		return key.Key{}, err
+	}
+	e.keyCache[name] = k
+	return k, nil
 }
 
 // ListKeys returns a new iterator over all keys within the
@@ -183,24 +182,41 @@ func (e *Enclave) GetKey(ctx context.Context, name string) (key.Key, error) {
 // to the enclave - i.e. creation or deletion of keys - are reflected.
 // It does not provide any ordering guarantees.
 func (e *Enclave) ListKeys(ctx context.Context) (key.Iterator, error) {
-	return e.keys.List(ctx)
+	return e.keys.ListKeys(ctx)
 }
 
 // SetPolicy creates or overwrites the policy with the given name.
-func (e *Enclave) SetPolicy(ctx context.Context, name string, policy *auth.Policy) error {
-	return e.policies.Set(ctx, name, policy)
+func (e *Enclave) SetPolicy(ctx context.Context, name string, policy auth.Policy) error {
+	delete(e.policyCache, name)
+	return e.policies.SetPolicy(ctx, name, policy)
 }
 
 // DeletePolicy deletes the policy associated with the given name.
 func (e *Enclave) DeletePolicy(ctx context.Context, name string) error {
-	return e.policies.Delete(ctx, name)
+	delete(e.policyCache, name)
+	return e.policies.DeletePolicy(ctx, name)
 }
 
 // GetPolicy returns the policy associated with the given name.
 //
 // It returns kes.ErrPolicyNotFound when no such entry exists.
-func (e *Enclave) GetPolicy(ctx context.Context, name string) (*auth.Policy, error) {
-	return e.policies.Get(ctx, name)
+func (e *Enclave) GetPolicy(ctx context.Context, name string) (auth.Policy, error) {
+	if policy, ok := e.policyCache[name]; ok {
+		return policy, nil
+	}
+
+	e.cacheLock.Lock()
+	defer e.cacheLock.Unlock()
+
+	if policy, ok := e.policyCache[name]; ok {
+		return policy, nil
+	}
+	policy, err := e.policies.GetPolicy(ctx, name)
+	if err != nil {
+		return auth.Policy{}, err
+	}
+	e.policyCache[name] = policy
+	return policy, nil
 }
 
 // ListPolicies returns a new iterator over all policies within
@@ -210,22 +226,98 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*auth.Policy, err
 // to the enclave - i.e. creation or deletion of policies - are
 // reflected. It does not provide any ordering guarantees.
 func (e *Enclave) ListPolicies(ctx context.Context) (auth.PolicyIterator, error) {
-	return e.policies.List(ctx)
+	return e.policies.ListPolicies(ctx)
+}
+
+// Admin returns the current Enclave admin identity.
+func (e *Enclave) Admin(ctx context.Context) (kes.Identity, error) {
+	if !e.admin.IsUnknown() {
+		return e.admin, nil
+	}
+
+	e.cacheLock.Lock()
+	defer e.cacheLock.Unlock()
+
+	if !e.admin.IsUnknown() {
+		return e.admin, nil
+	}
+	admin, err := e.identities.Admin(ctx)
+	if err != nil {
+		return "", err
+	}
+	e.admin = admin
+	return e.admin, nil
+}
+
+// SetAdmin sets the Enclave admin to the given identity. The
+// new admin identity must not be an existing identity that is
+// already assigned to a policy.
+func (e *Enclave) SetAdmin(ctx context.Context, admin kes.Identity) error {
+	if admin == e.admin {
+		return nil
+	}
+
+	_, err := e.GetIdentity(ctx, admin)
+	if err == nil {
+		return kes.NewError(http.StatusConflict, "identity already exists")
+	}
+	if err != nil && !errors.Is(err, kes.ErrIdentityNotFound) {
+		return err
+	}
+
+	if err := e.identities.SetAdmin(ctx, admin); err != nil {
+		return err
+	}
+	e.admin = ""
+	return nil
 }
 
 // AssignPolicy assigns the policy to the identity.
 func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity kes.Identity) error {
-	return e.identities.Assign(ctx, policy, identity)
+	admin, err := e.Admin(ctx)
+	if err != nil {
+		return err
+	}
+	if identity == admin {
+		return kes.NewError(http.StatusBadRequest, "cannot assign policy to admin")
+	}
+
+	delete(e.identityCache, identity)
+	return e.identities.AssignPolicy(ctx, policy, identity)
 }
 
 // DeleteIdentity deletes the given identity.
-func (e *Enclave) DeleteIdentity(ctx context.Context, identities kes.Identity) error {
-	return e.identities.Delete(ctx, identities)
+func (e *Enclave) DeleteIdentity(ctx context.Context, identity kes.Identity) error {
+	admin, err := e.Admin(ctx)
+	if err != nil {
+		return err
+	}
+	if identity == admin {
+		return kes.NewError(http.StatusBadRequest, "cannot delete admin")
+	}
+
+	delete(e.identityCache, identity)
+	return e.identities.DeleteIdentity(ctx, identity)
 }
 
 // GetIdentity returns metadata about the given identity.
 func (e *Enclave) GetIdentity(ctx context.Context, identity kes.Identity) (auth.IdentityInfo, error) {
-	return e.identities.Get(ctx, identity)
+	if info, ok := e.identityCache[identity]; ok {
+		return info, nil
+	}
+
+	e.cacheLock.Lock()
+	defer e.cacheLock.Unlock()
+
+	if info, ok := e.identityCache[identity]; ok {
+		return info, nil
+	}
+	info, err := e.identities.GetIdentity(ctx, identity)
+	if err != nil {
+		return auth.IdentityInfo{}, err
+	}
+	e.identityCache[identity] = info
+	return info, nil
 }
 
 // ListIdentities returns an iterator over all identites within
@@ -235,7 +327,7 @@ func (e *Enclave) GetIdentity(ctx context.Context, identity kes.Identity) (auth.
 // to the enclave - i.e. assignment or deletion of identities - are
 // reflected. It does not provide any ordering guarantees.
 func (e *Enclave) ListIdentities(ctx context.Context) (auth.IdentityIterator, error) {
-	return e.identities.List(ctx)
+	return e.identities.ListIdentities(ctx)
 }
 
 // VerifyRequest verifies the given request is allowed
@@ -268,14 +360,6 @@ func (e *Enclave) VerifyRequest(r *http.Request) error {
 		h        = sha256.Sum256(peerCertificates[0].RawSubjectPublicKeyInfo)
 		identity = kes.Identity(hex.EncodeToString(h[:]))
 	)
-	admin, err := e.identities.Admin(r.Context())
-	if err != nil {
-		return err
-	}
-	if identity == admin {
-		return nil
-	}
-
 	info, err := e.GetIdentity(r.Context(), identity)
 	if errors.Is(err, auth.ErrIdentityNotFound) {
 		return kes.ErrNotAllowed
@@ -283,6 +367,10 @@ func (e *Enclave) VerifyRequest(r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if info.IsAdmin {
+		return nil
+	}
+
 	policy, err := e.GetPolicy(r.Context(), info.Policy)
 	if errors.Is(err, kes.ErrPolicyNotFound) {
 		return kes.ErrNotAllowed

@@ -7,47 +7,153 @@ package sys
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/minio/kes"
 )
 
-// ErrSealed is returned when a Vault has been sealed.
-var ErrSealed = kes.NewError(http.StatusForbidden, "system is sealed")
+// NewVault returns a new Vault that uses the given
+// VaultFS to persist state.
+func NewVault(fs VaultFS) *Vault {
+	return &Vault{
+		fs:       fs,
+		enclaves: map[string]*Enclave{},
+	}
+}
 
-// A Vault manages a set of Enclaves.
+// A Vault manages a set of enclaves. It is either in a
+// sealed or unsealed state. When sealed, any Vault operation,
+// except unsealing, returns ErrSealed.
+type Vault struct {
+	fs   VaultFS
+	lock sync.RWMutex
+
+	cacheLock sync.Mutex
+	admin     kes.Identity
+	sealed    bool
+	enclaves  map[string]*Enclave
+}
+
+// Locker returns a sync.Locker that locks the Vault for writes.
+func (v *Vault) Locker() sync.Locker { return &v.lock }
+
+// RLocker returns a sync.Locker that locks the Vault for reads.
+func (v *Vault) RLocker() sync.Locker { return v.lock.RLocker() }
+
+// Seal seals the Vault. Once sealed, any subsequent Vault operation,
+// returns ErrSealed until the Vault gets unsealed again.
+func (v *Vault) Seal(ctx context.Context) error {
+	if v.sealed {
+		return kes.ErrSealed
+	}
+	if err := v.fs.Seal(ctx); err != nil {
+		return err
+	}
+	v.admin = ""
+	v.enclaves = map[string]*Enclave{}
+	v.sealed = true
+	return nil
+}
+
+// Unseal unseals the Vault. In case of an unsealed Vault,
+// Unseal is a no-op.
+func (v *Vault) Unseal(ctx context.Context, keys ...UnsealKey) error {
+	if !v.sealed {
+		return nil
+	}
+	if err := v.fs.Unseal(ctx, keys...); err != nil {
+		return err
+	}
+	admin, err := v.fs.Admin(ctx)
+	if err != nil {
+		return err
+	}
+	v.admin = admin
+	v.enclaves = map[string]*Enclave{}
+	v.sealed = false
+	return nil
+}
+
+// Admin returns the current Vault admin identity.
+func (v *Vault) Admin(ctx context.Context) (kes.Identity, error) {
+	if !v.admin.IsUnknown() {
+		return v.admin, nil
+	}
+
+	admin, err := v.fs.Admin(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	v.cacheLock.Lock()
+	v.admin = admin
+	v.cacheLock.Unlock()
+	return v.admin, nil
+}
+
+// CreateEnclave creates a new enclave with the given name and
+// enclave admin identity.
 //
-// It is either in a sealed or unsealed state. When the
-// Vault is sealed it does not process any requests except
-// unseal requests. Once unsealed, Vault provides access
-// to existing enclaves.
-type Vault interface {
-	// Seal seals the Vault. Once sealed, any subsequent operation
-	// returns ErrSealed.
-	//
-	// It returns ErrSealed if the Vault is already sealed.
-	Seal(ctx context.Context) error
+// It returns ErrEnclaveExists if such an enclave already exists.
+func (v *Vault) CreateEnclave(ctx context.Context, name string, admin kes.Identity) (*EnclaveInfo, error) {
+	if name == "" {
+		name = DefaultEnclaveName
+	}
 
-	// Unseal unseals the Vault.
-	//
-	// It returns no error If the Vault is already unsealed.
-	Unseal(ctx context.Context, keys ...UnsealKey) error
+	if v.sealed {
+		return nil, kes.ErrSealed
+	}
+	if admin.IsUnknown() {
+		return nil, kes.NewError(http.StatusBadRequest, "admin cannot be empty")
+	}
+	if admin == v.admin {
+		return nil, kes.NewError(http.StatusBadRequest, "admin cannot be the system admin")
+	}
 
-	// Operator returns the identity of the Vault operator.
-	SysAdmin(context.Context) (kes.Identity, error)
+	delete(v.enclaves, name)
+	return v.fs.CreateEnclave(ctx, name, admin)
+}
 
-	// CreateEnclave creates and returns a new Enclave if and only if
-	// no Enclave with the given name exists.
-	//
-	// It returns ErrEnclaveExists if an Enclave with the given name
-	// already exists.
-	CreateEnclave(ctx context.Context, name string, admin kes.Identity) (*EnclaveInfo, error)
+// GetEnclave returns the Enclave with the given name.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (v *Vault) GetEnclave(ctx context.Context, name string) (*Enclave, error) {
+	if name == "" {
+		name = DefaultEnclaveName
+	}
 
-	// GetEnclave returns the Enclave associated with the given name.
-	//
-	// It returns ErrEnclaveNotFound if no Enclave with the given
-	// name exists.
-	GetEnclave(ctx context.Context, name string) (*Enclave, error)
+	if v.sealed {
+		return nil, kes.ErrSealed
+	}
+	if enclave, ok := v.enclaves[name]; ok {
+		return enclave, nil
+	}
 
-	// DeleteEnclave deletes the Enclave with the given name.
-	DeleteEnclave(ctx context.Context, name string) error
+	v.cacheLock.Lock()
+	defer v.cacheLock.Unlock()
+
+	if enclave, ok := v.enclaves[name]; ok {
+		return enclave, nil
+	}
+	enclave, err := v.fs.GetEnclave(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	v.enclaves[name] = enclave
+	return enclave, nil
+}
+
+// DeleteEnclave deletes the enclave with the given name.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (v *Vault) DeleteEnclave(ctx context.Context, name string) error {
+	if name == "" {
+		name = DefaultEnclaveName
+	}
+
+	if v.sealed {
+		return kes.ErrSealed
+	}
+	delete(v.enclaves, name)
+	return v.fs.DeleteEnclave(ctx, name)
 }

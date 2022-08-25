@@ -196,7 +196,6 @@ func startServer(path string, sConfig serverConfig) {
 			}
 		}
 	}
-	fmt.Println(proxy)
 
 	vault, err := fs.Open(path, errorLog.Log())
 	if err != nil {

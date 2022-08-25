@@ -43,27 +43,28 @@ func serverDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-		info, err := enclave.GetIdentity(r.Context(), kes.Identity(name))
+		info, err := VSync(config.Vault.RLocker(), func() (auth.IdentityInfo, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return auth.IdentityInfo{}, err
+			}
+			return VSync(enclave.RLocker(), func() (auth.IdentityInfo, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return auth.IdentityInfo{}, err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return auth.IdentityInfo{}, err
+				}
+				return enclave.GetIdentity(r.Context(), kes.Identity(name))
+			})
+		})
 		if err != nil {
 			Error(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", ContentType)
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			IsAdmin:   info.IsAdmin,
 			Policy:    info.Policy,
@@ -82,10 +83,11 @@ func serverDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 
 func serverSelfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 	const (
-		Method  = http.MethodGet
-		APIPath = "/v1/identity/self/describe"
-		MaxBody = 0
-		Timeout = 15 * time.Second
+		Method      = http.MethodGet
+		APIPath     = "/v1/identity/self/describe"
+		MaxBody     = 0
+		Timeout     = 15 * time.Second
+		ContentType = "application/json"
 	)
 	type InlinePolicy struct {
 		Allow     []string     `json:"allow,omitempty"`
@@ -116,40 +118,47 @@ func serverSelfDescribeIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-
-		identity := auth.Identify(r)
-		info, err := enclave.GetIdentity(r.Context(), identity)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-
-		policy := new(auth.Policy)
-		if !info.IsAdmin {
-			policy, err = enclave.GetPolicy(r.Context(), info.Policy)
+		response, err := VSync(config.Vault.RLocker(), func() (Response, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
 			if err != nil {
-				Error(w, err)
-				return
+				return Response{}, err
 			}
-		}
-		json.NewEncoder(w).Encode(Response{
-			Identity:   identity,
-			PolicyName: info.Policy,
-			IsAdmin:    info.IsAdmin,
-			CreatedAt:  info.CreatedAt,
-			CreatedBy:  info.CreatedBy,
-			Policy: InlinePolicy{
-				Allow:     policy.Allow,
-				Deny:      policy.Deny,
-				CreatedAt: policy.CreatedAt,
-				CreatedBy: policy.CreatedBy,
-			},
+			return VSync(enclave.RLocker(), func() (Response, error) {
+				identity := auth.Identify(r)
+				info, err := enclave.GetIdentity(r.Context(), identity)
+				if err != nil {
+					return Response{}, err
+				}
+				policy := auth.Policy{}
+				if !info.IsAdmin {
+					policy, err = enclave.GetPolicy(r.Context(), info.Policy)
+					if err != nil {
+						return Response{}, err
+					}
+				}
+				return Response{
+					Identity:   identity,
+					PolicyName: info.Policy,
+					IsAdmin:    info.IsAdmin,
+					CreatedAt:  info.CreatedAt,
+					CreatedBy:  info.CreatedBy,
+					Policy: InlinePolicy{
+						Allow:     policy.Allow,
+						Deny:      policy.Deny,
+						CreatedAt: policy.CreatedAt,
+						CreatedBy: policy.CreatedBy,
+					},
+				}, nil
+			})
 		})
+		if err != nil {
+			Error(w, err)
+			return
+		}
+
+		w.Header().Add("Content-Type", ContentType)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
@@ -181,22 +190,31 @@ func serverDeleteIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.Locker(), func() error {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return err
+				}
+				identity := kes.Identity(name)
+				admin, err := config.Vault.Admin(r.Context())
+				if err != nil {
+					return err
+				}
+				if admin == identity {
+					return kes.NewError(http.StatusBadRequest, "cannot delete system admin")
+				}
+				return enclave.DeleteIdentity(r.Context(), identity)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.DeleteIdentity(r.Context(), kes.Identity(name)); err != nil {
 			Error(w, err)
 			return
 		}
@@ -242,59 +260,60 @@ func serverListIdentity(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
+		hasWritten, err := VSync(config.Vault.RLocker(), func() (bool, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return false, err
+			}
+			return VSync(enclave.RLocker(), func() (bool, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return false, err
+				}
+				pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validatePattern(pattern); err != nil {
+					return false, err
+				}
+				iterator, err := enclave.ListIdentities(r.Context())
+				if err != nil {
+					return false, err
+				}
+				defer iterator.Close()
 
-		pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validatePattern(pattern); err != nil {
-			Error(w, err)
-			return
-		}
-		iterator, err := enclave.ListIdentities(r.Context())
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		var (
-			encoder    = json.NewEncoder(w)
-			hasWritten bool
-		)
-		for iterator.Next() {
-			if ok, _ := path.Match(pattern, iterator.Identity().String()); !ok {
-				continue
-			}
-			info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
-			if err != nil {
-				encoder.Encode(Response{Err: err.Error()})
-				return
-			}
-			if !hasWritten {
-				w.Header().Set("Content-Type", ContentType)
-			}
-			err = encoder.Encode(Response{
-				Identity:  iterator.Identity(),
-				IsAdmin:   info.IsAdmin,
-				Policy:    info.Policy,
-				CreatedAt: info.CreatedAt,
-				CreatedBy: info.CreatedBy,
+				var hasWritten bool
+				encoder := json.NewEncoder(w)
+				for iterator.Next() {
+					if ok, _ := path.Match(pattern, iterator.Identity().String()); !ok {
+						continue
+					}
+					info, err := enclave.GetIdentity(r.Context(), iterator.Identity())
+					if err != nil {
+						return hasWritten, err
+					}
+					if !hasWritten {
+						hasWritten = true
+						w.Header().Set("Content-Type", ContentType)
+						w.WriteHeader(http.StatusOK)
+					}
+
+					err = encoder.Encode(Response{
+						Identity:  iterator.Identity(),
+						IsAdmin:   info.IsAdmin,
+						Policy:    info.Policy,
+						CreatedAt: info.CreatedAt,
+						CreatedBy: info.CreatedBy,
+					})
+					if err != nil {
+						return hasWritten, err
+					}
+				}
+				return hasWritten, iterator.Close()
 			})
-			if err != nil {
-				return
-			}
-			hasWritten = true
-		}
-		if err = iterator.Close(); err != nil {
-			if hasWritten {
-				encoder.Encode(Response{Err: err.Error()})
-			} else {
+		})
+		if err != nil {
+			if !hasWritten {
 				Error(w, err)
+			} else {
+				json.NewEncoder(w).Encode(Response{Err: err.Error()})
 			}
 			return
 		}
