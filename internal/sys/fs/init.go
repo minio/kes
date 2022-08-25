@@ -146,7 +146,7 @@ func WriteInitConfig(filename string, config *InitConfig) error {
 //
 // It returns an initialized Vault and a set of UnsealKeys to
 // unseal the Vault in the future.
-func Init(path string, init *InitConfig, seal *SealConfig) (sys.Vault, []sys.UnsealKey, error) {
+func Init(path string, init *InitConfig, seal *SealConfig) (*sys.Vault, []sys.UnsealKey, error) {
 	algorithm := key.AES256_GCM_SHA256
 	if !fips.Enabled && !cpu.HasAESGCM() {
 		algorithm = key.XCHACHA20_POLY1305
@@ -166,17 +166,12 @@ func Init(path string, init *InitConfig, seal *SealConfig) (sys.Vault, []sys.Uns
 	if err != nil {
 		return nil, nil, err
 	}
-	return &vault{
-		path:     path,
-		rootKey:  rootKey,
-		sysAdmin: rootKey.CreatedBy(),
-		enclaves: map[string]*sys.Enclave{},
-	}, unsealKeys, nil
+	return sys.NewVault(sys.NewVaultFS(path, rootKey)), unsealKeys, nil
 }
 
 // Open returns a new Vault that reads its initial and seal configuration
 // from config files within the given path.
-func Open(path string, errorLog *log.Logger) (sys.Vault, error) {
+func Open(path string, errorLog *log.Logger) (*sys.Vault, error) {
 	stanzaBytes, err := os.ReadFile(filepath.Join(path, ".unseal"))
 	if err != nil {
 		return nil, err
@@ -193,13 +188,7 @@ func Open(path string, errorLog *log.Logger) (sys.Vault, error) {
 	if err := rootKey.UnmarshalBinary(rootKeyBytes); err != nil {
 		return nil, err
 	}
-	return &vault{
-		path:     path,
-		rootKey:  rootKey,
-		sysAdmin: rootKey.CreatedBy(),
-		enclaves: map[string]*sys.Enclave{},
-		errorLog: errorLog,
-	}, nil
+	return sys.NewVault(sys.NewVaultFS(path, rootKey)), nil
 }
 
 func initFS(path string) error {

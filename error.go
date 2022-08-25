@@ -17,6 +17,11 @@ import (
 
 // KES server API errors
 var (
+	// ErrSealed is returned by a KES server that got sealed.
+	// Such a KES server will not process any requests until
+	// unsealed again.
+	ErrSealed = NewError(http.StatusForbidden, "system is sealed")
+
 	// ErrNotAllowed is returned by a KES server when a client has
 	// not sufficient permission to perform the API operation.
 	ErrNotAllowed = NewError(http.StatusForbidden, "not authorized: insufficient permissions")
@@ -32,6 +37,10 @@ var (
 	// ErrPolicyNotFound is returned by a KES server when a client
 	// tries to access a policy which does not exist.
 	ErrPolicyNotFound = NewError(http.StatusNotFound, "policy does not exist")
+
+	// ErrPolicyNotFound is returned by a KES server when a client
+	// tries to access a policy which does not exist.
+	ErrIdentityNotFound = NewError(http.StatusNotFound, "identity does not exist")
 
 	// ErrDecrypt is returned by a KES server when it fails to decrypt
 	// a ciphertext. It may occur when a client uses the wrong key or

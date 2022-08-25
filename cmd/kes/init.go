@@ -152,7 +152,7 @@ func initCmd(args []string) {
 			cli.Fatalf("failed to init enclave '%s': %v", name, err)
 		}
 		for policyName, policy := range enclave.Policy {
-			err = enc.SetPolicy(context.Background(), policyName, &auth.Policy{
+			err = enc.SetPolicy(context.Background(), policyName, auth.Policy{
 				Allow:     policy.Allow,
 				Deny:      policy.Deny,
 				CreatedAt: time.Now().UTC(),

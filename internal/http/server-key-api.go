@@ -40,35 +40,36 @@ func serverCreateKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.Locker(), func() error {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return err
+				}
+
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return err
+				}
+
+				var algorithm key.Algorithm
+				if fips.Enabled || cpu.HasAESGCM() {
+					algorithm = key.AES256_GCM_SHA256
+				} else {
+					algorithm = key.XCHACHA20_POLY1305
+				}
+
+				key, err := key.Random(algorithm, auth.Identify(r))
+				if err != nil {
+					return err
+				}
+				return enclave.CreateKey(r.Context(), name, key)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var algorithm key.Algorithm
-		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = key.AES256_GCM_SHA256
-		} else {
-			algorithm = key.XCHACHA20_POLY1305
-		}
-
-		key, err := key.Random(algorithm, auth.Identify(r))
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
 		}
@@ -108,51 +109,49 @@ func serverImportKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.Locker(), func() error {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return err
+				}
+
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return err
+				}
+
+				var req Request
+				if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+					return err
+				}
+
+				var algorithm key.Algorithm
+				switch key.Algorithm(req.Algorithm) {
+				case key.AES256_GCM_SHA256:
+					algorithm = key.AES256_GCM_SHA256
+				case key.XCHACHA20_POLY1305:
+					algorithm = key.XCHACHA20_POLY1305
+				case key.AlgorithmGeneric:
+					algorithm = key.AlgorithmGeneric
+				default:
+					return kes.NewError(http.StatusBadRequest, "invalid algorithm")
+				}
+
+				if len(req.Bytes) != algorithm.KeySize() {
+					return kes.NewError(http.StatusBadRequest, "invalid key size")
+				}
+				key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
+				if err != nil {
+					return err
+				}
+				return enclave.CreateKey(r.Context(), name, key)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var req Request
-		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
-			return
-		}
-
-		var algorithm key.Algorithm
-		switch key.Algorithm(req.Algorithm) {
-		case key.AES256_GCM_SHA256:
-			algorithm = key.AES256_GCM_SHA256
-		case key.XCHACHA20_POLY1305:
-			algorithm = key.XCHACHA20_POLY1305
-		case key.AlgorithmGeneric:
-			algorithm = key.AlgorithmGeneric
-		default:
-			Error(w, kes.NewError(http.StatusBadRequest, "invalid algorithm"))
-			return
-		}
-
-		if len(req.Bytes) != algorithm.KeySize() {
-			Error(w, kes.NewError(http.StatusBadRequest, "invalid key size"))
-			return
-		}
-		key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.CreateKey(r.Context(), name, key); err != nil {
 			Error(w, err)
 			return
 		}
@@ -188,23 +187,23 @@ func serverDeleteKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		err := Sync(config.Vault.RLocker(), func() error {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return err
+			}
+			return Sync(enclave.Locker(), func() error {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return err
+				}
+				return enclave.DeleteKey(r.Context(), name)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-
-		if err = enclave.DeleteKey(r.Context(), name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -248,29 +247,29 @@ func serverGenerateKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		key, err := VSync(config.Vault.RLocker(), func() (key.Key, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return key.Key{}, err
+			}
+			return VSync(enclave.RLocker(), func() (key.Key, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return key.Key{}, err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return key.Key{}, err
+				}
+				return enclave.GetKey(r.Context(), name)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
 
 		var req Request
 		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
-			return
-		}
-		key, err := enclave.GetKey(r.Context(), name)
-		if err != nil {
 			Error(w, err)
 			return
 		}
@@ -284,7 +283,9 @@ func serverGenerateKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
+
 		w.Header().Set("Content-Type", ContentType)
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			Plaintext:  dataKey,
 			Ciphertext: ciphertext,
@@ -328,18 +329,20 @@ func serverEncryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		key, err := VSync(config.Vault.RLocker(), func() (key.Key, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return key.Key{}, err
+			}
+			return VSync(enclave.RLocker(), func() (key.Key, error) {
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return key.Key{}, err
+				}
+				return enclave.GetKey(r.Context(), name)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -349,15 +352,11 @@ func serverEncryptKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
-		if err != nil {
-			Error(w, err)
-			return
-		}
 		ciphertext, err := key.Wrap(req.Plaintext, req.Context)
 		if err != nil {
 			Error(w, err)
 			return
+
 		}
 		w.Header().Set("Content-Type", ContentType)
 		json.NewEncoder(w).Encode(Response{
@@ -402,18 +401,23 @@ func serverDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
+		key, err := VSync(config.Vault.RLocker(), func() (key.Key, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return key.Key{}, err
+			}
+			return VSync(enclave.RLocker(), func() (key.Key, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return key.Key{}, err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return key.Key{}, err
+				}
+				return enclave.GetKey(r.Context(), name)
+			})
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
 			Error(w, err)
 			return
 		}
@@ -423,17 +427,14 @@ func serverDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, err)
 			return
 		}
-		key, err := enclave.GetKey(r.Context(), name)
-		if err != nil {
-			Error(w, err)
-			return
-		}
 		plaintext, err := key.Unwrap(req.Ciphertext, req.Context)
 		if err != nil {
 			Error(w, err)
 			return
 		}
+
 		w.Header().Set("Content-Type", ContentType)
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			Plaintext: plaintext,
 		})
@@ -477,22 +478,23 @@ func serverBulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
+		key, err := VSync(config.Vault.RLocker(), func() (key.Key, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return key.Key{}, err
+			}
+			return VSync(config.Vault.RLocker(), func() (key.Key, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return key.Key{}, err
+				}
 
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validateName(name); err != nil {
-			Error(w, err)
-			return
-		}
-		key, err := enclave.GetKey(r.Context(), name)
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return key.Key{}, err
+				}
+				return enclave.GetKey(r.Context(), name)
+			})
+		})
 		if err != nil {
 			Error(w, err)
 			return
@@ -523,6 +525,7 @@ func serverBulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 
 		w.Header().Set("Content-Type", ContentType)
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(responses)
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
@@ -543,8 +546,11 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
-		Name string `json:"name,omitempty"`
-		Err  string `json:"error,omitempty"`
+		Name      string       `json:"name,omitempty"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+
+		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -560,56 +566,59 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		enclave, err := lookupEnclave(config.Vault, r)
-		if err != nil {
-			Error(w, err)
-			return
-		}
-		if err = enclave.VerifyRequest(r); err != nil {
-			Error(w, err)
-			return
-		}
-
-		pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-		if err = validatePattern(pattern); err != nil {
-			Error(w, err)
-			return
-		}
-		iterator, err := enclave.ListKeys(r.Context())
-		if err != nil {
-			Error(w, err)
-			return
-		}
-
-		var (
-			hasWritten bool
-			encoder    = json.NewEncoder(w)
-		)
-		for iterator.Next() {
-			name := iterator.Name()
-			if ok, _ := path.Match(pattern, name); ok && name != "" {
-				if !hasWritten {
-					w.Header().Set("Content-Type", ContentType)
-				}
-				hasWritten = true
-
-				if err = encoder.Encode(Response{Name: name}); err != nil {
-					return
-				}
-				if err == http.ErrHandlerTimeout {
-					break
-				}
-				if err != nil {
-					encoder.Encode(Response{Err: err.Error()})
-					return
-				}
+		hasWritten, err := VSync(config.Vault.RLocker(), func() (bool, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return false, err
 			}
-		}
-		if err = iterator.Err(); err != nil {
-			if !hasWritten {
-				Error(w, err)
+			return VSync(enclave.RLocker(), func() (bool, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return false, err
+				}
+				pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validatePattern(pattern); err != nil {
+					return false, err
+				}
+
+				iterator, err := enclave.ListKeys(r.Context())
+				if err != nil {
+					return false, err
+				}
+				defer iterator.Err()
+
+				var hasWritten bool
+				encoder := json.NewEncoder(w)
+				for iterator.Next() {
+					if ok, _ := path.Match(pattern, iterator.Name()); !ok || iterator.Name() == "" {
+						continue
+					}
+					key, err := enclave.GetKey(r.Context(), iterator.Name())
+					if err != nil {
+						return hasWritten, err
+					}
+					if !hasWritten {
+						hasWritten = true
+						w.Header().Set("Content-Type", ContentType)
+						w.WriteHeader(http.StatusOK)
+					}
+
+					err = encoder.Encode(Response{
+						Name:      iterator.Name(),
+						CreatedAt: key.CreatedAt(),
+						CreatedBy: key.CreatedBy(),
+					})
+					if err != nil {
+						return hasWritten, err
+					}
+				}
+				return hasWritten, iterator.Err()
+			})
+		})
+		if err != nil {
+			if hasWritten {
+				json.NewEncoder(w).Encode(Response{Err: err.Error()})
 			} else {
-				encoder.Encode(Response{Err: err.Error()})
+				Error(w, err)
 			}
 			return
 		}

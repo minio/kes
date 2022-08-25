@@ -27,24 +27,23 @@ func serverSealVault(mux *http.ServeMux, config *ServerConfig) API {
 			Error(w, errMethodNotAllowed)
 			return
 		}
-
 		if err := normalizeURL(r.URL, APIPath); err != nil {
 			Error(w, err)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		sysAdmin, err := config.Vault.SysAdmin(r.Context())
+		err := Sync(config.Vault.Locker(), func() error {
+			sysAdmin, err := config.Vault.Admin(r.Context())
+			if err != nil {
+				return err
+			}
+			if identity := auth.Identify(r); identity != sysAdmin {
+				return kes.ErrNotAllowed
+			}
+			return config.Vault.Seal(r.Context())
+		})
 		if err != nil {
-			Error(w, err)
-			return
-		}
-		if identity := auth.Identify(r); identity != sysAdmin {
-			Error(w, kes.ErrNotAllowed)
-			return
-		}
-
-		if err = config.Vault.Seal(r.Context()); err != nil {
 			Error(w, err)
 			return
 		}
