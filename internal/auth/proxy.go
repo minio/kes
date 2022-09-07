@@ -64,7 +64,8 @@ func (p *TLSProxy) Is(identity kes.Identity) bool {
 
 // Add adds the given identity to the list of TLS
 // proxies if:
-//  identity != kes.IdentityUnknown
+//
+//	identity != kes.IdentityUnknown
 func (p *TLSProxy) Add(identity kes.Identity) {
 	if identity.IsUnknown() {
 		return

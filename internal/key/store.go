@@ -56,11 +56,12 @@ type Store interface {
 }
 
 // Iterator iterates over the names of set of cryptographic keys.
-//   for iterator.Next() {
-//       _ := iterator.Name() // Get the name of the key
-//   }
-//   if err := iterator.Err(); err != nil { // error handling
-//   }
+//
+//	for iterator.Next() {
+//	    _ := iterator.Name() // Get the name of the key
+//	}
+//	if err := iterator.Err(); err != nil { // error handling
+//	}
 //
 // Iterator implementations may or may not reflect concurrent
 // changes to the set of keys they iterate over. Further, they

@@ -17,9 +17,10 @@ import (
 // colorOption is a CLI Flag that controls
 // terminal output colorization. It can be
 // set to one of the following values:
-//   · always
-//   · auto  (default)
-//   · never
+//
+//	· always
+//	· auto  (default)
+//	· never
 type colorOption struct {
 	value string
 }

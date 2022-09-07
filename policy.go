@@ -20,8 +20,8 @@ import (
 // and for the specific pattern syntax see [2].
 //
 // A policy contains two different rule sets:
-//   • Allow rules
-//   • Deny  rules
+//   - Allow rules
+//   - Deny  rules
 //
 // A policy determines whether a request should be allowed
 // or denied in two steps. First, it iterates over all deny

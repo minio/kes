@@ -49,8 +49,9 @@ func Error(w http.ResponseWriter, err error) error {
 // been sent to client.
 //
 // A caller of ErrorTrailer has to pre-define the:
-//   • Status
-//   • Error
+//   - Status
+//   - Error
+//
 // trailers via http.ResponseWriter.Header().Set("Trailer", "Status, Error")
 //
 // If err has a 'Status() int' method then Error sets the
