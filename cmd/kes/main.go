@@ -30,6 +30,7 @@ Commands:
     server                   Start a KES server.
     init                     Initialize a stateful KES server or cluster.
 
+    enclave                  Manage KES enclaves.
     key                      Manage cryptographic keys.
     policy                   Manage KES policies.
     identity                 Manage KES identities.
@@ -54,6 +55,7 @@ func main() {
 		"server": serverCmd,
 		"init":   initCmd,
 
+		"enclave":  enclaveCmd,
 		"key":      keyCmd,
 		"policy":   policyCmd,
 		"identity": identityCmd,
