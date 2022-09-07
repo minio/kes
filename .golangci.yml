@@ -15,9 +15,7 @@ linters:
     - revive
     - ineffassign
     - gosimple
-    - deadcode
     - unused
-    - structcheck
     - prealloc
     - unconvert
     - gofumpt
@@ -26,6 +24,7 @@ issues:
   exclude-use-default: false
   exclude:
       - "var-naming: don't use ALL_CAPS in Go names; use CamelCase"
+      - "package-comments: should have a package comment"
 
 service:
-  golangci-lint-version: 1.43.0 # use the fixed version to not introduce new linters unexpectedly
+  golangci-lint-version: 1.48.0 # use the fixed version to not introduce new linters unexpectedly

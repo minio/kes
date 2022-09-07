@@ -148,11 +148,12 @@ type IdentitySet interface {
 }
 
 // An IdentityIterator iterates over a list of identites.
-//   for iterator.Next() {
-//       _ = iterator.Identity() // Get the next identity
-//   }
-//   if err := iterator.Close(); err != nil {
-//   }
+//
+//	for iterator.Next() {
+//	    _ = iterator.Identity() // Get the next identity
+//	}
+//	if err := iterator.Close(); err != nil {
+//	}
 //
 // Once done iterating, an IdentityIterator should be closed.
 //

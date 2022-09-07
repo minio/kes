@@ -37,15 +37,16 @@ import (
 // KES server, the client-side TLS certificate verification can be disabled with the '-k' flag.
 //
 // Examples:
-//   Run the integration tests against https://play.min.io using the default root identity:
-//   go test -v -integration
 //
-//   Only run the 'CreateKey' integration test against https://play.min.io using the default root identity:
-//   go test -v -integration -run=CreateKey
+//	Run the integration tests against https://play.min.io using the default root identity:
+//	go test -v -integration
 //
-//   Run the integration tests against a local KES server (https://127.0.0.1:7373) using
-//   a custom root identity.
-//   go  test -v -k -integration -endpoint=https://127.0.0.1:7373 -key=<client.key> -cert<client.cert>
+//	Only run the 'CreateKey' integration test against https://play.min.io using the default root identity:
+//	go test -v -integration -run=CreateKey
+//
+//	Run the integration tests against a local KES server (https://127.0.0.1:7373) using
+//	a custom root identity.
+//	go  test -v -k -integration -endpoint=https://127.0.0.1:7373 -key=<client.key> -cert<client.cert>
 var (
 	IsIntegrationTest  = flag.Bool("integration", false, "Run integration tests in addition to unit tests")
 	Endpoint           = flag.String("endpoint", "https://play.min.io:7373", "The KES server endpoint for integration tests")

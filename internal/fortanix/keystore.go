@@ -638,8 +638,8 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 // given endpoint followed by the path elements.
 //
 // For example:
-//   • endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
-//   • endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
+//   - endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
+//   - endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
 //
 // Any leading or trailing whitespaces are removed from
 // the endpoint before it is concatenated with the path

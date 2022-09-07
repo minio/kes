@@ -231,10 +231,11 @@ func (c *Cache) gc(t time.Duration) {
 }
 
 // gcUnused spawns a new go-routine that:
-//   1. Removes all entries that are marked
-//      as not recently used.
-//   2. Marks all remaining entries as not
-//      recently used.
+//  1. Removes all entries that are marked
+//     as not recently used.
+//  2. Marks all remaining entries as not
+//     recently used.
+//
 // The spawned go-routine repeats these two steps
 // in t intervals.
 //

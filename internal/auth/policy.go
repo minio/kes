@@ -38,11 +38,12 @@ type PolicySet interface {
 }
 
 // A PolicyIterator iterates over a list of policies.
-//   for iterator.Next() {
-//       _ = iterator.Name() // Get the next policy
-//   }
-//   if err := iterator.Close(); err != nil {
-//   }
+//
+//	for iterator.Next() {
+//	    _ = iterator.Name() // Get the next policy
+//	}
+//	if err := iterator.Close(); err != nil {
+//	}
 //
 // Once done iterating, a PolicyIterator should be closed.
 //
@@ -135,8 +136,9 @@ func (p *Policy) UnmarshalBinary(b []byte) error {
 
 // Verify reports whether the given HTTP request is allowed.
 // It returns no error if:
-//  (1) No deny pattern matches the URL path *AND*
-//  (2) At least one allow pattern matches the URL path.
+//
+//	(1) No deny pattern matches the URL path *AND*
+//	(2) At least one allow pattern matches the URL path.
 //
 // Otherwise, Verify returns ErrNotAllowed.
 func (p *Policy) Verify(r *http.Request) error {

@@ -287,9 +287,9 @@ func (w *latencyResponseWriter) Flush() {
 // countResponseWriter is an http.ResponseWriter that
 // counts the number of requests partition by requests
 // that:
-//   • Succeeded (HTTP 200 OK)
-//   • Errored   (HTTP 4xx)
-//   • Failed    (HTTP 5xx)
+//   - Succeeded (HTTP 200 OK)
+//   - Errored   (HTTP 4xx)
+//   - Failed    (HTTP 5xx)
 type countResponseWriter struct {
 	http.ResponseWriter
 	flusher http.Flusher

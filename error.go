@@ -84,9 +84,10 @@ func IsConnError(err error) (*ConnError, bool) {
 //
 // Calling code may check whether a returned error is
 // of type ConnError:
-//   if cErr, ok := kes.IsConnError(err) {
-//      // TODO: handle connection error
-//   }
+//
+//	if cErr, ok := kes.IsConnError(err) {
+//	   // TODO: handle connection error
+//	}
 type ConnError struct {
 	Host string // The host that couldn't be reached
 	Err  error  // The underlying error, if any.

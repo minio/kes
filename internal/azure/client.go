@@ -96,12 +96,13 @@ func (c *client) CreateSecret(ctx context.Context, name, value string) (status, 
 // will return the latest version of the secret.
 //
 // A KeyVault secret may have additional attributes:
-//  {
-//     Enabled
-//     Expiry
-//     NotBefore
-//     ...
-//  }
+//
+//	{
+//	   Enabled
+//	   Expiry
+//	   NotBefore
+//	   ...
+//	}
 //
 // GetSecret returns no secret and an error status
 // if the secret is disabled, expired or should not
@@ -413,8 +414,8 @@ func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, st
 // given endpoint followed by the path elements.
 //
 // For example:
-//   • endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
-//   • endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
+//   - endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
+//   - endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
 //
 // Any leading or trailing whitespaces are removed from
 // the endpoint before it is concatenated with the path

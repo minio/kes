@@ -39,7 +39,8 @@ func (c *client) Sealed() bool { return atomic.LoadUint32(&c.sealed) == 1 }
 //
 // Since CheckStatus starts an endless for-loop users should usually
 // invoke CheckStatus in a separate go routine:
-//   go client.CheckStatus(ctx, 10 * time.Second)
+//
+//	go client.CheckStatus(ctx, 10 * time.Second)
 //
 // If the delay == 0 CheckStatus uses a 10s delay by default.
 func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
@@ -163,7 +164,8 @@ type authFunc func() (token string, ttl time.Duration, err error)
 //
 // Since RenewToken starts a endless for-loop users should
 // usually invoke CheckStatus in a separate go routine:
-//   go client.RenewToken(ctx, login, ttl)
+//
+//	go client.RenewToken(ctx, login, ttl)
 func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, retry time.Duration) {
 	if retry == 0 {
 		retry = 5 * time.Second

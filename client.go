@@ -26,24 +26,25 @@ import (
 // functions.
 //
 // In general, a client just requires:
-//   • a KES server endpoint
-//   • a X.509 certificate for authentication
+//   - a KES server endpoint
+//   - a X.509 certificate for authentication
 //
 // However, custom transport protocols, timeouts,
 // connection pooling, etc. can be specified via
 // a custom http.RoundTripper. For example:
-//   client := &Client{
-//       Endpoints:  []string{"https:127.0.0.1:7373"},
-//       HTTPClient: http.Client{
-//           Transport: &http.Transport{
-//              // specify custom behavior...
 //
-//              TLSClientConfig: &tls.Config{
-//                  Certificates: []tls.Certificates{clientCert},
-//              },
-//           },
-//       },
-//    }
+//	client := &Client{
+//	    Endpoints:  []string{"https:127.0.0.1:7373"},
+//	    HTTPClient: http.Client{
+//	        Transport: &http.Transport{
+//	           // specify custom behavior...
+//
+//	           TLSClientConfig: &tls.Config{
+//	               Certificates: []tls.Certificates{clientCert},
+//	           },
+//	        },
+//	    },
+//	 }
 //
 // A custom transport protocol can be used via a
 // custom implemention of the http.RoundTripper
@@ -617,8 +618,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 // given endpoint followed by the path elements.
 //
 // For example:
-//   • endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
-//   • endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
+//   - endpoint("https://127.0.0.1:7373", "version")                => "https://127.0.0.1:7373/version"
+//   - endpoint("https://127.0.0.1:7373/", "/key/create", "my-key") => "https://127.0.0.1:7373/key/create/my-key"
 //
 // Any leading or trailing whitespaces are removed from
 // the endpoint before it is concatenated with the path
