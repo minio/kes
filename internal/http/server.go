@@ -82,6 +82,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 	config.APIs = append(config.APIs, serverAuditLog(mux, config))
 
 	config.APIs = append(config.APIs, serverCreateEnclave(mux, config))
+	config.APIs = append(config.APIs, serverDescribeEnclave(mux, config))
 	config.APIs = append(config.APIs, serverDeleteEnclave(mux, config))
 
 	config.APIs = append(config.APIs, serverSealVault(mux, config))

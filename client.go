@@ -259,6 +259,48 @@ func (c *Client) CreateEnclave(ctx context.Context, name string, admin Identity)
 	return nil
 }
 
+// DescribeEnclave returns an EnclaveInfo describing the
+// specified enclave. Only the KES system admin can create
+// fetch enclave descriptions.
+//
+// It returns ErrEnclaveNotFound if the enclave does not
+// exists.
+func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo, error) {
+	const (
+		APIPath         = "/v1/enclave/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20 // 1 MiB
+	)
+	type Response struct {
+		Name      string    `json:"name"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+	}
+	if name == "" {
+		name = "default"
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := client.Send(ctx, Method, c.Endpoints, join(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &EnclaveInfo{
+		Name:      response.Name,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
 // DeleteEnclave delete the specified enclave. Only the
 // KES system admin can delete enclaves.
 //

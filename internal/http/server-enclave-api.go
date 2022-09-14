@@ -12,6 +12,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes/internal/sys"
 )
 
 func serverCreateEnclave(mux *http.ServeMux, config *ServerConfig) API {
@@ -74,6 +75,68 @@ func serverCreateEnclave(mux *http.ServeMux, config *ServerConfig) API {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+	}
+	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
+	return API{
+		Method:  Method,
+		Path:    APIPath,
+		MaxBody: MaxBody,
+		Timeout: Timeout,
+	}
+}
+
+func serverDescribeEnclave(mux *http.ServeMux, config *ServerConfig) API {
+	const (
+		Method  = http.MethodGet
+		APIPath = "/v1/enclave/describe/"
+		MaxBody = 0
+		Timeout = 15 * time.Second
+	)
+	type Response struct {
+		Name      string       `json:"name"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy kes.Identity `json:"created_by"`
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w = audit(w, r, config.AuditLog.Log())
+
+		if r.Method != Method {
+			w.Header().Set("Accept", Method)
+			Error(w, errMethodNotAllowed)
+			return
+		}
+
+		if err := normalizeURL(r.URL, APIPath); err != nil {
+			Error(w, err)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+
+		info, err := VSync(config.Vault.RLocker(), func() (sys.EnclaveInfo, error) {
+			sysAdmin, err := config.Vault.Admin(r.Context())
+			if err != nil {
+				return sys.EnclaveInfo{}, err
+			}
+			if identity := auth.Identify(r); identity != sysAdmin {
+				return sys.EnclaveInfo{}, kes.ErrNotAllowed
+			}
+			name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+			if err = validateName(name); err != nil {
+				return sys.EnclaveInfo{}, err
+			}
+			return config.Vault.GetEnclaveInfo(r.Context(), name)
+		})
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(Response{
+			Name:      info.Name,
+			CreatedAt: info.CreatedAt,
+			CreatedBy: info.CreatedBy,
+		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{

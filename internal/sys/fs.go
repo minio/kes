@@ -30,12 +30,17 @@ type VaultFS interface {
 	// as enclave admin.
 	//
 	// It returns ErrEnclaveExists if such an enclave already exists.
-	CreateEnclave(ctx context.Context, name string, admin kes.Identity) (*EnclaveInfo, error)
+	CreateEnclave(ctx context.Context, name string, admin kes.Identity) (EnclaveInfo, error)
 
 	// GetEnclave returns the requested enclave.
 	//
 	// It returns ErrEnclaveNotFound if no such enclave exists.
 	GetEnclave(ctx context.Context, name string) (*Enclave, error)
+
+	// GetEnclaveInfo returns information about the specified enclave.
+	//
+	// It returns ErrEnclaveNotFound if no such enclave exists.
+	GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo, error)
 
 	// DeleteEnclave deletes the specified enclave.
 	//

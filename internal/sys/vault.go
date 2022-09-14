@@ -95,19 +95,19 @@ func (v *Vault) Admin(ctx context.Context) (kes.Identity, error) {
 // enclave admin identity.
 //
 // It returns ErrEnclaveExists if such an enclave already exists.
-func (v *Vault) CreateEnclave(ctx context.Context, name string, admin kes.Identity) (*EnclaveInfo, error) {
+func (v *Vault) CreateEnclave(ctx context.Context, name string, admin kes.Identity) (EnclaveInfo, error) {
 	if name == "" {
 		name = DefaultEnclaveName
 	}
 
 	if v.sealed {
-		return nil, kes.ErrSealed
+		return EnclaveInfo{}, kes.ErrSealed
 	}
 	if admin.IsUnknown() {
-		return nil, kes.NewError(http.StatusBadRequest, "admin cannot be empty")
+		return EnclaveInfo{}, kes.NewError(http.StatusBadRequest, "admin cannot be empty")
 	}
 	if admin == v.admin {
-		return nil, kes.NewError(http.StatusBadRequest, "admin cannot be the system admin")
+		return EnclaveInfo{}, kes.NewError(http.StatusBadRequest, "admin cannot be the system admin")
 	}
 
 	delete(v.enclaves, name)
@@ -141,6 +141,19 @@ func (v *Vault) GetEnclave(ctx context.Context, name string) (*Enclave, error) {
 	}
 	v.enclaves[name] = enclave
 	return enclave, nil
+}
+
+// GetEnclaveInfo returns information about the specified enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (v *Vault) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo, error) {
+	if name == "" {
+		name = DefaultEnclaveName
+	}
+	if v.sealed {
+		return EnclaveInfo{}, kes.ErrSealed
+	}
+	return v.fs.GetEnclaveInfo(ctx, name)
 }
 
 // DeleteEnclave deletes the enclave with the given name.

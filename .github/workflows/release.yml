@@ -8,11 +8,8 @@ on:
     - master
 jobs:
   goreleaser:
-    name: Go ${{ matrix.go-version }}
+    name: Build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [1.19.x]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -21,8 +18,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: ${{ matrix.go-version }}
-        id: go
+          go-version: 1.19.1
+          check-latest: true
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
