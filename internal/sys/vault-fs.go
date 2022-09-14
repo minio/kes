@@ -73,18 +73,18 @@ func (v *vaultFS) Admin(ctx context.Context) (kes.Identity, error) {
 	return v.rootKey.CreatedBy(), nil
 }
 
-func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Identity) (*EnclaveInfo, error) {
+func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Identity) (EnclaveInfo, error) {
 	if err := valid(name); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 
 	enclavePath := filepath.Join(v.rootDir, "enclave", name)
 	_, err := os.Stat(enclavePath)
 	if err == nil {
-		return nil, kes.ErrEnclaveExists
+		return EnclaveInfo{}, kes.ErrEnclaveExists
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 
 	algorithm := key.AES256_GCM_SHA256
@@ -93,36 +93,36 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 	}
 	keyStoreKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
 	if err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	policyKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
 	if err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	identityKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
 	if err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 
 	if err = os.MkdirAll(filepath.Join(enclavePath), 0o755); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	if err = os.Mkdir(filepath.Join(enclavePath, "key"), 0o755); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	if err = os.Mkdir(filepath.Join(enclavePath, "policy"), 0o755); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	if err = os.Mkdir(filepath.Join(enclavePath, "identity"), 0o755); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 
 	identityFS := NewIdentityFS(filepath.Join(enclavePath, "identity"), identityKey)
 	if err = identityFS.SetAdmin(ctx, admin); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 
-	info := &EnclaveInfo{
+	info := EnclaveInfo{
 		Name:        name,
 		KeyStoreKey: keyStoreKey,
 		PolicyKey:   policyKey,
@@ -132,14 +132,14 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 	}
 	plaintext, err := info.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	ciphertext, err := v.rootKey.Wrap(plaintext, []byte(name))
 	if err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	if err = os.WriteFile(filepath.Join(enclavePath, ".enclave"), ciphertext, 0o600); err != nil {
-		return nil, err
+		return EnclaveInfo{}, err
 	}
 	return info, nil
 }
@@ -151,6 +151,9 @@ func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error)
 
 	enclavePath := filepath.Join(v.rootDir, "enclave", name)
 	file, err := os.Open(filepath.Join(enclavePath, ".enclave"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, kes.ErrEnclaveNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +177,37 @@ func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error)
 	policyFS := NewPolicyFS(filepath.Join(enclavePath, "policy"), info.PolicyKey)
 	identityFS := NewIdentityFS(filepath.Join(enclavePath, "identity"), info.IdentityKey)
 	return NewEnclave(keyFS, policyFS, identityFS), nil
+}
+
+func (v *vaultFS) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo, error) {
+	if err := valid(name); err != nil {
+		return EnclaveInfo{}, err
+	}
+
+	enclavePath := filepath.Join(v.rootDir, "enclave", name)
+	file, err := os.Open(filepath.Join(enclavePath, ".enclave"))
+	if errors.Is(err, os.ErrNotExist) {
+		return EnclaveInfo{}, kes.ErrEnclaveNotFound
+	}
+	if err != nil {
+		return EnclaveInfo{}, err
+	}
+	defer file.Close()
+
+	const MaxSize = 1 << 20
+	var ciphertext bytes.Buffer
+	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+		return EnclaveInfo{}, err
+	}
+	plaintext, err := v.rootKey.Unwrap(ciphertext.Bytes(), []byte(name))
+	if err != nil {
+		return EnclaveInfo{}, err
+	}
+	var info EnclaveInfo
+	if err = info.UnmarshalBinary(plaintext); err != nil {
+		return EnclaveInfo{}, err
+	}
+	return info, nil
 }
 
 func (v *vaultFS) DeleteEnclave(ctx context.Context, name string) error {

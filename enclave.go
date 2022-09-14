@@ -15,6 +15,13 @@ import (
 	"time"
 )
 
+// EnclaveInfo describes a KES enclave.
+type EnclaveInfo struct {
+	Name      string    `json:"name"`       // Enclave name
+	CreatedAt time.Time `json:"created_at"` // Point in time when the enclave has been created
+	CreatedBy Identity  `json:"created_by"` // Identity that created the enclave
+}
+
 // An Enclave is an isolated area within a KES server.
 // It stores cryptographic keys, policies and other
 // related information securely.
