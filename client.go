@@ -347,6 +347,16 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	return enclave.ImportKey(ctx, name, key)
 }
 
+// DescribeKey returns the KeyInfo for the given key.
+// It returns ErrKeyNotFound if no such key exists.
+func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
+	enclave := Enclave{
+		endpoints: c.Endpoints,
+		client:    retry(c.HTTPClient),
+	}
+	return enclave.DescribeKey(ctx, name)
+}
+
 // DeleteKey deletes the key from a KES server. It returns
 // ErrKeyNotFound if no such key exists.
 func (c *Client) DeleteKey(ctx context.Context, name string) error {

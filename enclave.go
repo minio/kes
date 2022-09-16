@@ -87,6 +87,41 @@ func (e *Enclave) ImportKey(ctx context.Context, name string, key []byte) error 
 	return nil
 }
 
+// DescribeKey returns the KeyInfo for the given key.
+// It returns ErrKeyNotFound if no such key exists.
+func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
+	const (
+		APIPath         = "/v1/key/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 << 20
+	)
+	type Response struct {
+		Name      string    `json:"name"`
+		ID        string    `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+	}
+	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &KeyInfo{
+		Name:      response.Name,
+		ID:        response.ID,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
 // DeleteKey deletes the key from a KES server. It returns
 // ErrKeyNotFound if no such key exists.
 func (e *Enclave) DeleteKey(ctx context.Context, name string) error {
