@@ -155,6 +155,66 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 	}
 }
 
+func gatewayDescribeKey(mux *http.ServeMux, config *GatewayConfig) API {
+	const (
+		Method  = http.MethodGet
+		APIPath = "/v1/key/describe/"
+		MaxBody = 0
+		Timeout = 15 * time.Second
+	)
+	type Response struct {
+		Name      string       `json:"name"`
+		ID        string       `json:"id,omitempty"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w = audit(w, r, config.AuditLog.Log())
+
+		if r.Method != Method {
+			w.Header().Set("Accept", Method)
+			Error(w, errMethodNotAllowed)
+			return
+		}
+		if err := normalizeURL(r.URL, APIPath); err != nil {
+			Error(w, err)
+			return
+		}
+
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+			Error(w, err)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+
+		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+		if err := validateName(name); err != nil {
+			Error(w, err)
+			return
+		}
+		key, err := config.Keys.Get(r.Context(), name)
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		w.Header().Set("Content-Length", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(Response{
+			Name:      name,
+			ID:        key.ID(),
+			CreatedAt: key.CreatedAt(),
+			CreatedBy: key.CreatedBy(),
+		})
+	}
+	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
+	return API{
+		Method:  Method,
+		Path:    APIPath,
+		MaxBody: MaxBody,
+		Timeout: Timeout,
+	}
+}
+
 func gatewayDeleteKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method  = http.MethodDelete

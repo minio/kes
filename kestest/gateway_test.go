@@ -29,6 +29,7 @@ var gatewayAPIs = []kes.API{
 
 	{Method: http.MethodPost, Path: "/v1/key/create/", MaxBody: 0, Timeout: 15 * time.Second},             // 4
 	{Method: http.MethodPost, Path: "/v1/key/import/", MaxBody: 1 << 20, Timeout: 15 * time.Second},       // 5
+	{Method: http.MethodGet, Path: "/v1/key/describe/", MaxBody: 0, Timeout: 15 * time.Second},            // 5
 	{Method: http.MethodDelete, Path: "/v1/key/delete/", MaxBody: 0, Timeout: 15 * time.Second},           // 6
 	{Method: http.MethodPost, Path: "/v1/key/generate/", MaxBody: 1 << 20, Timeout: 15 * time.Second},     // 7
 	{Method: http.MethodPost, Path: "/v1/key/encrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second},      // 8

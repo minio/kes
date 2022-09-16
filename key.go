@@ -49,9 +49,10 @@ type PCP struct {
 
 // KeyInfo describes a cryptographic key at a KES server.
 type KeyInfo struct {
-	Name      string    // Name of the cryptographic key
-	CreatedAt time.Time // Point in time when the key was created
-	CreatedBy Identity  // Identity that created the key
+	Name      string    `json:"name"`                 // Name of the cryptographic key
+	ID        string    `json:"id,omitempty"`         // ID of the cryptographic key
+	CreatedAt time.Time `json:"created_at,omitempty"` // Point in time when the key was created
+	CreatedBy Identity  `json:"created_by,omitempty"` // Identity that created the key
 }
 
 // KeyIterator iterates over a stream of KeyInfo objects.
@@ -77,6 +78,10 @@ func (i *KeyIterator) Value() KeyInfo { return i.current }
 // short-hand for Value().Name.
 func (i *KeyIterator) Name() string { return i.current.Name }
 
+// ID returns the ID of the current key. It is a
+// short-hand for Value().ID.
+func (i *KeyIterator) ID() string { return i.current.ID }
+
 // CreatedAt returns the created-at timestamp of the current
 // key. It is a short-hand for Value().CreatedAt.
 func (i *KeyIterator) CreatedAt() time.Time { return i.current.CreatedAt }
@@ -92,6 +97,7 @@ func (i *KeyIterator) CreatedBy() Identity { return i.current.CreatedBy }
 func (i *KeyIterator) Next() bool {
 	type Response struct {
 		Name      string    `json:"name"`
+		ID        string    `json:"id"`
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
 
@@ -127,7 +133,8 @@ func (i *KeyIterator) Next() bool {
 // encounterred, if any.
 func (i *KeyIterator) WriteTo(w io.Writer) (int64, error) {
 	type Response struct {
-		Name      string    `json:"name"`
+		Name      string    `json:"name,omitempty"`
+		ID        string    `json:"id,omitempty"`
 		CreatedAt time.Time `json:"created_at,omitempty"`
 		CreatedBy Identity  `json:"created_by,omitempty"`
 

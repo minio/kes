@@ -48,6 +48,7 @@ func NewGatewayMux(config *GatewayConfig) *http.ServeMux {
 
 	config.APIs = append(config.APIs, gatewayCreateKey(mux, config))
 	config.APIs = append(config.APIs, gatewayImportKey(mux, config))
+	config.APIs = append(config.APIs, gatewayDescribeKey(mux, config))
 	config.APIs = append(config.APIs, gatewayDeleteKey(mux, config))
 	config.APIs = append(config.APIs, gatewayGenerateKey(mux, config))
 	config.APIs = append(config.APIs, gatewayEncryptKey(mux, config))
