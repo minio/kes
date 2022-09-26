@@ -119,6 +119,15 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 	}
 }
 
+// Enclave returns a new Enclave with the given name.
+func (c *Client) Enclave(name string) *Enclave {
+	return &Enclave{
+		Name:       name,
+		Endpoints:  append(make([]string, 0, len(c.Endpoints)), c.Endpoints...),
+		HTTPClient: c.HTTPClient,
+	}
+}
+
 // Version tries to fetch the version information from the
 // KES server.
 func (c *Client) Version(ctx context.Context) (string, error) {
@@ -330,8 +339,8 @@ func (c *Client) DeleteEnclave(ctx context.Context, name string) error {
 // exists.
 func (c *Client) CreateKey(ctx context.Context, name string) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.CreateKey(ctx, name)
 }
@@ -341,8 +350,8 @@ func (c *Client) CreateKey(ctx context.Context, name string) error {
 // exists.
 func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.ImportKey(ctx, name, key)
 }
@@ -351,8 +360,8 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 // It returns ErrKeyNotFound if no such key exists.
 func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DescribeKey(ctx, name)
 }
@@ -361,8 +370,8 @@ func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error)
 // ErrKeyNotFound if no such key exists.
 func (c *Client) DeleteKey(ctx context.Context, name string) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DeleteKey(ctx, name)
 }
@@ -387,8 +396,8 @@ func (c *Client) DeleteKey(ctx context.Context, name string) error {
 // exists.
 func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (DEK, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.GenerateKey(ctx, name, context)
 }
@@ -402,8 +411,8 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 // server.
 func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []byte) ([]byte, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.Encrypt(ctx, name, plaintext, context)
 }
@@ -417,8 +426,8 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 // context value is provided.
 func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context []byte) ([]byte, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
@@ -432,8 +441,8 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 // or a different context value was used.
 func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP) ([]PCP, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DecryptAll(ctx, name, ciphertexts...)
 }
@@ -446,8 +455,8 @@ func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP
 // the KeyIterator iterates over all key names.
 func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.ListKeys(ctx, pattern)
 }
@@ -458,8 +467,8 @@ func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, er
 // the given policy.
 func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.SetPolicy(ctx, name, policy)
 }
@@ -468,8 +477,8 @@ func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) err
 // It returns ErrPolicyNotFound if no such policy exists.
 func (c *Client) DescribePolicy(ctx context.Context, name string) (*PolicyInfo, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DescribePolicy(ctx, name)
 }
@@ -479,8 +488,8 @@ func (c *Client) DescribePolicy(ctx context.Context, name string) (*PolicyInfo, 
 // exists.
 func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.GetPolicy(ctx, name)
 }
@@ -491,8 +500,8 @@ func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 // It returns ErrPolicyNotFound if no such policy exists.
 func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DeletePolicy(ctx, name)
 }
@@ -504,8 +513,8 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 // ListPolicies returns all policy names.
 func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyIterator, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.ListPolicies(ctx, pattern)
 }
@@ -517,8 +526,8 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyItera
 // AssignPolicy returns PolicyNotFound if no such policy exists.
 func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Identity) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.AssignPolicy(ctx, policy, identity)
 }
@@ -526,8 +535,8 @@ func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Ident
 // DescribeIdentity returns an IdentityInfo describing the given identity.
 func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*IdentityInfo, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DescribeIdentity(ctx, identity)
 }
@@ -540,8 +549,8 @@ func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*Iden
 // policy information about itself.
 func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DescribeSelf(ctx)
 }
@@ -553,8 +562,8 @@ func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, erro
 // The KES admin identity cannot be removed.
 func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.DeleteIdentity(ctx, identity)
 }
@@ -565,8 +574,8 @@ func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 // ListIdentities returns all identities.
 func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityIterator, error) {
 	enclave := Enclave{
-		endpoints: c.Endpoints,
-		client:    retry(c.HTTPClient),
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
 	}
 	return enclave.ListIdentities(ctx, pattern)
 }

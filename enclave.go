@@ -7,8 +7,10 @@ package kes
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -32,9 +34,74 @@ type EnclaveInfo struct {
 //
 // With Enclaves, a KES server implements multi-tenancy.
 type Enclave struct {
-	name      string
-	endpoints []string
-	client    retry
+	// Name is the name of the KES server enclave.
+	Name string
+
+	// Endpoints contains one or multiple KES server
+	// endpoints. For example: https://127.0.0.1:7373
+	//
+	// Multiple endpoints should only be specified
+	// when multiple KES servers should be used, e.g.
+	// for high availability, but no round-robin DNS
+	// is used.
+	Endpoints []string
+
+	// HTTPClient is the HTTP client.
+	//
+	// The HTTP client uses its http.RoundTripper
+	// to send requests resp. receive responses.
+	//
+	// It must not be modified concurrently.
+	HTTPClient http.Client
+}
+
+// NewEnclave returns a new Enclave with the given name and
+// KES server endpoint that uses the given TLS certificate
+// mTLS authentication.
+//
+// The TLS certificate must be valid for client authentication.
+//
+// NewEnclave uses an http.Transport with reasonable defaults.
+//
+// For getting an Enclave from a Client refer to Client.Enclave.
+func NewEnclave(endpoint, name string, certificate tls.Certificate) *Enclave {
+	return NewEnclaveWithConfig(endpoint, name, &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+	})
+}
+
+// NewEnclaveWithConfig returns a new Enclave with the given
+// name and KES server endpoint that uses the given TLS config
+// for mTLS authentication.
+//
+// Therefore, the config.Certificates must contain a TLS
+// certificate that is valid for client authentication.
+//
+// NewClientWithConfig uses an http.Transport with reasonable
+// defaults.
+//
+// For getting an Enclave from a Client refer to Client.Enclave.
+func NewEnclaveWithConfig(endpoint, name string, config *tls.Config) *Enclave {
+	return &Enclave{
+		Name:      name,
+		Endpoints: []string{endpoint},
+		HTTPClient: http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          100,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+				TLSClientConfig:       config,
+			},
+		},
+	}
 }
 
 // CreateKey creates a new cryptographic key. The key will
@@ -48,7 +115,8 @@ func (e *Enclave) CreateKey(ctx context.Context, name string) error {
 		Method   = http.MethodPost
 		StatusOK = http.StatusOK
 	)
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -77,7 +145,8 @@ func (e *Enclave) ImportKey(ctx context.Context, name string, key []byte) error 
 		return err
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -102,7 +171,8 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
 	}
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +201,8 @@ func (e *Enclave) DeleteKey(ctx context.Context, name string) error {
 		StatusOK = http.StatusOK
 	)
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -181,7 +252,8 @@ func (e *Enclave) GenerateKey(ctx context.Context, name string, context []byte) 
 		return DEK{}, err
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return DEK{}, err
 	}
@@ -227,7 +299,8 @@ func (e *Enclave) Encrypt(ctx context.Context, name string, plaintext, context [
 		return nil, err
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +345,8 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 		return nil, err
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +398,8 @@ func (e *Enclave) DecryptAll(ctx context.Context, name string, ciphertexts ...CC
 	if err != nil {
 		return nil, err
 	}
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +441,8 @@ func (e *Enclave) ListKeys(ctx context.Context, pattern string) (*KeyIterator, e
 		pattern = MatchAll
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, pattern), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, pattern), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +474,8 @@ func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity Iden
 	if err != nil {
 		return err
 	}
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, policy), bytes.NewReader(body))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, policy), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -423,8 +500,8 @@ func (e *Enclave) SetPolicy(ctx context.Context, name string, policy *Policy) er
 	if err != nil {
 		return err
 	}
-
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -447,7 +524,8 @@ func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo,
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
 	}
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +560,8 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
 	}
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -516,7 +595,8 @@ func (e *Enclave) DeletePolicy(ctx context.Context, name string) error {
 		StatusOK = http.StatusOK
 	)
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, name), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -542,7 +622,8 @@ func (e *Enclave) ListPolicies(ctx context.Context, pattern string) (*PolicyIter
 		pattern = MatchAll
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, pattern), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, pattern), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +651,8 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 		CreatedBy Identity  `json:"created_by"`
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, identity.String()), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, identity.String()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +700,8 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 		Policy     InlinePolicy `json:"policy"`
 	}
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath), nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -660,7 +743,8 @@ func (e *Enclave) DeleteIdentity(ctx context.Context, identity Identity) error {
 		StatusOK = http.StatusOK
 	)
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, identity.String()), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, identity.String()), nil)
 	if err != nil {
 		return err
 	}
@@ -681,7 +765,8 @@ func (e *Enclave) ListIdentities(ctx context.Context, pattern string) (*Identity
 		StatusOK = http.StatusOK
 	)
 
-	resp, err := e.client.Send(ctx, Method, e.endpoints, e.path(APIPath, pattern), nil)
+	client := retry(e.HTTPClient)
+	resp, err := client.Send(ctx, Method, e.Endpoints, e.path(APIPath, pattern), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -698,8 +783,8 @@ func (e *Enclave) path(api string, args ...string) string {
 	for _, arg := range args {
 		api = path.Join(api, url.PathEscape(arg))
 	}
-	if e.name != "" {
-		api = "?enclave=" + url.QueryEscape(e.name)
+	if e.Name != "" {
+		api = "?enclave=" + url.QueryEscape(e.Name)
 	}
 	return api
 }
