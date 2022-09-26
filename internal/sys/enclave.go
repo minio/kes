@@ -361,7 +361,7 @@ func (e *Enclave) VerifyRequest(r *http.Request) error {
 		identity = kes.Identity(hex.EncodeToString(h[:]))
 	)
 	info, err := e.GetIdentity(r.Context(), identity)
-	if errors.Is(err, auth.ErrIdentityNotFound) {
+	if errors.Is(err, kes.ErrIdentityNotFound) {
 		return kes.ErrNotAllowed
 	}
 	if err != nil {
