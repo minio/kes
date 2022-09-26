@@ -18,10 +18,6 @@ import (
 	"github.com/minio/kes"
 )
 
-// ErrIdentityNotFound is returned by an IdentitySet if a specified
-// identity does not exist.
-var ErrIdentityNotFound = kes.NewError(http.StatusNotFound, "identity does not exist")
-
 // VerifyRequest verifies whether the request's identity is allowed to perform
 // the request based on the given policies.
 func VerifyRequest(r *http.Request, policies PolicySet, identities IdentitySet) error {
@@ -61,7 +57,7 @@ func VerifyRequest(r *http.Request, policies PolicySet, identities IdentitySet) 
 	}
 
 	info, err := identities.Get(r.Context(), identity)
-	if errors.Is(err, ErrIdentityNotFound) {
+	if errors.Is(err, kes.ErrIdentityNotFound) {
 		return kes.ErrNotAllowed
 	}
 	if err != nil {
@@ -117,12 +113,6 @@ type IdentitySet interface {
 	// The admin is never assigned to any policy
 	// and can perform any operation.
 	Admin(ctx context.Context) (kes.Identity, error)
-
-	// SetAdmin sets the identity of the admin.
-	//
-	// The admin is never assigned to any policy
-	// and can perform any operation.
-	SetAdmin(ctx context.Context, admin kes.Identity) error
 
 	// Assign assigns the policy to the given identity.
 	//

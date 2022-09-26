@@ -154,26 +154,3 @@ func (p *Policy) Verify(r *http.Request) error {
 	}
 	return kes.ErrNotAllowed
 }
-
-// ROPolicySet wraps p and returns a readonly PolicySet.
-func ROPolicySet(p PolicySet) PolicySet { return roPolicySet{set: p} }
-
-type roPolicySet struct{ set PolicySet }
-
-var _ PolicySet = roPolicySet{} // compiler check
-
-func (r roPolicySet) Set(context.Context, string, *Policy) error {
-	return kes.NewError(http.StatusNotImplemented, "readonly policy-set: setting a policy is not supported")
-}
-
-func (r roPolicySet) Get(ctx context.Context, name string) (*Policy, error) {
-	return r.set.Get(ctx, name)
-}
-
-func (r roPolicySet) Delete(context.Context, string) error {
-	return kes.NewError(http.StatusNotImplemented, "readonly policy-set: deleting a policy is not supported")
-}
-
-func (r roPolicySet) List(ctx context.Context) (PolicyIterator, error) {
-	return r.set.List(ctx)
-}

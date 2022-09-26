@@ -207,7 +207,7 @@ func (i *identitySet) Get(_ context.Context, identity kes.Identity) (auth.Identi
 
 	policy, ok := i.roles[identity]
 	if !ok {
-		return auth.IdentityInfo{}, auth.ErrIdentityNotFound
+		return auth.IdentityInfo{}, kes.ErrIdentityNotFound
 	}
 	return policy, nil
 }
