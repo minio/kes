@@ -19,6 +19,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // DefaultEnclaveName is the default Enclave name used
@@ -134,7 +135,7 @@ func (e *Enclave) RLocker() sync.Locker { return e.lock.RLocker() }
 // due to a network error - it returns a
 // StoreState with StoreUnreachable and no
 // error.
-func (e *Enclave) Status(ctx context.Context) (key.StoreState, error) { return key.StoreState{}, nil }
+func (e *Enclave) Status(ctx context.Context) (kms.State, error) { return kms.State{}, nil }
 
 // CreateKey stores the given key if and only if no entry with
 // the given name exists.
@@ -181,7 +182,7 @@ func (e *Enclave) GetKey(ctx context.Context, name string) (key.Key, error) {
 // The iterator makes no guarantees about whether concurrent changes
 // to the enclave - i.e. creation or deletion of keys - are reflected.
 // It does not provide any ordering guarantees.
-func (e *Enclave) ListKeys(ctx context.Context) (key.Iterator, error) {
+func (e *Enclave) ListKeys(ctx context.Context) (kms.Iter, error) {
 	return e.keys.ListKeys(ctx)
 }
 

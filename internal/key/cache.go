@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/kms"
 )
 
 // Typed errors that are returned to the client.
@@ -98,7 +99,7 @@ type Cache struct {
 	cancel context.CancelFunc
 }
 
-var _ Store = (*Cache)(nil) // compiler check
+// var _ Store = (*Cache)(nil) // compiler check
 
 type cacheEntry struct {
 	Key Key
@@ -107,7 +108,7 @@ type cacheEntry struct {
 }
 
 // Status returns the current state of the Store.
-func (c *Cache) Status(ctx context.Context) (StoreState, error) { return c.Store.Status(ctx) }
+func (c *Cache) Status(ctx context.Context) (kms.State, error) { return c.Store.Status(ctx) }
 
 // Create stors the givem key at the Store if and
 // only if no entry with the given name exists.
@@ -160,7 +161,7 @@ func (c *Cache) Delete(ctx context.Context, name string) error {
 }
 
 // List returns a new Iterator over the Store.
-func (c *Cache) List(ctx context.Context) (Iterator, error) {
+func (c *Cache) List(ctx context.Context) (kms.Iter, error) {
 	i, err := c.Store.List(ctx)
 	if err != nil {
 		return nil, errListKey
@@ -334,8 +335,8 @@ func (c *Cache) watchOfflineStatus(t time.Duration) {
 				// offline cache.
 				// Once the Store becomes available again, we clear
 				// both caches and start with a clean state.
-				state, err := c.Store.Status(c.ctx)
-				if err != nil || state.State != StoreAvailable {
+				_, err := c.Store.Status(c.ctx)
+				if err != nil {
 					if atomic.CompareAndSwapUint32(&c.useOfflineCache, Online, Offline) {
 						c.lock.Lock()
 						c.offlineCache, c.cache = c.cache, map[string]*cacheEntry{}

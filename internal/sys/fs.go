@@ -11,6 +11,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // VaultFS provides access to Vault state.
@@ -68,7 +69,7 @@ type KeyFS interface {
 	DeleteKey(ctx context.Context, name string) error
 
 	// ListKeys returns an iterator over all key entries.
-	ListKeys(ctx context.Context) (key.Iterator, error)
+	ListKeys(ctx context.Context) (kms.Iter, error)
 }
 
 // PolicyFS provides access to policies within a particular Enclave.

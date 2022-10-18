@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -27,24 +26,15 @@ import (
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
-	"github.com/minio/kes/internal/aws"
-	"github.com/minio/kes/internal/azure"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
-	"github.com/minio/kes/internal/fortanix"
-	"github.com/minio/kes/internal/fs"
-	"github.com/minio/kes/internal/gcp"
-	"github.com/minio/kes/internal/gemalto"
-	"github.com/minio/kes/internal/generic"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
 	xlog "github.com/minio/kes/internal/log"
-	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/internal/vault"
-	"github.com/minio/kes/internal/yml"
+	"github.com/minio/kes/keserv"
 )
 
 type gatewayConfig struct {
@@ -64,35 +54,50 @@ func startGateway(gConfig gatewayConfig) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelCtx()
 
-	config, err := yml.ReadServerConfig(gConfig.ConfigFile)
+	config, err := keserv.ReadServerConfig(gConfig.ConfigFile)
 	if err != nil {
 		cli.Fatalf("failed to read config file: %v", err)
 	}
 	if gConfig.Address != "" {
-		config.Address.Set(gConfig.Address)
+		config.Addr.Value = gConfig.Address
 	}
 	if gConfig.PrivateKey != "" {
-		config.TLS.PrivateKey.Set(gConfig.PrivateKey)
+		config.TLS.PrivateKey.Value = gConfig.PrivateKey
 	}
 	if gConfig.Certificate != "" {
-		config.TLS.Certificate.Set(gConfig.Certificate)
+		config.TLS.Certificate.Value = gConfig.Certificate
 	}
 
-	if config.Address.Value() == "" {
-		config.Address.Set("0.0.0.0:7373")
+	// Set config defaults
+	if config.Addr.Value == "" {
+		config.Addr.Value = "0.0.0.0:7373"
 	}
-	if config.Admin.Identity.Value().IsUnknown() {
+	if config.Cache.Expiry.Value == 0 {
+		config.Cache.Expiry.Value = 5 * time.Minute
+	}
+	if config.Cache.ExpiryUnused.Value == 0 {
+		config.Cache.ExpiryUnused.Value = 30 * time.Second
+	}
+	if config.Log.Error.Value == "" {
+		config.Log.Error.Value = "on"
+	}
+	if config.Log.Audit.Value == "" {
+		config.Log.Audit.Value = "off"
+	}
+
+	// Verify config
+	if config.Admin.Value.IsUnknown() {
 		cli.Fatal("no admin identity specified")
 	}
-	if config.TLS.PrivateKey.Value() == "" {
+	if config.TLS.PrivateKey.Value == "" {
 		cli.Fatal("no TLS private key specified")
 	}
-	if config.TLS.Certificate.Value() == "" {
+	if config.TLS.Certificate.Value == "" {
 		cli.Fatal("no TLS certificate specified")
 	}
 
 	var errorLog *xlog.Target
-	switch strings.ToLower(config.Log.Error.Value()) {
+	switch strings.ToLower(config.Log.Error.Value) {
 	case "on":
 		if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
 			errorLog = xlog.NewTarget(os.Stderr)
@@ -102,31 +107,31 @@ func startGateway(gConfig gatewayConfig) {
 	case "off":
 		errorLog = xlog.NewTarget(ioutil.Discard)
 	default:
-		cli.Fatalf("%q is an invalid error log configuration", config.Log.Error.Value())
+		cli.Fatalf("%q is an invalid error log configuration", config.Log.Error.Value)
 	}
 
 	var auditLog *xlog.Target
-	switch strings.ToLower(config.Log.Audit.Value()) {
+	switch strings.ToLower(config.Log.Audit.Value) {
 	case "on":
 		auditLog = xlog.NewTarget(os.Stdout)
 	case "off":
 		auditLog = xlog.NewTarget(ioutil.Discard)
 	default:
-		cli.Fatalf("%q is an invalid audit log configuration", config.Log.Audit.Value())
+		cli.Fatalf("%q is an invalid audit log configuration", config.Log.Audit.Value)
 	}
 	auditLog.Log().SetFlags(0)
 
 	var proxy *auth.TLSProxy
-	if len(config.TLS.Proxy.Identities) != 0 {
+	if len(config.TLS.Proxies) != 0 {
 		proxy = &auth.TLSProxy{
-			CertHeader: http.CanonicalHeaderKey(config.TLS.Proxy.Header.ClientCert.Value()),
+			CertHeader: http.CanonicalHeaderKey(config.TLS.ForwardCertHeader.Value),
 		}
 		if strings.ToLower(gConfig.TLSAuth) != "off" {
 			proxy.VerifyOptions = new(x509.VerifyOptions)
 		}
-		for _, identity := range config.TLS.Proxy.Identities {
-			if !identity.Value().IsUnknown() {
-				proxy.Add(identity.Value())
+		for _, identity := range config.TLS.Proxies {
+			if !identity.Value.IsUnknown() {
+				proxy.Add(identity.Value)
 			}
 		}
 	}
@@ -139,14 +144,14 @@ func startGateway(gConfig gatewayConfig) {
 	if err != nil {
 		cli.Fatal(err)
 	}
-	store, err := connect(config, errorLog.Log())
+	store, err := connect(ctx, config, errorLog.Log())
 	if err != nil {
 		cli.Fatal(err)
 	}
 	cache := key.NewCache(store, &key.CacheConfig{
-		Expiry:        config.Cache.Expiry.Any.Value(),
-		ExpiryUnused:  config.Cache.Expiry.Unused.Value(),
-		ExpiryOffline: config.Cache.Expiry.Offline.Value(),
+		Expiry:        config.Cache.Expiry.Value,
+		ExpiryUnused:  config.Cache.ExpiryUnused.Value,
+		ExpiryOffline: config.Cache.ExpiryOffline.Value,
 	})
 	defer cache.Stop()
 
@@ -158,16 +163,16 @@ func startGateway(gConfig gatewayConfig) {
 			algorithm = key.XCHACHA20_POLY1305
 		}
 
-		key, err := key.Random(algorithm, config.Admin.Identity.Value())
+		key, err := key.Random(algorithm, config.Admin.Value)
 		if err != nil {
 			cli.Fatalf("failed to create key %q: %v", k.Name, err)
 		}
-		if err = store.Create(ctx, k.Name.Value(), key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
-			cli.Fatalf("failed to create key %q: %v", k.Name.Value(), err)
+		if err = store.Create(ctx, k.Name.Value, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
+			cli.Fatalf("failed to create key %q: %v", k.Name.Value, err)
 		}
 	}
 
-	certificate, err := xhttp.LoadCertificate(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value())
+	certificate, err := xhttp.LoadCertificate(config.TLS.Certificate.Value, config.TLS.PrivateKey.Value, config.TLS.Password.Value)
 	if err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}
@@ -178,7 +183,7 @@ func startGateway(gConfig gatewayConfig) {
 	auditLog.Add(metrics.AuditEventCounter())
 
 	server := http.Server{
-		Addr: config.Address.Value(),
+		Addr: config.Addr.Value,
 		Handler: xhttp.NewGatewayMux(&xhttp.GatewayConfig{
 			Keys:       cache,
 			Policies:   policySet,
@@ -223,9 +228,9 @@ func startGateway(gConfig gatewayConfig) {
 		}
 	}()
 	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
-	go key.LogStoreStatus(ctx, cache, 1*time.Minute, errorLog.Log())
+	// go key.LogStoreStatus(ctx, cache, 1*time.Minute, errorLog.Log())
 
-	ip, port := serverAddr(config.Address.Value())
+	ip, port := serverAddr(config.Addr.Value)
 	ifaceIPs := listeningOnV4(ip)
 	if len(ifaceIPs) == 0 {
 		cli.Fatal("failed to listen on network interfaces")
@@ -276,10 +281,10 @@ func startGateway(gConfig gatewayConfig) {
 	}
 
 	cli.Println()
-	if r, err := hex.DecodeString(config.Admin.Identity.Value().String()); err == nil && len(r) == sha256.Size {
+	if r, err := hex.DecodeString(config.Admin.Value.String()); err == nil && len(r) == sha256.Size {
 		cli.Println(
 			item.Render(fmt.Sprintf("%-10s", "Admin")),
-			config.Admin.Identity.Value(),
+			config.Admin.Value,
 		)
 	} else {
 		cli.Println(
@@ -334,202 +339,57 @@ func startGateway(gConfig gatewayConfig) {
 }
 
 // connect tries to establish a connection to the KMS specified in the ServerConfig
-func connect(config *yml.ServerConfig, errorLog *log.Logger) (key.Store, error) {
-	switch {
-	case config.KeyStore.Fs.Path.Value() != "":
-		f, err := os.Stat(config.KeyStore.Fs.Path.Value())
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to open %q: %v", config.KeyStore.Fs.Path.Value(), err)
-		}
-		if err == nil && !f.IsDir() {
-			return nil, fmt.Errorf("%q is not a directory", config.KeyStore.Fs.Path.Value())
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			if err = os.MkdirAll(config.KeyStore.Fs.Path.Value(), 0o700); err != nil {
-				return nil, fmt.Errorf("failed to create directory %q: %v", config.KeyStore.Fs.Path.Value(), err)
-			}
-		}
-		return &fs.Store{
-			Dir:      config.KeyStore.Fs.Path.Value(),
-			ErrorLog: errorLog,
-		}, nil
-	case config.KeyStore.Generic.Endpoint.Value() != "":
-		genericStore := &generic.Store{
-			Endpoint: config.KeyStore.Generic.Endpoint.Value(),
-			KeyPath:  config.KeyStore.Generic.TLS.PrivateKey.Value(),
-			CertPath: config.KeyStore.Generic.TLS.Certificate.Value(),
-			CAPath:   config.KeyStore.Generic.TLS.CAPath.Value(),
-			ErrorLog: errorLog,
-		}
-		if err := genericStore.Authenticate(); err != nil {
-			return nil, fmt.Errorf("failed to connect to generic KeyStore: %v", err)
-		}
-		return genericStore, nil
-	case config.KeyStore.Vault.Endpoint.Value() != "":
-		vaultStore, err := vault.Connect(context.Background(), &vault.Config{
-			Endpoint:   config.KeyStore.Vault.Endpoint.Value(),
-			Engine:     config.KeyStore.Vault.Engine.Value(),
-			APIVersion: config.KeyStore.Vault.APIVersion.Value(),
-			Prefix:     config.KeyStore.Vault.Prefix.Value(),
-			Namespace:  config.KeyStore.Vault.Namespace.Value(),
-			AppRole: vault.AppRole{
-				Engine: config.KeyStore.Vault.AppRole.Engine.Value(),
-				ID:     config.KeyStore.Vault.AppRole.ID.Value(),
-				Secret: config.KeyStore.Vault.AppRole.Secret.Value(),
-				Retry:  config.KeyStore.Vault.AppRole.Retry.Value(),
-			},
-			K8S: vault.Kubernetes{
-				Engine: config.KeyStore.Vault.Kubernetes.Engine.Value(),
-				Role:   config.KeyStore.Vault.Kubernetes.Role.Value(),
-				JWT:    config.KeyStore.Vault.Kubernetes.JWT.Value(),
-				Retry:  config.KeyStore.Vault.Kubernetes.Retry.Value(),
-			},
-			StatusPingAfter: config.KeyStore.Vault.Status.Ping.Value(),
-			ErrorLog:        errorLog,
-			ClientKeyPath:   config.KeyStore.Vault.TLS.PrivateKey.Value(),
-			ClientCertPath:  config.KeyStore.Vault.TLS.Certificate.Value(),
-			CAPath:          config.KeyStore.Vault.TLS.CAPath.Value(),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to Vault: %v", err)
-		}
-		return vaultStore, nil
-	case config.KeyStore.Fortanix.SDKMS.Endpoint.Value() != "":
-		fortanixStore := &fortanix.KeyStore{
-			Endpoint: config.KeyStore.Fortanix.SDKMS.Endpoint.Value(),
-			GroupID:  config.KeyStore.Fortanix.SDKMS.GroupID.Value(),
-			APIKey:   fortanix.APIKey(config.KeyStore.Fortanix.SDKMS.Login.APIKey.Value()),
-			ErrorLog: errorLog,
-			CAPath:   config.KeyStore.Fortanix.SDKMS.TLS.CAPath.Value(),
-		}
-		if err := fortanixStore.Authenticate(context.Background()); err != nil {
-			return nil, fmt.Errorf("failed to connect to Fortanix SDKMS: %v", err)
-		}
-		return fortanixStore, nil
-	case config.KeyStore.Aws.SecretsManager.Endpoint.Value() != "":
-		awsStore := &aws.SecretsManager{
-			Addr:     config.KeyStore.Aws.SecretsManager.Endpoint.Value(),
-			Region:   config.KeyStore.Aws.SecretsManager.Region.Value(),
-			KMSKeyID: config.KeyStore.Aws.SecretsManager.KmsKey.Value(),
-			ErrorLog: errorLog,
-			Login: aws.Credentials{
-				AccessKey:    config.KeyStore.Aws.SecretsManager.Login.AccessKey.Value(),
-				SecretKey:    config.KeyStore.Aws.SecretsManager.Login.SecretKey.Value(),
-				SessionToken: config.KeyStore.Aws.SecretsManager.Login.SessionToken.Value(),
-			},
-		}
-		if err := awsStore.Authenticate(); err != nil {
-			return nil, fmt.Errorf("failed to connect to AWS Secrets Manager: %v", err)
-		}
-		return awsStore, nil
-	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
-		scopes := make([]string, 0, len(config.KeyStore.GCP.SecretManager.Scopes))
-		for _, scope := range config.KeyStore.GCP.SecretManager.Scopes {
-			if scope.Value() != "" {
-				scopes = append(scopes, scope.Value())
-			}
-		}
-		gcpStore, err := gcp.Connect(context.Background(), &gcp.Config{
-			Endpoint:  config.KeyStore.GCP.SecretManager.Endpoint.Value(),
-			ProjectID: config.KeyStore.GCP.SecretManager.ProjectID.Value(),
-			Scopes:    scopes,
-			Credentials: gcp.Credentials{
-				ClientID: config.KeyStore.GCP.SecretManager.Credentials.ClientID.Value(),
-				Client:   config.KeyStore.GCP.SecretManager.Credentials.Client.Value(),
-				KeyID:    config.KeyStore.GCP.SecretManager.Credentials.KeyID.Value(),
-				Key:      config.KeyStore.GCP.SecretManager.Credentials.Key.Value(),
-			},
-			ErrorLog: errorLog,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to GCP SecretManager: %v", err)
-		}
-		return gcpStore, nil
-	case config.KeyStore.Azure.KeyVault.Endpoint.Value() != "":
-		azureStore := &azure.KeyVault{
-			Endpoint: config.KeyStore.Azure.KeyVault.Endpoint.Value(),
-			ErrorLog: errorLog,
-		}
-		switch c := config.KeyStore.Azure.KeyVault.Credentials; {
-		case c.TenantID.Value() != "" || c.ClientID.Value() != "" || c.Secret.Value() != "":
-			err := azureStore.AuthenticateWithCredentials(azure.Credentials{
-				TenantID: config.KeyStore.Azure.KeyVault.Credentials.TenantID.Value(),
-				ClientID: config.KeyStore.Azure.KeyVault.Credentials.ClientID.Value(),
-				Secret:   config.KeyStore.Azure.KeyVault.Credentials.Secret.Value(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
-			}
-		case config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value() != "":
-			err := azureStore.AuthenticateWithIdentity(azure.ManagedIdentity{
-				ClientID: config.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect to Azure KeyVault: %v", err)
-			}
-		default:
-			return nil, errors.New("failed to connect to Azure KeyVault: no client credentials or managed identity")
-		}
-		return azureStore, nil
-	case config.KeyStore.Gemalto.KeySecure.Endpoint.Value() != "":
-		gemaltoStore := &gemalto.KeySecure{
-			Endpoint: config.KeyStore.Gemalto.KeySecure.Endpoint.Value(),
-			CAPath:   config.KeyStore.Gemalto.KeySecure.TLS.CAPath.Value(),
-			ErrorLog: errorLog,
-			Login: gemalto.Credentials{
-				Token:  config.KeyStore.Gemalto.KeySecure.Login.Token.Value(),
-				Domain: config.KeyStore.Gemalto.KeySecure.Login.Domain.Value(),
-				Retry:  config.KeyStore.Gemalto.KeySecure.Login.Retry.Value(),
-			},
-		}
-
-		if err := gemaltoStore.Authenticate(); err != nil {
-			return nil, fmt.Errorf("failed to connect to Gemalto KeySecure: %v", err)
-		}
-		return gemaltoStore, nil
-	default:
-		return &mem.Store{}, nil
+func connect(ctx context.Context, config *keserv.ServerConfig, errorLog *log.Logger) (key.Store, error) {
+	conn, err := config.KMS.Connect(ctx)
+	if err != nil {
+		return key.Store{}, err
 	}
+	return key.Store{
+		Conn: conn,
+	}, nil
 }
 
-func description(config *yml.ServerConfig) (kind, endpoint string, err error) {
-	switch {
-	case config.KeyStore.Fs.Path.Value() != "":
-		kind = "Filesystem"
-		if endpoint, err = filepath.Abs(config.KeyStore.Fs.Path.Value()); err != nil {
-			endpoint = config.KeyStore.Fs.Path.Value()
+func description(config *keserv.ServerConfig) (kind, endpoint string, err error) {
+	/*
+		switch {
+		case config.KMS.FS.Path.Value != "":
+			kind = "Filesystem"
+			if endpoint, err = filepath.Abs(config.KMS.FS.Path.Value); err != nil {
+				endpoint = config.KMS.FS.Path.Value
+			}
+		case config.KeyStore.Generic.Endpoint.Value() != "":
+			kind = "Generic"
+			endpoint = config.KeyStore.Generic.Endpoint.Value()
+		case config.KMS.Vault.Endpoint.Value != "":
+			kind = "Hashicorp Vault"
+			endpoint = config.KMS.Vault.Endpoint.Value
+		case config.KMS.Fortanix.Endpoint.Value != "":
+			kind = "Fortanix SDKMS"
+			endpoint = config.KMS.Fortanix.Endpoint.Value
+		case config.KMS.SecretsManager.Endpoint.Value != "":
+			kind = "AWS SecretsManager"
+			endpoint = config.KMS.SecretsManager.Endpoint.Value
+		case config.KMS.KeySecure.Endpoint.Value != "":
+			kind = "Gemalto KeySecure"
+			endpoint = config.KMS.KeySecure.Endpoint.Value
+		case config.KMS.SecretManager.ProjectID.Value != "":
+			kind = "GCP SecretManager"
+			endpoint = config.KMS.SecretManager.Endpoint.Value + " | Project: " + config.KMS.SecretManager.ProjectID.Value
+		case config.KMS.KeyVault.Endpoint.Value != "":
+			kind = "Azure KeyVault"
+			endpoint = config.KMS.KeyVault.Endpoint.Value
+		default:
+			kind = "In-Memory"
+			endpoint = "non-persistent"
 		}
-	case config.KeyStore.Generic.Endpoint.Value() != "":
-		kind = "Generic"
-		endpoint = config.KeyStore.Generic.Endpoint.Value()
-	case config.KeyStore.Vault.Endpoint.Value() != "":
-		kind = "Hashicorp Vault"
-		endpoint = config.KeyStore.Vault.Endpoint.Value()
-	case config.KeyStore.Fortanix.SDKMS.Endpoint.Value() != "":
-		kind = "Fortanix SDKMS"
-		endpoint = config.KeyStore.Fortanix.SDKMS.Endpoint.Value()
-	case config.KeyStore.Aws.SecretsManager.Endpoint.Value() != "":
-		kind = "AWS SecretsManager"
-		endpoint = config.KeyStore.Aws.SecretsManager.Endpoint.Value()
-	case config.KeyStore.Gemalto.KeySecure.Endpoint.Value() != "":
-		kind = "Gemalto KeySecure"
-		endpoint = config.KeyStore.Gemalto.KeySecure.Endpoint.Value()
-	case config.KeyStore.GCP.SecretManager.ProjectID.Value() != "":
-		kind = "GCP SecretManager"
-		endpoint = config.KeyStore.GCP.SecretManager.Endpoint.Value() + " | Project: " + config.KeyStore.GCP.SecretManager.ProjectID.Value()
-	case config.KeyStore.Azure.KeyVault.Endpoint.Value() != "":
-		kind = "Azure KeyVault"
-		endpoint = config.KeyStore.Azure.KeyVault.Endpoint.Value()
-	default:
-		kind = "In-Memory"
-		endpoint = "non-persistent"
-	}
-	return kind, endpoint, nil
+		return kind, endpoint, nil
+	*/
+	return "undefined", "undefined", nil
 }
 
 // policySetFromConfig returns an in-memory PolicySet
 // from the given ServerConfig.
-func policySetFromConfig(config *yml.ServerConfig) (auth.PolicySet, error) {
+func policySetFromConfig(config *keserv.ServerConfig) (auth.PolicySet, error) {
 	policies := &policySet{
 		policies: make(map[string]*auth.Policy),
 	}
@@ -542,7 +402,7 @@ func policySetFromConfig(config *yml.ServerConfig) (auth.PolicySet, error) {
 			Allow:     policy.Allow,
 			Deny:      policy.Deny,
 			CreatedAt: time.Now().UTC(),
-			CreatedBy: config.Admin.Identity.Value(),
+			CreatedBy: config.Admin.Value,
 		}
 	}
 	return policies, nil
@@ -617,34 +477,34 @@ func (i *policyIterator) Close() error { return nil }
 
 // identitySetFromConfig returns an in-memory IdentitySet
 // from the given ServerConfig.
-func identitySetFromConfig(config *yml.ServerConfig) (auth.IdentitySet, error) {
+func identitySetFromConfig(config *keserv.ServerConfig) (auth.IdentitySet, error) {
 	identities := &identitySet{
-		admin:     config.Admin.Identity.Value(),
+		admin:     config.Admin.Value,
 		createdAt: time.Now().UTC(),
 		roles:     map[kes.Identity]auth.IdentityInfo{},
 	}
 
 	for name, policy := range config.Policies {
 		for _, id := range policy.Identities {
-			if id.Value().IsUnknown() {
+			if id.Value.IsUnknown() {
 				continue
 			}
 
-			if id.Value() == config.Admin.Identity.Value() {
-				return nil, fmt.Errorf("identity %q is already an admin identity", id.Value())
+			if id.Value == config.Admin.Value {
+				return nil, fmt.Errorf("identity %q is already an admin identity", id.Value)
 			}
-			if _, ok := identities.roles[id.Value()]; ok {
-				return nil, fmt.Errorf("identity %q is already assigned", id.Value())
+			if _, ok := identities.roles[id.Value]; ok {
+				return nil, fmt.Errorf("identity %q is already assigned", id.Value)
 			}
-			for _, proxyID := range config.TLS.Proxy.Identities {
-				if id.Value() == proxyID.Value() {
-					return nil, fmt.Errorf("identity %q is already a TLS proxy identity", id.Value())
+			for _, proxyID := range config.TLS.Proxies {
+				if id.Value == proxyID.Value {
+					return nil, fmt.Errorf("identity %q is already a TLS proxy identity", id.Value)
 				}
 			}
-			identities.roles[id.Value()] = auth.IdentityInfo{
+			identities.roles[id.Value] = auth.IdentityInfo{
 				Policy:    name,
 				CreatedAt: time.Now().UTC(),
-				CreatedBy: config.Admin.Identity.Value(),
+				CreatedBy: config.Admin.Value,
 			}
 		}
 	}

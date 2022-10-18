@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,92 +26,132 @@ import (
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
-// Store is a generic KeyStore that stores/fetches keys from a
-// v1 KeyStore plugin compatible service.
-type Store struct {
-	Endpoint string // Endpoint of the KeyStore plugin / generic KeyStore.
+// Config is a structure containing
+// all generic KMS plugin configuration.
+type Config struct {
+	// Endpoint is the endpoint of the
+	// KMS plugin.
+	Endpoint string
 
-	KeyPath  string // Path to the TLS client private key.
-	CertPath string // Path to the TLS client certificate.
-	CAPath   string // Path to one (or directory of) root CA certificates.
+	// PrivateKey is an optional path to a
+	// TLS private key file containing a
+	// TLS private key for mTLS authentication.
+	PrivateKey string
 
-	// ErrorLog specifies an optional logger for errors.
-	// If an unexpected error is encountered while trying
-	// to fetch, store or delete a key or when an authentication
-	// error happens then an error event is written to the error
-	// log.
-	//
-	// If nil, logging is done via the log package's standard
-	// logger.
-	ErrorLog *log.Logger
+	// Certificate is an optional path to a
+	// TLS certificate file containing a
+	// TLS certificate for mTLS authentication.
+	Certificate string
 
+	// CAPath is an optional path to the root
+	// CA certificate(s) for verifying the TLS
+	// certificate of the KMS plugin. If empty,
+	// the OS default root CA set is used.
+	CAPath string
+}
+
+// Conn is a connection to a generic KMS plugin.
+type Conn struct {
+	config Config
 	client xhttp.Retry
 }
 
-var (
-	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
-	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
-	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
-	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
-)
+// Connect connects to the KMS plugin using the
+// given configuration.
+func Connect(ctx context.Context, config *Config) (*Conn, error) {
+	if config == nil || config.Endpoint == "" {
+		return nil, errors.New("generic: endpoint is empty")
+	}
+	_, err := kms.Dial(ctx, config.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+	if config.Certificate != "" || config.PrivateKey != "" {
+		certificate, err := tls.LoadX509KeyPair(config.Certificate, config.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.Certificates = append(tlsConfig.Certificates, certificate)
+	}
+	if config.CAPath != "" {
+		rootCAs, err := loadCustomCAs(config.CAPath)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.RootCAs = rootCAs
+	}
+	return &Conn{
+		config: *config,
+		client: xhttp.Retry{
+			Client: http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: tlsConfig,
+					Proxy:           http.ProxyFromEnvironment,
+					DialContext: (&net.Dialer{
+						Timeout:   10 * time.Second,
+						KeepAlive: 10 * time.Second,
+						DualStack: true,
+					}).DialContext,
+					ForceAttemptHTTP2:     true,
+					MaxIdleConns:          100,
+					IdleConnTimeout:       30 * time.Second,
+					TLSHandshakeTimeout:   10 * time.Second,
+					ExpectContinueTimeout: 1 * time.Second,
+				},
+			},
+		},
+	}, nil
+}
+
+var _ kms.Conn = (*Conn)(nil)
 
 // Status returns the current state of the generic KeyStore instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (key.StoreState, error) {
-	state, err := key.DialStore(ctx, s.Endpoint)
-	if err != nil {
-		return key.StoreState{}, err
-	}
-	if state.State == key.StoreReachable {
-		state.State = key.StoreAvailable
-	}
-	return state, nil
+func (c *Conn) Status(ctx context.Context) (kms.State, error) {
+	return kms.Dial(ctx, c.config.Endpoint)
 }
 
 // Create creates the given key-value pair at the generic KeyStore if
 // and only if the given key does not exist. If such an entry already
 // exists it returns kes.ErrKeyExists.
-func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
+func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	type Request struct {
 		Bytes []byte `json:"bytes"`
 	}
-	encodedKey, err := key.MarshalText()
-	if err != nil {
-		s.logf("generic: failed to encode key '%s': %v", name, err)
-		return err
-	}
 	body, err := json.Marshal(Request{
-		Bytes: encodedKey,
+		Bytes: value,
 	})
 	if err != nil {
-		s.logf("generic: failed to create key %q: %v", name, err)
-		return errCreateKey
+		return fmt.Errorf("generic: failed to create key '%s': %v", name, err)
 	}
 
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+	url := endpoint(c.config.Endpoint, "/v1/key", url.PathEscape(name))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
-		s.logf("generic: failed to create key %q: %v", name, err)
-		return errCreateKey
+		return fmt.Errorf("generic: failed to create key '%s': %v", name, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("generic: failed to create key %q: %v", name, err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
 		}
-		return errCreateKey
+		return fmt.Errorf("generic: failed to create key '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		switch err = parseErrorResponse(resp); {
 		case err == kes.ErrKeyExists:
 			return kes.ErrKeyExists
 		default:
-			s.logf("generic: failed to create key %q: %v", name, err)
-			return errCreateKey
+			return fmt.Errorf("generic: failed to create key '%s': %v", name, err)
 		}
 	}
 	return nil
@@ -120,57 +159,56 @@ func (s *Store) Create(ctx context.Context, name string, key key.Key) error {
 
 // Delete removes a the value associated with the given key
 // from the generic KeyStore, if it exists.
-func (s *Store) Delete(ctx context.Context, name string) error {
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+func (c *Conn) Delete(ctx context.Context, name string) error {
+	url := endpoint(c.config.Endpoint, "/v1/key", url.PathEscape(name))
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
-		s.logf("generic: failed to delete key %q: %v", name, err)
-		return errDeleteKey
+		return fmt.Errorf("generic: failed to delete key '%s': %v", name, err)
 	}
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("generic: failed to delete key %q: %v", name, err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
 		}
-		return errDeleteKey
+		return fmt.Errorf("generic: failed to delete key '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		if err = parseErrorResponse(resp); err != nil {
-			s.logf("generic: failed to delete key %q: %v", name, err)
+			return fmt.Errorf("generic: failed to delete key '%s': %v", name, err)
 		}
-		return errDeleteKey
+		return fmt.Errorf("generic: failed to delete key '%s': %s (%d)", name, http.StatusText(resp.StatusCode), resp.StatusCode)
 	}
 	return nil
 }
 
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(ctx context.Context, name string) (key.Key, error) {
+func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 	type Response struct {
 		Bytes []byte `json:"bytes"`
 	}
 
-	url := endpoint(s.Endpoint, "/v1/key", url.PathEscape(name))
+	url := endpoint(c.config.Endpoint, "/v1/key", url.PathEscape(name))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		s.logf("generic: failed to access key %q: %v", name, err)
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("generic: failed to access key '%s': %v", name, err)
 	}
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("generic: failed to access key %q: %v", name, err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("generic: failed to access key '%s': %v", name, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		switch err = parseErrorResponse(resp); {
 		case err == kes.ErrKeyNotFound:
-			return key.Key{}, kes.ErrKeyNotFound
+			return nil, kes.ErrKeyNotFound
+		case err == nil:
+			return nil, fmt.Errorf("generic: failed to access key '%s': %s (%d)", name, http.StatusText(resp.StatusCode), resp.StatusCode)
 		default:
-			s.logf("generic: failed to access key %q: %v", name, err)
-			return key.Key{}, errGetKey
+			return nil, fmt.Errorf("generic: failed to access key '%s': %v", name, err)
 		}
 	}
 
@@ -179,86 +217,40 @@ func (s *Store) Get(ctx context.Context, name string) (key.Key, error) {
 		response Response
 	)
 	if err = decoder.Decode(&response); err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("generic: failed to parse server response: %v", err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("generic: failed to parse server response: %v", err)
 	}
-
-	k, err := key.Parse(response.Bytes)
-	if err != nil {
-		s.logf("generic: failed to parse key %q: %v", name, err)
-		return key.Key{}, err
-	}
-	return k, nil
+	return response.Bytes, nil
 }
 
 // List returns a new Iterator over the names of all stored keys.
-func (s *Store) List(ctx context.Context) (key.Iterator, error) {
-	url := endpoint(s.Endpoint, "/v1/key")
+func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
+	url := endpoint(c.config.Endpoint, "/v1/key")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		s.logf("generic: failed to list keys: %v", err)
-		return nil, errListKey
+		return nil, fmt.Errorf("generic: failed to list keys: %v", err)
 	}
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		s.logf("generic: failed to list keys: %v", err)
-		return nil, errListKey
+		return nil, fmt.Errorf("generic: failed to list keys: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		if err = parseErrorResponse(resp); err != nil {
-			s.logf("generic: failed to list keys: %v", err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
-		return nil, errListKey
+		if err = parseErrorResponse(resp); err != nil {
+			return nil, fmt.Errorf("generic: failed to list keys: %v", err)
+		}
+		return nil, fmt.Errorf("generic: failed to list keys: %s (%d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	return &iterator{
+	return kms.FuseIter(&iterator{
 		response: resp,
 		decoder:  decoder,
-	}, nil
-}
-
-// Authenticate authentictes to the generic plugin server.
-// It returns any authentication error encountered, if any.
-func (s *Store) Authenticate() error {
-	config := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-	}
-	if s.CertPath != "" || s.KeyPath != "" {
-		certificate, err := tls.LoadX509KeyPair(s.CertPath, s.KeyPath)
-		if err != nil {
-			return err
-		}
-		config.Certificates = append(config.Certificates, certificate)
-	}
-	if s.CAPath != "" {
-		rootCAs, err := loadCustomCAs(s.CAPath)
-		if err != nil {
-			return err
-		}
-		config.RootCAs = rootCAs
-	}
-	s.client = xhttp.Retry{
-		Client: http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: config,
-				Proxy:           http.ProxyFromEnvironment,
-				DialContext: (&net.Dialer{
-					Timeout:   10 * time.Second,
-					KeepAlive: 10 * time.Second,
-					DualStack: true,
-				}).DialContext,
-				ForceAttemptHTTP2:     true,
-				MaxIdleConns:          100,
-				IdleConnTimeout:       30 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-			},
-		},
-	}
-	return nil
+	}), nil
 }
 
 type keyDescription struct {
@@ -270,15 +262,11 @@ type iterator struct {
 	response *http.Response
 	decoder  *json.Decoder
 
-	last   keyDescription
-	err    error
-	closed bool
+	last keyDescription
+	err  error
 }
 
 func (i *iterator) Next() bool {
-	if i.closed || i.err != nil {
-		return false
-	}
 	if err := i.decoder.Decode(&i.last); err != nil {
 		if err == io.EOF {
 			i.err = i.Close()
@@ -292,19 +280,18 @@ func (i *iterator) Next() bool {
 	}
 	if i.last.Last {
 		i.err = i.Close()
+		return i.err == nil
 	}
 	return true
 }
 
-func (i *iterator) Name() string {
-	return i.last.Name
-}
-
-func (i *iterator) Err() error { return i.err }
+func (i *iterator) Name() string { return i.last.Name }
 
 func (i *iterator) Close() error {
-	i.closed = true
-	return i.response.Body.Close()
+	if err := i.response.Body.Close(); i.err == nil {
+		i.err = err
+	}
+	return i.err
 }
 
 // endpoint returns an endpoint URL starting with the
@@ -428,12 +415,4 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		}
 	}
 	return rootCAs, nil
-}
-
-func (s *Store) logf(format string, v ...interface{}) {
-	if s.ErrorLog != nil {
-		s.ErrorLog.Printf(format, v...)
-	} else {
-		log.Printf(format, v...)
-	}
 }

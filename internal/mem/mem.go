@@ -10,23 +10,22 @@ import (
 	"sync"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // Store is an in-memory key-value store. Its zero value is
 // ready to use.
 type Store struct {
 	lock  sync.RWMutex
-	store map[string]key.Key
+	store map[string][]byte
 }
 
-var _ key.Store = (*Store)(nil)
+var _ kms.Conn = (*Store)(nil)
 
 // Status returns the state of the in-memory key store which is
 // always healthy.
-func (s *Store) Status(_ context.Context) (key.StoreState, error) {
-	return key.StoreState{
-		State:   key.StoreAvailable,
+func (s *Store) Status(_ context.Context) (kms.State, error) {
+	return kms.State{
 		Latency: 0,
 	}, nil
 }
@@ -34,17 +33,17 @@ func (s *Store) Status(_ context.Context) (key.StoreState, error) {
 // Create adds the given key to the store if and only if
 // no entry for the given name exists. If an entry already
 // exists it returns kes.ErrKeyExists.
-func (s *Store) Create(_ context.Context, name string, k key.Key) error {
+func (s *Store) Create(_ context.Context, name string, value []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if s.store == nil {
-		s.store = map[string]key.Key{}
+		s.store = map[string][]byte{}
 	}
 	if _, ok := s.store[name]; ok {
 		return kes.ErrKeyExists
 	}
-	s.store[name] = k
+	s.store[name] = value
 	return nil
 }
 
@@ -59,19 +58,19 @@ func (s *Store) Delete(_ context.Context, name string) error {
 
 // Get returns the key associated with the given name. If no
 // entry for this name exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
+func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	k, ok := s.store[name]
 	if !ok {
-		return key.Key{}, kes.ErrKeyNotFound
+		return nil, kes.ErrKeyNotFound
 	}
 	return k, nil
 }
 
 // List returns a new iterator over the metadata of all stored keys.
-func (s *Store) List(ctx context.Context) (key.Iterator, error) {
+func (s *Store) List(ctx context.Context) (kms.Iter, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -89,7 +88,7 @@ type iterator struct {
 	last   string
 }
 
-var _ key.Iterator = (*iterator)(nil)
+var _ kms.Iter = (*iterator)(nil)
 
 func (i *iterator) Next() bool {
 	if len(i.values) > 0 {
@@ -102,4 +101,4 @@ func (i *iterator) Next() bool {
 
 func (i *iterator) Name() string { return i.last }
 
-func (*iterator) Err() error { return nil }
+func (*iterator) Close() error { return nil }

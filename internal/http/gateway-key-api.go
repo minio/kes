@@ -616,7 +616,7 @@ func gatewayListKey(mux *http.ServeMux, config *GatewayConfig) API {
 				}
 			}
 		}
-		if err = iterator.Err(); err != nil {
+		if err = iterator.Close(); err != nil {
 			if !hasWritten {
 				Error(w, err)
 			} else {

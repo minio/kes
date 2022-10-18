@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 type iterator struct {
@@ -16,7 +16,7 @@ type iterator struct {
 	last   string
 }
 
-var _ key.Iterator = (*iterator)(nil)
+var _ kms.Iter = (*iterator)(nil)
 
 func (i *iterator) Next() bool {
 	for len(i.values) > 0 {
@@ -33,4 +33,4 @@ func (i *iterator) Next() bool {
 
 func (i *iterator) Name() string { return i.last }
 
-func (*iterator) Err() error { return nil }
+func (*iterator) Close() error { return nil }

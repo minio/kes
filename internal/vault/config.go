@@ -5,7 +5,6 @@
 package vault
 
 import (
-	"log"
 	"sync"
 	"time"
 )
@@ -84,8 +83,8 @@ type Kubernetes struct {
 	Retry time.Duration
 }
 
-// A Config structure is used to configure a Hashicorp Vault
-// client.
+// Config is a structure containing configuration
+// options for connecting to a Hashicorp Vault server.
 type Config struct {
 	// Endpoint is the HTTP Vault server endpoint
 	Endpoint string
@@ -126,11 +125,6 @@ type Config struct {
 	// credentials.
 	K8S Kubernetes
 
-	// ErrorLog is an optional logger for errors that
-	// may occur when interacting with an Hashicorp
-	// Vault server.
-	ErrorLog *log.Logger
-
 	// StatusPingAfter is the duration after which
 	// the KeyStore will check the status of the Vault
 	// server. Particularly, this status information
@@ -140,11 +134,11 @@ type Config struct {
 
 	// Path to the mTLS client private key to authenticate to
 	// the Vault server.
-	ClientKeyPath string
+	PrivateKey string
 
 	// Path to the mTLS client certificate to authenticate to
 	// the Vault server.
-	ClientCertPath string
+	Certificate string
 
 	// Path to the root CA certificate(s) used to verify the
 	// TLS certificate of the Vault server. If empty, the
@@ -172,33 +166,9 @@ func (c *Config) Clone() *Config {
 		Prefix:          c.Prefix,
 		AppRole:         c.AppRole,
 		K8S:             c.K8S,
-		ErrorLog:        c.ErrorLog,
 		StatusPingAfter: c.StatusPingAfter,
-		ClientKeyPath:   c.ClientKeyPath,
-		ClientCertPath:  c.ClientCertPath,
+		PrivateKey:      c.PrivateKey,
+		Certificate:     c.Certificate,
 		CAPath:          c.CAPath,
-	}
-}
-
-// setDefaults overwrites some empty fields with
-// default values.
-func (c *Config) setDefaults() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if c.Engine == "" {
-		c.Engine = EngineKV
-	}
-	if c.APIVersion == "" {
-		c.APIVersion = APIv1
-	}
-	if c.AppRole.Retry == 0 {
-		c.AppRole.Retry = 5 * time.Second
-	}
-	if c.K8S.Engine == "" {
-		c.K8S.Engine = EngineKubernetes
-	}
-	if c.K8S.Retry == 0 {
-		c.K8S.Retry = 5 * time.Second
 	}
 }

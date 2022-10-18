@@ -5,31 +5,28 @@
 package gcp
 
 import (
-	"net/http"
-
-	"github.com/minio/kes"
-
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	gcpiterator "google.golang.org/api/iterator"
 )
 
-var errListKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
-
 type iterator struct {
-	src        *secretmanager.SecretIterator
-	errHandler func(error)
-	last       string
-	err        error
+	src    *secretmanager.SecretIterator
+	last   string
+	err    error
+	closed bool
 }
 
 func (i *iterator) Next() bool {
+	if i.closed {
+		return false
+	}
 	v, err := i.src.Next()
 	if err == gcpiterator.Done {
+		i.err = i.Close()
 		return false
 	}
 	if err != nil {
-		i.errHandler(err)
-		i.err = errListKey
+		i.err = err
 		return false
 	}
 	i.last = v.GetName()
@@ -38,4 +35,10 @@ func (i *iterator) Next() bool {
 
 func (i *iterator) Name() string { return i.last }
 
-func (i *iterator) Err() error { return i.err }
+func (i *iterator) Close() error {
+	if !i.closed {
+		i.closed = true
+		i.last = ""
+	}
+	return i.err
+}
