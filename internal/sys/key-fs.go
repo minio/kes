@@ -14,6 +14,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // NewKeyFS returns a new KeyFS that
@@ -123,7 +124,7 @@ func (fs *keyFS) DeleteKey(_ context.Context, name string) error {
 	return err
 }
 
-func (fs *keyFS) ListKeys(ctx context.Context) (key.Iterator, error) {
+func (fs *keyFS) ListKeys(ctx context.Context) (kms.Iter, error) {
 	file, err := os.Open(fs.rootDir)
 	if err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func (i *keyIterator) Next() bool {
 
 func (i *keyIterator) Name() string { return i.next }
 
-func (i *keyIterator) Err() error {
+func (i *keyIterator) Close() error {
 	if err := i.dir.Close(); i.err == nil || i.err == io.EOF {
 		return err
 	}

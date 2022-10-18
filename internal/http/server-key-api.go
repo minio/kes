@@ -650,7 +650,7 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 				if err != nil {
 					return false, err
 				}
-				defer iterator.Err()
+				defer iterator.Close()
 
 				var hasWritten bool
 				encoder := json.NewEncoder(w)
@@ -678,7 +678,7 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 						return hasWritten, err
 					}
 				}
-				return hasWritten, iterator.Err()
+				return hasWritten, iterator.Close()
 			})
 		})
 		if err != nil {

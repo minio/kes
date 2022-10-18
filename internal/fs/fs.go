@@ -8,224 +8,262 @@
 package fs
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
-	"log"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
-// Store is a file system key-value store that stores
-// keys as file names in a directory.
-type Store struct {
-	// Dir is the directory where key-value entries
-	// are located. The store will read / write
-	// values from / to files in this directory.
-	Dir string
-
-	// ErrorLog specifies an optional logger for errors
-	// when files cannot be opened, deleted or contain
-	// invalid content.
-	// If nil, logging is done via the log package's
-	// standard logger.
-	ErrorLog *log.Logger
-}
-
-var _ key.Store = (*Store)(nil)
-
-// Status returns the current state of the FS key store.
-func (s *Store) Status(_ context.Context) (key.StoreState, error) {
-	state := key.StoreAvailable
-
-	start := time.Now()
-	_, err := os.Stat(s.Dir)
-	latency := time.Since(start)
-	if err != nil {
-		state = key.StoreUnreachable
-	}
-	return key.StoreState{
-		State:   state,
-		Latency: latency,
-	}, nil
-}
-
-// Create stores the key in a new file in the KeyStore
-// directory if and only if no file with the given name
-// does not exists.
+// NewConn returns a new Conn that reads
+// from and writes to the given directory.
 //
-// If such a file already exists it returns kes.ErrKeyExists.
-func (s *Store) Create(_ context.Context, name string, key key.Key) error {
-	if err := validatePath(name); err != nil {
-		s.logf("fs: invalid key name %q: %v", name, err)
-		return err
-	}
-
-	// We use os.O_CREATE and os.O_EXCL to enforce that the
-	// file must not have existed before.
-	path := filepath.Join(s.Dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if errors.Is(err, os.ErrExist) {
-		return kes.ErrKeyExists
-	}
-	if err != nil {
-		s.logf("fs: cannot open %q: %v", path, err)
-		return err
-	}
-	defer file.Close()
-
-	b, err := key.MarshalText()
-	if err != nil {
-		s.logf("fs: failed to encode key '%s': %v", name, err)
-		return err
-	}
-	if _, err = file.Write(b); err != nil {
-		s.logf("fs: failed to write to %q: %v", path, err)
-		if rmErr := os.Remove(path); rmErr != nil {
-			s.logf("fs: cannot remove %q: %v", path, rmErr)
+// If the directory or any parent directory
+// does not exist, NewConn creates them all.
+//
+// It returns an error if dir exists but is
+// not a directory.
+func NewConn(dir string) (*Conn, error) {
+	switch file, err := os.Stat(dir); {
+	case errors.Is(err, os.ErrNotExist):
+		if err = os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
 		}
-		return err
-	}
-
-	if err = file.Sync(); err != nil { // Ensure that we wrote the value to disk
-		s.logf("fs: cannot to flush and sync %s: %v", path, err)
-		if rmErr := os.Remove(path); rmErr != nil {
-			s.logf("fs: cannot remove %q: %v", path, rmErr)
-		}
-		return err
-	}
-	return nil
-}
-
-// Delete removes the file with the given name in the
-// KeyStore directory, if it exists. It does not return
-// an error if the file does not exist.
-func (s *Store) Delete(_ context.Context, name string) error {
-	if err := validatePath(name); err != nil {
-		s.logf("fs: invalid key name %q: %v", name, err)
-		return err
-	}
-
-	var (
-		path = filepath.Join(s.Dir, name)
-		err  = os.Remove(path)
-	)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return kes.ErrKeyNotFound
-		}
-		s.logf("fs: failed to delete %q: %v", path, err)
-		return err
-	}
-	return nil
-}
-
-// Get returns the key associated with the given name. If no
-// entry for name exists, Get returns kes.ErrKeyNotFound. In
-// particular, Get reads the key from the associated
-// file in KeyStore directory.
-func (s *Store) Get(_ context.Context, name string) (key.Key, error) {
-	if err := validatePath(name); err != nil {
-		s.logf("fs: invalid key name %q: %v", name, err)
-		return key.Key{}, err
-	}
-
-	var (
-		path      = filepath.Join(s.Dir, name)
-		file, err = os.Open(path)
-	)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return key.Key{}, kes.ErrKeyNotFound
-		}
-		s.logf("fs: cannot open %q: %v", path, err)
-		return key.Key{}, err
-	}
-	defer file.Close()
-
-	var b bytes.Buffer
-	if _, err := io.Copy(&b, io.LimitReader(file, key.MaxSize)); err != nil {
-		s.logf("fs: failed to read from %q: %v", path, err)
-		return key.Key{}, err
-	}
-	k, err := key.Parse(b.Bytes())
-	if err != nil {
-		s.logf("fs: failed to parse key from %q: %v", path, err)
-		return key.Key{}, err
-	}
-	return k, nil
-}
-
-// List returns a new iterator over the metadata of all stored keys.
-func (s *Store) List(ctx context.Context) (key.Iterator, error) {
-	file, err := os.Open(s.Dir)
-	if err != nil {
-		s.logf("fs: cannot open %q: %v", s.Dir, err)
+	case err != nil:
 		return nil, err
+	default:
+		if !file.Mode().IsDir() {
+			return nil, errors.New("fs: '" + dir + "' is not a directory")
+		}
 	}
-	defer file.Close()
+	return &Conn{dir: dir}, nil
+}
 
-	files, err := file.Readdir(0)
-	if err != nil {
-		s.logf("fs: failed to list keys: %v", err)
-		return nil, err
+// Conn is a connection to a directory on
+// the filesystem.
+//
+// It implements the kms.Conn interface and
+// acts as KMS abstraction over a fileystem.
+type Conn struct {
+	dir  string
+	lock sync.RWMutex
+}
+
+var _ kms.Conn = (*Conn)(nil)
+
+// Status returns the current state of the Conn.
+//
+// In particular, it reports whether the underlying
+// filesystem is accessible.
+func (c *Conn) Status(context.Context) (kms.State, error) {
+	start := time.Now()
+	if _, err := os.Stat(c.dir); err != nil {
+		return kms.State{}, &kms.Unreachable{Err: err}
 	}
-	return &iterator{
-		values: files,
+	return kms.State{
+		Latency: time.Since(start),
 	}, nil
 }
 
-type iterator struct {
-	values []os.FileInfo
-	last   string
+// Create creates a new file with the given name inside
+// the Conn directory if and only if no such file exists.
+//
+// It returns kes.ErrKeyExists if such a file already exists.
+func (c *Conn) Create(_ context.Context, name string, value []byte) error {
+	if err := validName(name); err != nil {
+		return err
+	}
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	filename := filepath.Join(c.dir, name)
+	switch err := c.create(filename, value); {
+	case errors.Is(err, os.ErrExist):
+		return kes.ErrKeyExists
+	case err != nil:
+		os.Remove(filename)
+		return err
+	}
+	return nil
 }
 
-var _ key.Iterator = (*iterator)(nil)
+// Get reads the content of the named file within the Conn
+// directory. It returns kes.ErrKeyNotFound if no such file
+// exists.
+func (c *Conn) Get(_ context.Context, name string) ([]byte, error) {
+	const MaxSize = 1 << 20 // 1 MiB
 
-func (i *iterator) Next() bool {
-	for len(i.values) > 0 {
-		if i.values[0].Mode().IsRegular() {
-			i.last = i.values[0].Name()
-			i.values = i.values[1:]
+	if err := validName(name); err != nil {
+		return nil, err
+	}
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	file, err := os.Open(filepath.Join(c.dir, name))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, kes.ErrKeyNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	value, err := io.ReadAll(io.LimitReader(file, MaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if err = file.Close(); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// Delete deletes the named file within the Conn directory if
+// and only if it exists. It returns kes.ErrKeyNotFound if
+// no such file exists.
+func (c *Conn) Delete(_ context.Context, name string) error {
+	if err := validName(name); err != nil {
+		return err
+	}
+	switch err := os.Remove(filepath.Join(c.dir, name)); {
+	case errors.Is(err, os.ErrNotExist):
+		return kes.ErrKeyNotFound
+	default:
+		return err
+	}
+}
+
+// List returns a Iter over the files within the Conn directory.
+// The Iter must be closed to release any filesystem resources
+// back to the OS.
+func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
+	dir, err := os.Open(c.dir)
+	if err != nil {
+		return nil, err
+	}
+	return NewIter(ctx, dir), nil
+}
+
+func (c *Conn) create(filename string, value []byte) error {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	n, err := file.Write(value)
+	if err != nil {
+		return err
+	}
+	if n != len(value) {
+		return io.ErrShortWrite
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	return file.Close()
+}
+
+// Iter is an iterator over all files within a
+// directory. It must be closed to release any
+// filesystem resources.
+type Iter struct {
+	ctx    context.Context
+	dir    fs.ReadDirFile
+	names  []fs.DirEntry
+	err    error
+	closed bool
+}
+
+var _ kms.Iter = (*Iter)(nil)
+
+// NewIter returns an Iter all files within the given
+// directory. The Iter does not iterator recursively
+// into subdirectories.
+func NewIter(ctx context.Context, dir fs.ReadDirFile) *Iter {
+	return &Iter{
+		ctx: ctx,
+		dir: dir,
+	}
+}
+
+// Next reports whether there are more directory entries.
+// It returns false when there are no more entries, the
+// Iter got closed or once it encounters an error.
+//
+// The name of the next directory entry is availbale via
+// the Name method.
+func (i *Iter) Next() bool {
+	if i.closed || i.err != nil {
+		return false
+	}
+	if len(i.names) > 0 {
+		i.names = i.names[1:]
+		return true
+	}
+
+	if i.ctx != nil {
+		select {
+		case <-i.ctx.Done():
+			if i.err = i.ctx.Err(); i.err == nil {
+				i.err = context.Canceled
+			}
+			return false
+		default:
+		}
+	}
+
+	const N = 256
+	i.names, i.err = i.dir.ReadDir(N)
+	if errors.Is(i.err, io.EOF) {
+		i.err = nil
+		if len(i.names) > 0 {
 			return true
 		}
-		i.values = i.values[1:]
+		i.err = i.Close()
+		return false
 	}
-	return false
+	return i.err == nil
 }
 
-func (i *iterator) Name() string { return i.last }
-
-func (*iterator) Err() error { return nil }
-
-func (s *Store) logf(format string, v ...interface{}) {
-	if s.ErrorLog == nil {
-		log.Printf(format, v...)
-	} else {
-		s.ErrorLog.Printf(format, v...)
+// Name returns the current name of the directory entry.
+// It returns the empty string if there are no more
+// entries or once the Iter has encountered an error.
+func (i *Iter) Name() string {
+	if len(i.names) > 0 && !i.closed && i.err == nil {
+		return i.names[0].Name()
 	}
+	return ""
 }
 
-// validatePath returns an error of the given key name
-// contains a path separator, and therefore, is an
-// invalid key name.
-//
-// Key names that contain path separator(s) are considered
-// malicious because they may be abused for directory traversal
-// attacks.
-func validatePath(name string) error {
-	if strings.ContainsRune(name, '/') {
-		return errors.New("fs: key name contains path separator")
+// Close closes the Iter and releases and filesystem
+// resources back to the OS.
+func (i *Iter) Close() error {
+	if i.closed {
+		return i.err
 	}
-	if runtime.GOOS == "windows" && strings.ContainsRune(name, '\\') {
-		return errors.New("fs: key name contains path separator")
+
+	i.closed = true
+	err := i.dir.Close()
+	if i.err != nil {
+		return i.err
+	}
+	i.err = err
+	return err
+}
+
+func validName(name string) error {
+	if name == "" || strings.IndexFunc(name, func(c rune) bool {
+		return c == '/' || c == '\\' || c == '.'
+	}) >= 0 {
+		return errors.New("fs: key name contains invalid character")
 	}
 	return nil
 }

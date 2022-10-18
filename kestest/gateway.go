@@ -107,7 +107,7 @@ func (g *Gateway) start() {
 
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
-	store := key.NewCache(&mem.Store{}, &key.CacheConfig{
+	store := key.NewCache(key.Store{Conn: &mem.Store{}}, &key.CacheConfig{
 		Expiry:       30 * time.Second,
 		ExpiryUnused: 5 * time.Second,
 	})

@@ -27,7 +27,7 @@ type GatewayConfig struct {
 
 	Metrics *metric.Metrics
 
-	Keys key.Store
+	Keys *key.Cache
 
 	Policies auth.PolicySet
 

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -36,7 +35,6 @@ func (t *authToken) String() string { return fmt.Sprintf("%s %s", t.Type, t.Valu
 // authentication tokens.
 type client struct {
 	xhttp.Retry
-	ErrorLog *log.Logger
 
 	lock  sync.Mutex
 	token authToken
@@ -48,7 +46,7 @@ type client struct {
 //
 // Authenticate should be called to obtain the first authentication
 // token. This token can then be renewed via RenewAuthToken.
-func (c *client) Authenticate(endpoint string, login Credentials) error {
+func (c *client) Authenticate(ctx context.Context, endpoint string, login Credentials) error {
 	type Request struct {
 		Type   string `json:"grant_type"`
 		Token  string `json:"refresh_token"`
@@ -70,7 +68,7 @@ func (c *client) Authenticate(endpoint string, login Credentials) error {
 	}
 
 	url := fmt.Sprintf("%s/api/v1/auth/tokens", endpoint)
-	req, err := http.NewRequest(http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
 		return err
 	}
@@ -141,7 +139,6 @@ func (c *client) RenewAuthToken(ctx context.Context, endpoint string, login Cred
 	)
 	for {
 		if err != nil {
-			logf(c.ErrorLog, "gemalto: failed to renew auth token: %v", err)
 			timer = time.NewTimer(login.Retry)
 		} else {
 			c.lock.Lock()
@@ -154,7 +151,7 @@ func (c *client) RenewAuthToken(ctx context.Context, endpoint string, login Cred
 			timer.Stop()
 			return
 		case <-timer.C:
-			err = c.Authenticate(endpoint, login)
+			err = c.Authenticate(ctx, endpoint, login)
 			timer.Stop()
 		}
 	}

@@ -17,7 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/yml"
+	"github.com/minio/kes/keserv"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -83,31 +83,32 @@ func migrateCmd(args []string) {
 		pattern = "*"
 	}
 
-	sourceConfig, err := yml.ReadServerConfig(fromPath)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt)
+	defer cancel()
+
+	sourceConfig, err := keserv.ReadServerConfig(fromPath)
 	if err != nil {
 		cli.Fatalf("failed to read '--from' config file: %v", err)
 	}
 
-	targetConfig, err := yml.ReadServerConfig(toPath)
+	targetConfig, err := keserv.ReadServerConfig(toPath)
 	if err != nil {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 
-	src, err := connect(sourceConfig, nil)
+	src, err := connect(ctx, sourceConfig, nil)
 	if err != nil {
 		cli.Fatal(err)
 	}
-	dst, err := connect(targetConfig, nil)
+	dst, err := connect(ctx, targetConfig, nil)
 	if err != nil {
 		cli.Fatal(err)
 	}
 
 	var (
-		n           uint64
-		uiTicker    = time.NewTicker(100 * time.Millisecond)
-		ctx, cancel = signal.NotifyContext(context.Background(), os.Kill, os.Interrupt)
+		n        uint64
+		uiTicker = time.NewTicker(100 * time.Millisecond)
 	)
-	defer cancel()
 	defer uiTicker.Stop()
 
 	// Now, we start listing the keys at the source.
@@ -161,7 +162,7 @@ func migrateCmd(args []string) {
 		}
 		atomic.AddUint64(&n, 1)
 	}
-	if err = iterator.Err(); err != nil {
+	if err = iterator.Close(); err != nil {
 		quiet.ClearLine()
 		cli.Fatalf("failed to list keys: %v\nMigrated keys: %d", err, atomic.LoadUint64(&n))
 	}

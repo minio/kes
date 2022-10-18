@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,6 +28,7 @@ import (
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // APIKey is a Fortanix API key for authenticating to
@@ -40,9 +40,9 @@ type APIKey string
 // request headers.
 func (k APIKey) String() string { return "Basic " + string(k) }
 
-// KeyStore is a key store that persists and fetches
-// cryptographic keys from a Fortanix SDKMS.
-type KeyStore struct {
+// Config is a structure containing configuration
+// options for connecting to a Fortanix SDKMS server.
+type Config struct {
 	// Endpoint is the Fortanix SDKMS instance endpoint.
 	Endpoint string
 
@@ -58,136 +58,148 @@ type KeyStore struct {
 	// operations. It is sent on each request as part of the request headers.
 	APIKey APIKey
 
-	// ErrorLog specifies an optional logger for operational errors.
-	//
-	// If nil, logging is done via the log package's standard logger.
-	ErrorLog *log.Logger
-
 	// CAPath is an optional path to a CA certificate or directory
 	// containing CA certificates.
 	//
 	// If not empty, the KeyStore will use the specified CAs to
 	// verify the Fortanix SDKMS server certificate.
 	CAPath string
+}
 
+// Conn is a connection to a Fortanix SDKMS server.
+type Conn struct {
+	config Config
 	client xhttp.Retry
 }
 
-var _ key.Store = (*KeyStore)(nil) // compiler check
+var _ kms.Conn = (*Conn)(nil) // compiler check
 
-// Authenticate tries to establish a connection to
-// the Fortanix SDKMS instance and authenticate
-// using the KeyStore's credentials.
-func (s *KeyStore) Authenticate(ctx context.Context) error {
-	if s.CAPath != "" {
-		rootCAs, err := loadCustomCAs(s.CAPath)
+// Connect establishes and returns a Conn to a Fortanix SDKMS server
+// using the given config.
+func Connect(ctx context.Context, config *Config) (*Conn, error) {
+	if config == nil {
+	}
+	if config.Endpoint == "" {
+	}
+
+	var tlsConfig *tls.Config
+	if config.CAPath != "" {
+		rootCAs, err := loadCustomCAs(config.CAPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		s.client.Client.Transport = &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			TLSClientConfig: &tls.Config{
-				RootCAs: rootCAs,
+		tlsConfig = &tls.Config{
+			RootCAs: rootCAs,
+		}
+	}
+
+	client := xhttp.Retry{
+		Client: http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          100,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+				TLSClientConfig:       tlsConfig,
 			},
-		}
+		},
 	}
 
 	// Check if the Fortanix SDKMS endpoint is reachable
-	url := endpoint(s.Endpoint, "/sys/v1/health")
+	url := endpoint(config.Endpoint, "/sys/v1/health")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", config.APIKey.String())
 
-	resp, err := s.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusNoContent {
 		if err := parseErrorResponse(resp); err != nil {
-			return err
+			return nil, err
 		}
-		return fmt.Errorf("fortanix: failed to connect to %q: %s (%d)", s.Endpoint, resp.Status, resp.StatusCode)
+		return nil, fmt.Errorf("fortanix: failed to connect to '%s': %s (%d)", config.Endpoint, resp.Status, resp.StatusCode)
 	}
 
 	// Check if the authentication credentials are valid
-	url = endpoint(s.Endpoint, "/sys/v1/session/auth")
+	url = endpoint(config.Endpoint, "/sys/v1/session/auth")
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", config.APIKey.String())
 
-	resp, err = s.client.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		if err := parseErrorResponse(resp); err != nil {
-			return err
+			return nil, err
 		}
-		return fmt.Errorf("fortanix: failed to authenticate to %q: %s (%d)", s.Endpoint, resp.Status, resp.StatusCode)
+		return nil, fmt.Errorf("fortanix: failed to authenticate to '%s': %s (%d)", config.Endpoint, resp.Status, resp.StatusCode)
 	}
 	type Response struct {
 		Token string `json:"access_token"` // Raw bearer token - clients have to set 'Authorization: Bearer <token>'
 	}
 	var response Response
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&response); err != nil {
-		return fmt.Errorf("fortanix: failed to authenticate to %q: %v", s.Endpoint, err)
+		return nil, fmt.Errorf("fortanix: failed to authenticate to '%s': %v", config.Endpoint, err)
 	}
 
 	// Now we revoke the session we just created to cleanup any
 	// session credentials we just created. This is not strictly
 	// necessary but allows Fortanix SDKMS to garbage-collect
 	// unused credentials early.
-	url = endpoint(s.Endpoint, "/sys/v1/session/terminate")
+	url = endpoint(config.Endpoint, "/sys/v1/session/terminate")
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+response.Token)
 
-	resp, err = s.client.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusNoContent {
 		if err := parseErrorResponse(resp); err != nil {
-			return err
+			return nil, err
 		}
-		return fmt.Errorf("fortanix: failed to authenticate to %q: %s (%d)", s.Endpoint, resp.Status, resp.StatusCode)
+		return nil, fmt.Errorf("fortanix: failed to authenticate to '%s': %s (%d)", config.Endpoint, resp.Status, resp.StatusCode)
 	}
-	return nil
+	return &Conn{
+		config: *config,
+		client: client,
+	}, nil
 }
 
 // Status returns the current state of the Fortanix SDKMS instance.
 // In particular, whether it is reachable and the network latency.
-func (s *KeyStore) Status(ctx context.Context) (key.StoreState, error) {
-	state, err := key.DialStore(ctx, s.Endpoint)
+func (c *Conn) Status(ctx context.Context) (kms.State, error) {
+	state, err := kms.Dial(ctx, c.config.Endpoint)
 	if err != nil {
-		return key.StoreState{}, err
+		return kms.State{}, &kms.Unreachable{Err: err}
 	}
-	if state.State == key.StoreReachable {
-		state.State = key.StoreAvailable
-	}
-	return state, nil
+	return kms.State{
+		Latency: state.Latency,
+	}, nil
 }
 
 // Create stors the given key at the Fortanix SDKMS if and only
 // if no entry with the given name exists.
 //
 // If no such entry exists, Create returns kes.ErrKeyExists.
-func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
+func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	type Request struct {
 		Type       string   `json:"obj_type"`
 		Name       string   `json:"name"`
@@ -202,49 +214,41 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 		OpAppManageable = "APPMANAGEABLE"
 	)
 
-	encodedKey, err := key.MarshalText()
-	if err != nil {
-		s.logf("fortanix: failed to encode key '%s': %v", name, err)
-		return err
-	}
 	request, err := json.Marshal(Request{
 		Type:       Type,
 		Name:       name,
-		GroupID:    s.GroupID,
+		GroupID:    c.config.GroupID,
 		Operations: []string{OpExport, OpAppManageable},
-		Value:      base64.StdEncoding.EncodeToString(encodedKey), // Fortanix expects base64-encoded values and will not accept raw strings
+		Value:      base64.StdEncoding.EncodeToString(value), // Fortanix expects base64-encoded values and will not accept raw strings
 		Enabled:    true,
 	})
 	if err != nil {
 		return err
 	}
 
-	url := endpoint(s.Endpoint, "/crypto/v1/keys")
+	url := endpoint(c.config.Endpoint, "/crypto/v1/keys")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
-		s.logf("fortanix: failed to create key %q: %v", name, err)
-		return err
+		return fmt.Errorf("fortanix: failed to create key '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", c.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("fortanix: failed to create key %q: %v", name, err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
 		}
-		return err
+		return fmt.Errorf("fortanix: failed to create key '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		switch err := parseErrorResponse(resp); {
 		case err == nil:
-			s.logf("fortanix: failed to create key %q: %s (%q)", name, resp.Status, resp.StatusCode)
-			return kes.NewError(resp.StatusCode, resp.Status)
+			return fmt.Errorf("fortanix: failed to create key '%s': %s (%q)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusConflict && err.Error() == "sobject already exists":
 			return kes.ErrKeyExists
 		default:
-			s.logf("fortanix: failed to create key %q: %v", name, err)
-			return err
+			return fmt.Errorf("fortanix: failed to create key '%s': %v", name, err)
 		}
 	}
 	return nil
@@ -253,7 +257,7 @@ func (s *KeyStore) Create(ctx context.Context, name string, key key.Key) error {
 // Delete deletes the key associated with the given name
 // from the Fortanix SDKMS. It may not return an error if no
 // entry for the given name exists.
-func (s *KeyStore) Delete(ctx context.Context, name string) error {
+func (c *Conn) Delete(ctx context.Context, name string) error {
 	// In order to detele a key, we need to fetch its key ID first.
 	// Fortanix SDKMS API does not provide a way to delete a key
 	// using just its name.
@@ -264,36 +268,32 @@ func (s *KeyStore) Delete(ctx context.Context, name string) error {
 		Name: name,
 	})
 	if err != nil {
-		s.logf("fortanix: failed to delete %q: %v", name, err)
-		return err
+		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
 
-	url := endpoint(s.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(c.config.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
-		s.logf("fortanix: failed to delete %q: %v", name, err)
-		return err
+		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", c.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("fortanix: failed to delete %q: %v", name, err)
-		}
+	resp, err := c.client.Do(req)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
+	}
+	if err != nil {
+		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		switch err = parseErrorResponse(resp); {
 		case err == nil:
-			s.logf("fortanix: failed to delete %q: failed fetch key metadata: %s (%d)", name, resp.Status, resp.StatusCode)
-			return kes.NewError(resp.StatusCode, resp.Status)
+			return fmt.Errorf("fortanix: failed to delete '%s': failed fetch key metadata: %s (%d)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusNotFound && err.Error() == "sobject does not exist":
 			return kes.ErrKeyNotFound
 		default:
-			s.logf("fortanix: failed to delete %q: failed to fetch key metadata: %v", name, err)
-			return err
+			return fmt.Errorf("fortanix: failed to delete '%s': failed to fetch key metadata: %v", name, err)
 		}
 	}
 
@@ -302,33 +302,30 @@ func (s *KeyStore) Delete(ctx context.Context, name string) error {
 	}
 	var response Response
 	if err := json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
-		s.logf("fortanix: failed to delete %q: failed to parse key metadata: %v", name, err)
-		return err
+		return fmt.Errorf("fortanix: failed to delete '%s': failed to parse key metadata: %v", name, err)
 	}
 
 	// Now, we can delete the key using its key ID.
-	url = endpoint(s.Endpoint, "/crypto/v1/keys", response.KeyID)
+	url = endpoint(c.config.Endpoint, "/crypto/v1/keys", response.KeyID)
 	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", c.config.APIKey.String())
 
-	resp, err = s.client.Do(req)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("fortanix: failed to delete %q: %v", name, err)
-		}
+	resp, err = c.client.Do(req)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
+	}
+	if err != nil {
+		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusNoContent {
 		switch err = parseErrorResponse(resp); {
 		case err == nil:
-			s.logf("fortanix: failed to delete %q: %s (%d)", name, resp.Status, resp.StatusCode)
-			return kes.NewError(resp.StatusCode, resp.Status)
+			return fmt.Errorf("fortanix: failed to delete '%s': %s (%d)", name, resp.Status, resp.StatusCode)
 		default:
-			s.logf("fortanix: failed to delete %q: %v", name, err)
-			return err
+			return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 		}
 	}
 	return nil
@@ -337,7 +334,7 @@ func (s *KeyStore) Delete(ctx context.Context, name string) error {
 // Get returns the key associated with the given name.
 //
 // If there is no such entry, Get returns kes.ErrKeyNotFound.
-func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
+func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 	type Request struct {
 		Name string `json:"name"`
 	}
@@ -345,36 +342,32 @@ func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
 		Name: name,
 	})
 	if err != nil {
-		s.logf("fortanix: failed to fetch %q: %v", name, err)
-		return key.Key{}, err
+		return nil, fmt.Errorf("fortanix: failed to fetch %q: %v", name, err)
 	}
 
-	url := endpoint(s.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(c.config.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
-		s.logf("fortanix: failed to fetch %q: %v", name, err)
-		return key.Key{}, err
+		return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", s.APIKey.String())
+	req.Header.Set("Authorization", c.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
+	resp, err := c.client.Do(req)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, err
+	}
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logf("fortanix: failed to fetch %q: %v", name, err)
-		}
-		return key.Key{}, err
+		return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		switch err = parseErrorResponse(resp); {
 		case err == nil:
-			s.logf("fortanix: failed to fetch %q: %s (%d)", name, resp.Status, resp.StatusCode)
-			return key.Key{}, kes.NewError(resp.StatusCode, resp.Status)
+			return nil, fmt.Errorf("fortanix: failed to fetch '%s': %s (%d)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusNotFound && err.Error() == "sobject does not exist":
-			return key.Key{}, kes.ErrKeyNotFound
+			return nil, kes.ErrKeyNotFound
 		default:
-			s.logf("fortanix: failed to fetch %q: %v", name, err)
-			return key.Key{}, err
+			return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 		}
 	}
 
@@ -384,24 +377,16 @@ func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
 	}
 	var response Response
 	if err := json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
-		s.logf("fortanix: failed to fetch %q: failed to parse server response %v", name, err)
-		return key.Key{}, err
+		return nil, fmt.Errorf("fortanix: failed to fetch '%s': failed to parse server response %v", name, err)
 	}
 	if !response.Enabled {
-		s.logf("fortanix: failed to fetch %q: key has been disabled and cannot be used until enabled again", name)
-		return key.Key{}, errors.New("fortanix: key has been disabled")
+		return nil, fmt.Errorf("fortanix: failed to fetch '%s': key has been disabled and cannot be used until enabled again", name)
 	}
 	value, err := base64.StdEncoding.DecodeString(response.Value)
 	if err != nil {
-		s.logf("fortanix: failed to fetch %q: %v", name, err)
-		return key.Key{}, err
+		return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 	}
-	k, err := key.Parse(value)
-	if err != nil {
-		s.logf("fortanix: failed to fetch %q: failed to parse key: %v", name, err)
-		return key.Key{}, err
-	}
-	return k, nil
+	return value, nil
 }
 
 // List returns a new Iterator over the Fortanix SDKMS keys.
@@ -410,7 +395,7 @@ func (s *KeyStore) Get(ctx context.Context, name string) (key.Key, error) {
 // concurrent changes to the Fortanix SDKMS instance - i.e.
 // creates or deletes. Further, it does not provide any
 // ordering guarantees.
-func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
+func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 	var (
 		names = make(chan string, 10)
 		iter  = &iterator{
@@ -423,24 +408,24 @@ func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
 
 		var start string
 		for {
-			reqURL := endpoint(s.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
+			reqURL := endpoint(c.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
 			if start != "" {
 				reqURL += "&start=" + start
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 			if err != nil {
-				s.logf("fortanix: failed to list keys: %v", err)
+				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: %v", err))
+				return
+			}
+			req.Header.Set("Authorization", c.config.APIKey.String())
+
+			resp, err := c.client.Do(req)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				iter.SetErr(err)
 				return
 			}
-			req.Header.Set("Authorization", s.APIKey.String())
-
-			resp, err := s.client.Do(req)
 			if err != nil {
-				if !errors.Is(err, context.Canceled) {
-					s.logf("fortanix: failed to list keys: %v", err)
-				}
-				iter.SetErr(err)
+				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: %v", err))
 				return
 			}
 
@@ -449,8 +434,7 @@ func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
 			}
 			var keys []Response
 			if err := json.NewDecoder(io.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
-				s.logf("fortanix: failed to list keys: failed to parse server response: %v", err)
-				iter.SetErr(err)
+				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
 				return
 			}
 			if len(keys) == 0 {
@@ -467,15 +451,7 @@ func (s *KeyStore) List(ctx context.Context) (key.Iterator, error) {
 			start = url.QueryEscape(keys[len(keys)-1].Name)
 		}
 	}()
-	return iter, nil
-}
-
-func (s *KeyStore) logf(format string, v ...interface{}) {
-	if s.ErrorLog == nil {
-		s.ErrorLog.Printf(format, v...)
-	} else {
-		log.Printf(format, v...)
-	}
+	return kms.FuseIter(iter), nil
 }
 
 type iterator struct {
@@ -486,7 +462,7 @@ type iterator struct {
 	err  error
 }
 
-var _ key.Iterator = (*iterator)(nil)
+var _ kms.Iter = (*iterator)(nil)
 
 // Next moves the iterator to the next key, if any.
 // This key is available until Next is called again.
@@ -518,7 +494,7 @@ func (i *iterator) Name() string {
 
 // Err returns the first error, if any, encountered
 // while iterating over the set of keys.
-func (i *iterator) Err() error {
+func (i *iterator) Close() error {
 	i.lock.RLock()
 	defer i.lock.RUnlock()
 	return i.err

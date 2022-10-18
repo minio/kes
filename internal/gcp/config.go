@@ -59,8 +59,8 @@ func (c Credentials) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// A Config structure is used to configure a GCP SecretManager
-// client.
+// Config is a structure containing configuration
+// options for connecting to a KeySecure server.
 type Config struct {
 	// Endpoint is the GCP SecretManager endpoint.
 	Endpoint string

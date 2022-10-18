@@ -5,7 +5,6 @@
 package vault
 
 import (
-	"log"
 	"testing"
 	"time"
 )
@@ -36,10 +35,9 @@ var cloneConfigTests = []*Config{
 			Role:   "kes",
 			JWT:    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
 		},
-		ErrorLog:        log.Default(),
 		StatusPingAfter: 15 * time.Second,
-		ClientKeyPath:   "/tmp/kes/vault.key",
-		ClientCertPath:  "/tmp/kes/vault.crt",
+		PrivateKey:      "/tmp/kes/vault.key",
+		Certificate:     "/tmp/kes/vault.crt",
 		CAPath:          "/tmp/kes/vautl.ca",
 	},
 }

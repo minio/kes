@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -17,7 +16,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/minio/kes"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/kms"
 )
 
 // Credentials are Azure client credentials to authenticate an application
@@ -37,40 +36,18 @@ type ManagedIdentity struct {
 	ClientID string // The Azure managed identity client ID
 }
 
-// KeyVault is a secret store that uses Azure KeyVault for storing secrets.
-type KeyVault struct {
-	Endpoint string // The Azure KeyVault Endpoint
-
-	// ErrorLog specifies an optional logger for errors
-	// when files cannot be opened, deleted or contain
-	// invalid content.
-	// If nil, logging is done via the log package's
-	// standard logger.
-	ErrorLog *log.Logger
-
-	client client
+// Conn is a connection to a Azure KeyVault.
+type Conn struct {
+	endpoint string
+	client   client
 }
 
-var _ key.Store = (*KeyVault)(nil)
-
-var (
-	errCreateKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to create key")
-	errGetKey    = kes.NewError(http.StatusBadGateway, "bad gateway: failed to access key")
-	errDeleteKey = kes.NewError(http.StatusBadGateway, "bad gateway: failed to delete key")
-	errListKey   = kes.NewError(http.StatusBadGateway, "bad gateway: failed to list keys")
-)
+var _ kms.Conn = (*Conn)(nil)
 
 // Status returns the current state of the Azure KeyVault instance.
 // In particular, whether it is reachable and the network latency.
-func (kv *KeyVault) Status(ctx context.Context) (key.StoreState, error) {
-	state, err := key.DialStore(ctx, kv.Endpoint)
-	if err != nil {
-		return key.StoreState{}, err
-	}
-	if state.State == key.StoreReachable {
-		state.State = key.StoreAvailable
-	}
-	return state, nil
+func (c *Conn) Status(ctx context.Context) (kms.State, error) {
+	return kms.Dial(ctx, c.endpoint)
 }
 
 // Create creates the given key-value pair as KeyVault secret.
@@ -92,50 +69,40 @@ func (kv *KeyVault) Status(ctx context.Context) (key.StoreState, error) {
 // purging but will eventually give up and fail. However,
 // a subsequent create may succeed once KeyVault has purged
 // the secret completely.
-func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error {
-	_, stat, err := kv.client.GetSecret(ctx, name, "")
+func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
+	_, stat, err := c.client.GetSecret(ctx, name, "")
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			kv.logf("azure: failed to create %q: failed to check whether %q already exists: %v", name, name, err)
-		}
-		return errCreateKey
+		return fmt.Errorf("azure: failed to create '%s': failed to check whether '%s' already exists: %v", name, name, err)
 	}
 	switch {
 	case stat.StatusCode == http.StatusOK:
 		return kes.ErrKeyExists
 	case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
-		kv.logf("azure: failed to create %q: insufficient permissions to check whether %q already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
-		return errCreateKey
-	default:
-		if stat.StatusCode != http.StatusNotFound {
-			kv.logf("azure: failed to create %q: failed to check whether %q already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
-			return errCreateKey
-		}
+		return fmt.Errorf("azure: failed to create '%s': insufficient permissions to check whether '%s' already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
+	case stat.StatusCode != http.StatusNotFound:
+		return fmt.Errorf("azure: failed to create '%s': failed to check whether '%s' already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
 	}
 
-	encodedKey, err := key.MarshalText()
-	if err != nil {
-		kv.logf("azure: failed to encode key '%s': %v", name, err)
-		return errCreateKey
+	stat, err = c.client.CreateSecret(ctx, name, string(value))
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
 	}
-	stat, err = kv.client.CreateSecret(ctx, name, string(encodedKey))
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			kv.logf("azure: failed to create %q: %v", name, err)
-		}
-		return errCreateKey
+		return fmt.Errorf("azure: failed to create '%s': %v", name, err)
 	}
 	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsDeletedButRecoverable" {
-		stat, err = kv.client.PurgeSecret(ctx, name)
+		stat, err = c.client.PurgeSecret(ctx, name)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				kv.logf("azure: failed to create %q: failed to purge deleted secret: %v", name, err)
-			}
-			return errCreateKey
+			return fmt.Errorf("azure: failed to create '%s': failed to purge deleted secret: %v", name, err)
 		}
 		if stat.StatusCode != http.StatusNoContent {
-			kv.logf("azure: failed to create %q: failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
-			return errCreateKey
+			return fmt.Errorf("azure: failed to create '%s': failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 		}
 
 		const (
@@ -144,12 +111,12 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 			Jitter = 800 * time.Millisecond
 		)
 		for i := 0; i < Retry; i++ {
-			stat, err = kv.client.CreateSecret(ctx, name, string(encodedKey))
+			stat, err = c.client.CreateSecret(ctx, name, string(value))
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
 			if err != nil {
-				if !errors.Is(err, context.Canceled) {
-					kv.logf("azure: failed to create %q: %v", name, err)
-				}
-				return errDeleteKey
+				return fmt.Errorf("azure: failed to create '%s': %v", name, err)
 			}
 			if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
 				time.Sleep(Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond)
@@ -162,13 +129,12 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 	case stat.StatusCode == http.StatusOK:
 		return nil
 	case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsDeletedButRecoverable":
-		kv.logf("azure: failed to create %q: key already exists but is currently marked as deleted. Either restore or purge %q", name, name)
+		return fmt.Errorf("azure: failed to create '%s': key already exists but is currently marked as deleted. Either restore or purge '%s'", name, name)
 	case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
-		kv.logf("azure: failed to create %q: insufficient permissions: %s", name, stat.Message)
+		return fmt.Errorf("azure: failed to create '%s': insufficient permissions: %s", name, stat.Message)
 	default:
-		kv.logf("azure: failed to create %q: %s (%s)", name, stat.Message, stat.ErrorCode)
+		return fmt.Errorf("azure: failed to create '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
-	return errCreateKey
 }
 
 // Delete deletes and purges the secret from KeyVault.
@@ -187,7 +153,7 @@ func (kv *KeyVault) Create(ctx context.Context, name string, key key.Key) error 
 //
 // Since KeyVault only supports two-steps deletes, KES cannot
 // guarantee that a Delete operation has atomic semantics.
-func (kv *KeyVault) Delete(ctx context.Context, name string) error {
+func (c *Conn) Delete(ctx context.Context, name string) error {
 	// Deleting a key from KeyVault is a two-step
 	// process. First, the key has to be deleted
 	// (soft delete) and then purged. It is not
@@ -206,16 +172,18 @@ func (kv *KeyVault) Delete(ctx context.Context, name string) error {
 	// key - hoping that KeyVault finishes the
 	// internal soft-delete process.
 
-	stat, err := kv.client.DeleteSecret(ctx, name)
+	stat, err := c.client.DeleteSecret(ctx, name)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			kv.logf("azure: failed to delete %q: %v", name, err)
-		}
-		return errDeleteKey
+		return fmt.Errorf("azure: failed to delete '%s': %v", name, err)
+	}
+	if stat.StatusCode != http.StatusNotFound {
+		return kes.ErrKeyNotFound
 	}
 	if stat.StatusCode != http.StatusOK && stat.StatusCode != http.StatusNotFound {
-		kv.logf("azure: failed to delete %q: %s (%s)", name, stat.Message, stat.ErrorCode)
-		return errDeleteKey
+		return fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
 
 	// Now, the key either does not exist, is being deleted or
@@ -232,12 +200,12 @@ func (kv *KeyVault) Delete(ctx context.Context, name string) error {
 		Jitter = 800 * time.Millisecond
 	)
 	for i := 0; i < Retry; i++ {
-		stat, err = kv.client.PurgeSecret(ctx, name)
+		stat, err = c.client.PurgeSecret(ctx, name)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				kv.logf("azure: failed to delete %q: %s (%s)", name, stat.Message, stat.ErrorCode)
-			}
-			return errDeleteKey
+			return fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 		}
 		switch {
 		case stat.StatusCode == http.StatusNoContent:
@@ -256,8 +224,7 @@ func (kv *KeyVault) Delete(ctx context.Context, name string) error {
 	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
 		return nil
 	}
-	kv.logf("azure: failed to delete %q: failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
-	return errDeleteKey
+	return fmt.Errorf("azure: failed to delete '%s': failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 }
 
 // Get returns the first resp. oldest version of the secret.
@@ -266,42 +233,37 @@ func (kv *KeyVault) Delete(ctx context.Context, name string) error {
 // Since Get has to fetch and filter the secrets versions first
 // before actually accessing the secret, Get may return inconsistent
 // responses when the secret is modified concurrently.
-func (kv *KeyVault) Get(ctx context.Context, name string) (key.Key, error) {
-	version, stat, err := kv.client.GetFirstVersion(ctx, name)
+func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
+	version, stat, err := c.client.GetFirstVersion(ctx, name)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, err
+	}
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			kv.logf("azure: failed to get %q: failed to list versions: %v", name, err)
-		}
-		return key.Key{}, err
+		return nil, fmt.Errorf("azure: failed to get '%s': failed to list versions: %v", name, err)
 	}
 	if stat.StatusCode == http.StatusNotFound && stat.ErrorCode == "NoObjectVersions" {
-		return key.Key{}, kes.ErrKeyNotFound
+		return nil, kes.ErrKeyNotFound
 	}
 	if stat.StatusCode != http.StatusOK {
-		kv.logf("azure: failed to get %q: failed to list versions: %s (%s)", name, stat.Message, stat.ErrorCode)
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("azure: failed to get '%s': failed to list versions: %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
 
-	value, stat, err := kv.client.GetSecret(ctx, name, version)
+	value, stat, err := c.client.GetSecret(ctx, name, version)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, err
+	}
 	if err != nil {
-		kv.logf("azure: failed to get %q: %v", name, err)
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("azure: failed to get '%s': %v", name, err)
 	}
 	if stat.StatusCode != http.StatusOK {
-		kv.logf("azure: failed to get %q: %s (%s)", name, stat.Message, stat.ErrorCode)
-		return key.Key{}, errGetKey
+		return nil, fmt.Errorf("azure: failed to get '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
-	k, err := key.Parse([]byte(value))
-	if err != nil {
-		kv.logf("azure: failed to parse key %q: %v", name, err)
-		return key.Key{}, err
-	}
-	return k, nil
+	return []byte(value), nil
 }
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
+func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 	var (
 		values   = make(chan string, 10)
 		iterator = &iterator{
@@ -313,23 +275,30 @@ func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
 
 		var nextLink string
 		for {
-			secrets, link, status, err := kv.client.ListSecrets(ctx, nextLink)
-			if errors.Is(err, context.Canceled) {
+			secrets, link, status, err := c.client.ListSecrets(ctx, nextLink)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				iterator.SetErr(err)
 				break
 			}
 			if err != nil {
-				kv.logf("azure: failed to list keys: %v", err)
-				iterator.SetErr(errListKey)
+				iterator.SetErr(fmt.Errorf("azure: failed to list keys: %v", err))
 				break
 			}
 			if status.StatusCode != http.StatusOK {
-				kv.logf("azure: failed to list keys: %s (%s)", status.Message, status.ErrorCode)
-				iterator.SetErr(errListKey)
+				iterator.SetErr(fmt.Errorf("azure: failed to list keys: %s (%s)", status.Message, status.ErrorCode))
 				break
 			}
 			nextLink = link
 			for _, secret := range secrets {
-				values <- secret
+				select {
+				case values <- secret:
+				case <-ctx.Done():
+					if err = ctx.Err(); err == nil {
+						err = context.Canceled
+					}
+					iterator.SetErr(err)
+					break
+				}
 			}
 			if nextLink == "" {
 				break
@@ -339,35 +308,29 @@ func (kv *KeyVault) List(ctx context.Context) (key.Iterator, error) {
 	return iterator, nil
 }
 
-// AuthenticateWithCredentials tries to establish a connection to a Azure KeyVault
+// ConnectWithCredentials tries to establish a connection to a Azure KeyVault
 // instance using Azure client credentials.
-//
-// It retruns an error if no connection could be
-// established - for instance because of invalid
-// credentials.
-func (kv *KeyVault) AuthenticateWithCredentials(creds Credentials) error {
+func ConnectWithCredentials(ctx context.Context, endpoint string, creds Credentials) (*Conn, error) {
 	const Scope = "https://vault.azure.net"
 
 	c := auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
 	c.Resource = Scope
 	token, err := c.ServicePrincipalToken()
 	if err != nil {
-		return fmt.Errorf("azure: failed to obtain ServicePrincipalToken from client credentials: %v", err)
+		return nil, fmt.Errorf("azure: failed to obtain ServicePrincipalToken from client credentials: %v", err)
 	}
-	kv.client = client{
-		Endpoint:   kv.Endpoint,
-		Authorizer: autorest.NewBearerAuthorizer(token),
-	}
-	return nil
+	return &Conn{
+		endpoint: endpoint,
+		client: client{
+			Endpoint:   endpoint,
+			Authorizer: autorest.NewBearerAuthorizer(token),
+		},
+	}, nil
 }
 
-// AuthenticateWithIdentity tries to establish a connection to a Azure KeyVault
+// ConnectWithIdentity tries to establish a connection to a Azure KeyVault
 // instance using an Azure managed identity.
-//
-// It retruns an error if no connection could be
-// established - for instance because of invalid
-// credentials.
-func (kv *KeyVault) AuthenticateWithIdentity(msi ManagedIdentity) error {
+func ConnectWithIdentity(ctx context.Context, endpoint string, msi ManagedIdentity) (*Conn, error) {
 	const Scope = "https://vault.azure.net"
 
 	c := auth.NewMSIConfig()
@@ -375,13 +338,15 @@ func (kv *KeyVault) AuthenticateWithIdentity(msi ManagedIdentity) error {
 	c.ClientID = msi.ClientID
 	token, err := c.ServicePrincipalToken()
 	if err != nil {
-		return fmt.Errorf("azure: failed to obtain ServicePrincipalToken from managed identity: %v", err)
+		return nil, fmt.Errorf("azure: failed to obtain ServicePrincipalToken from managed identity: %v", err)
 	}
-	kv.client = client{
-		Endpoint:   kv.Endpoint,
-		Authorizer: autorest.NewBearerAuthorizer(token),
-	}
-	return nil
+	return &Conn{
+		endpoint: endpoint,
+		client: client{
+			Endpoint:   endpoint,
+			Authorizer: autorest.NewBearerAuthorizer(token),
+		},
+	}, nil
 }
 
 type iterator struct {
@@ -403,7 +368,7 @@ func (i *iterator) Next() bool {
 
 func (i *iterator) Name() string { return i.last }
 
-func (i *iterator) Err() error {
+func (i *iterator) Close() error {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 	return i.err
@@ -413,12 +378,4 @@ func (i *iterator) SetErr(err error) {
 	i.lock.Lock()
 	i.err = err
 	i.lock.Unlock()
-}
-
-func (kv *KeyVault) logf(format string, v ...interface{}) {
-	if kv.ErrorLog == nil {
-		log.Printf(format, v...)
-	} else {
-		kv.ErrorLog.Printf(format, v...)
-	}
 }
