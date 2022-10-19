@@ -70,7 +70,7 @@ func NewCache(store Store, config *CacheConfig) *Cache {
 	c.gcUnused(config.ExpiryUnused)
 
 	if config.ExpiryOffline > 0 {
-		c.gcOffline(config.ExpiryUnused)
+		c.gcOffline(config.ExpiryOffline)
 		c.watchOfflineStatus(10 * time.Second)
 	}
 	return c
