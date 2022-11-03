@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 )
@@ -162,7 +163,7 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		APIPath         = "/v1/status"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	client := retry(c.HTTPClient)
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
@@ -185,7 +186,7 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		StackAlloc uint64 `json:"mem_stack_used"`
 	}
 	var response Response
-	if err = json.NewDecoder(limitBody(resp, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(limitBody(resp, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return State{}, err
 	}
 	return State(response), nil
@@ -202,7 +203,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 		APIPath         = "/v1/api"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	client := retry(c.HTTPClient)
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
@@ -220,7 +221,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 		Timeout int64  `json:"timeout"` // Timeout in seconds
 	}
 	var responses []Response
-	if err = json.NewDecoder(limitBody(resp, MaxResponseSize)).Decode(&responses); err != nil {
+	if err = json.NewDecoder(limitBody(resp, int64(MaxResponseSize))).Decode(&responses); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +280,7 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 		APIPath         = "/v1/enclave/describe"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
 		Name      string    `json:"name"`
@@ -300,7 +301,7 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 	}
 
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &EnclaveInfo{
@@ -637,7 +638,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		APIPath        = "/v1/metrics"
 		Method         = http.MethodGet
 		StatusOK       = http.StatusOK
-		MaxResponeSize = 1 << 20 // 1 MB
+		MaxResponeSize = 1 * mem.MiB
 	)
 	client := retry(c.HTTPClient)
 	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
@@ -670,7 +671,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		metric       Metric
 		metricFamily dto.MetricFamily
 	)
-	decoder := expfmt.NewDecoder(limitBody(resp, MaxResponeSize), expfmt.ResponseFormat(resp.Header))
+	decoder := expfmt.NewDecoder(limitBody(resp, int64(MaxResponeSize)), expfmt.ResponseFormat(resp.Header))
 	for {
 		err := decoder.Decode(&metricFamily)
 		if err == io.EOF {

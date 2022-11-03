@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"aead.dev/mem"
 )
 
 // KES server API errors
@@ -154,7 +156,7 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	defer resp.Body.Close()
 
-	const MaxBodySize = 1 << 20
+	const MaxBodySize = int64(1 * mem.MiB)
 	size := resp.ContentLength
 	if size < 0 || size > MaxBodySize {
 		size = MaxBodySize

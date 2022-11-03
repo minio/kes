@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"path"
 	"time"
+
+	"aead.dev/mem"
 )
 
 // EnclaveInfo describes a KES enclave.
@@ -163,7 +165,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 		APIPath         = "/v1/key/describe"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
 		Name      string    `json:"name"`
@@ -181,7 +183,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	}
 
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &KeyInfo{
@@ -235,7 +237,7 @@ func (e *Enclave) GenerateKey(ctx context.Context, name string, context []byte) 
 		APIPath         = "/v1/key/generate"
 		Method          = http.MethodPost
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Request struct {
 		Context []byte `json:"context,omitempty"` // A context is optional
@@ -263,7 +265,7 @@ func (e *Enclave) GenerateKey(ctx context.Context, name string, context []byte) 
 	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return DEK{}, err
 	}
 	return DEK(response), nil
@@ -281,7 +283,7 @@ func (e *Enclave) Encrypt(ctx context.Context, name string, plaintext, context [
 		APIPath         = "/v1/key/encrypt"
 		Method          = http.MethodPost
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Request struct {
 		Plaintext []byte `json:"plaintext"`
@@ -310,7 +312,7 @@ func (e *Enclave) Encrypt(ctx context.Context, name string, plaintext, context [
 	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return response.Ciphertext, nil
@@ -328,7 +330,7 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 		APIPath         = "/v1/key/decrypt"
 		Method          = http.MethodPost
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Request struct {
 		Ciphertext []byte `json:"ciphertext"`
@@ -356,7 +358,7 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return response.Plaintext, nil
@@ -374,7 +376,7 @@ func (e *Enclave) DecryptAll(ctx context.Context, name string, ciphertexts ...CC
 		APIPath         = "/v1/key/bulk/decrypt"
 		Method          = http.MethodPost
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Request struct {
 		Ciphertext []byte `json:"ciphertext"`
@@ -409,7 +411,7 @@ func (e *Enclave) DecryptAll(ctx context.Context, name string, ciphertexts ...CC
 	defer resp.Body.Close()
 
 	var responses []Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&responses); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&responses); err != nil {
 		return nil, err
 	}
 
@@ -518,7 +520,7 @@ func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo,
 		APIPath         = "/v1/policy/describe"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
 		CreatedAt time.Time `json:"created_at"`
@@ -534,7 +536,7 @@ func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo,
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &PolicyInfo{
@@ -552,7 +554,7 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 		APIPath         = "/v1/policy/read"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
 		Allow     []string  `json:"allow"`
@@ -570,7 +572,7 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &Policy{
@@ -642,7 +644,7 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 		APIPath         = "/v1/identity/describe"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
 		IsAdmin   bool      `json:"admin"`
@@ -660,7 +662,7 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 		return nil, parseErrorResponse(resp)
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &IdentityInfo{
@@ -683,7 +685,7 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 		APIPath         = "/v1/identity/self/describe"
 		Method          = http.MethodGet
 		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 << 20 // 1 MiB
+		MaxResponseSize = 1 * mem.MiB
 	)
 	type InlinePolicy struct {
 		Allow     []string  `json:"allow"`
@@ -709,7 +711,7 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 		return nil, nil, parseErrorResponse(resp)
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
 		return nil, nil, err
 	}
 	info := &IdentityInfo{

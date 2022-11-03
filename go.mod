@@ -3,6 +3,7 @@ module github.com/minio/kes
 go 1.18
 
 require (
+	aead.dev/mem v0.1.0
 	cloud.google.com/go v0.65.0
 	github.com/Azure/go-autorest/autorest v0.11.17
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.7
