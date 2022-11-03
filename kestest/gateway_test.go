@@ -49,6 +49,36 @@ var gatewayAPIs = []kes.API{
 	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 21
 }
 
+func TestMetrics(t *testing.T) {
+	ctx, cancel := testingContext(t)
+	defer cancel()
+
+	server := kestest.NewGateway()
+	defer server.Close()
+
+	client := server.Client()
+
+	metric, err := client.Metrics(ctx)
+	if err != nil {
+		t.Fatalf("Failed fetch server metrics: %v", err)
+	}
+	if n := metric.RequestOK + metric.RequestErr + metric.RequestFail; n != metric.RequestN() {
+		t.Fatalf("metrics request count differs: got %d - want %d", n, metric.RequestN())
+	}
+	if metric.CPUs == 0 {
+		t.Fatalf("metrics contains no number of CPUs")
+	}
+	if metric.HeapAlloc == 0 {
+		t.Fatalf("metrics contains no heap allocations")
+	}
+	if metric.HeapObjects == 0 {
+		t.Fatalf("metrics contains no heap objects")
+	}
+	if metric.StackAlloc == 0 {
+		t.Fatalf("metrics contains no stack allocations")
+	}
+}
+
 func TestAPIs(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
