@@ -1,8 +1,13 @@
+// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package keserv
 
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"time"
 
@@ -20,6 +25,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DecodeServerConfig parses and returns a new ServerConfig
+// from an io.Reader.
+func DecodeServerConfig(r io.Reader) (*ServerConfig, error) {
+	decoder := yaml.NewDecoder(r)
+	decoder.KnownFields(false)
+
+	var config serverConfigYAML
+	if err := decoder.Decode(&config); err != nil {
+		return nil, err
+	}
+	return yamlToServerConfig(&config), nil
+}
+
+// EncodeServerConfig encodes and writes the ServerConfig to
+// an io.Writer
+func EncodeServerConfig(w io.Writer, config *ServerConfig) error {
+	return yaml.NewEncoder(w).Encode(serverConfigToYAML(config))
+}
+
 // ReadServerConfig parses and returns a new ServerConfig from
 // a file.
 func ReadServerConfig(filename string) (*ServerConfig, error) {
@@ -29,14 +53,14 @@ func ReadServerConfig(filename string) (*ServerConfig, error) {
 	}
 	defer file.Close()
 
-	var config serverConfigYAML
-	if err = yaml.NewDecoder(file).Decode(&config); err != nil {
+	config, err := DecodeServerConfig(file)
+	if err != nil {
 		return nil, err
 	}
-	if err = file.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		return nil, err
 	}
-	return yamlToServerConfig(&config), nil
+	return config, nil
 }
 
 // WriteServerConfig encodes and writes the ServerConfig to
@@ -48,7 +72,7 @@ func WriteServerConfig(filename string, config *ServerConfig) error {
 	}
 	defer file.Close()
 
-	if err := yaml.NewEncoder(file).Encode(serverConfigToYAML(config)); err != nil {
+	if err := EncodeServerConfig(file, config); err != nil {
 		return err
 	}
 	return file.Close()

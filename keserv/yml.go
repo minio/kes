@@ -1,3 +1,7 @@
+// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
 package keserv
 
 import (
@@ -192,6 +196,11 @@ func serverConfigToYAML(config *ServerConfig) *serverConfigYAML {
 	yml.Log.Error = config.Log.Error
 
 	// Policies
+	yml.Policies = make(map[string]struct {
+		Allow      []string            `yaml:"allow,omitempty"`
+		Deny       []string            `yaml:"deny,omitempty"`
+		Identities []Env[kes.Identity] `yaml:"identities,omitempty"`
+	}, len(config.Policies))
 	for name, policy := range config.Policies {
 		type Item struct {
 			Allow      []string            `yaml:"allow,omitempty"`
@@ -244,6 +253,7 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 	config.Log.Error = yml.Log.Error
 
 	// Policies
+	config.Policies = make(map[string]Policy, len(yml.Policies))
 	for name, policy := range yml.Policies {
 		config.Policies[name] = Policy{
 			Allow:      policy.Allow,

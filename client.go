@@ -680,52 +680,64 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 			return Metric{}, err
 		}
 
-		if len(metricFamily.Metric) != 1 {
-			return Metric{}, errors.New("kes: server response contains more than one metric")
+		if len(metricFamily.Metric) == 0 {
+			return Metric{}, errors.New("kes: server response contains no metric")
 		}
 		var (
-			name      = metricFamily.GetName()
-			kind      = metricFamily.GetType()
-			rawMetric = metricFamily.GetMetric()[0] // Safe since we checked length before
+			name = metricFamily.GetName()
+			kind = metricFamily.GetType()
 		)
 		switch {
 		case kind == dto.MetricType_COUNTER && name == MetricRequestOK:
-			metric.RequestOK = uint64(rawMetric.GetCounter().GetValue())
-		case kind == dto.MetricType_COUNTER && name == MetricRequestErr:
-			metric.RequestErr = uint64(rawMetric.GetCounter().GetValue())
-		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
-			metric.RequestFail = uint64(rawMetric.GetCounter().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
-			metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_COUNTER && name == MetricAuditEvents:
-			metric.AuditEvents = uint64(rawMetric.GetCounter().GetValue())
-		case kind == dto.MetricType_COUNTER && name == MetricErrorEvents:
-			metric.ErrorEvents = uint64(rawMetric.GetCounter().GetValue())
-		case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
-			metric.LatencyHistogram = map[time.Duration]uint64{}
-			for _, bucket := range rawMetric.GetHistogram().GetBucket() {
-				if math.IsInf(bucket.GetUpperBound(), 0) { // Ignore the +Inf bucket
-					continue
-				}
-
-				duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
-				metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestOK += uint64(m.GetCounter().GetValue())
 			}
-			delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
-		case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
-			metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
-		case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
-			metric.CPUs = int(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricSystemUsableCPUs:
-			metric.UsableCPUs = int(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
-			metric.Threads = int(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
-			metric.HeapAlloc = uint64(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricSystemHeapObjects:
-			metric.HeapObjects = uint64(rawMetric.GetGauge().GetValue())
-		case kind == dto.MetricType_GAUGE && name == MetricSystemStackUsed:
-			metric.StackAlloc = uint64(rawMetric.GetGauge().GetValue())
+		case kind == dto.MetricType_COUNTER && name == MetricRequestErr:
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestErr += uint64(m.GetCounter().GetValue())
+			}
+		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestFail += uint64(m.GetCounter().GetValue())
+			}
+		default:
+			if len(metricFamily.Metric) != 1 {
+				return Metric{}, errors.New("kes: server response contains more than one metric")
+			}
+			rawMetric := metricFamily.GetMetric()[0] // Safe since we checked length before
+			switch {
+			case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
+				metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_COUNTER && name == MetricAuditEvents:
+				metric.AuditEvents = uint64(rawMetric.GetCounter().GetValue())
+			case kind == dto.MetricType_COUNTER && name == MetricErrorEvents:
+				metric.ErrorEvents = uint64(rawMetric.GetCounter().GetValue())
+			case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
+				metric.LatencyHistogram = map[time.Duration]uint64{}
+				for _, bucket := range rawMetric.GetHistogram().GetBucket() {
+					if math.IsInf(bucket.GetUpperBound(), 0) { // Ignore the +Inf bucket
+						continue
+					}
+
+					duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
+					metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
+				}
+				delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
+			case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
+				metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
+			case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
+				metric.CPUs = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemUsableCPUs:
+				metric.UsableCPUs = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
+				metric.Threads = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
+				metric.HeapAlloc = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapObjects:
+				metric.HeapObjects = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemStackUsed:
+				metric.StackAlloc = uint64(rawMetric.GetGauge().GetValue())
+			}
 		}
 	}
 	return metric, nil
