@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"sort"
@@ -398,94 +397,6 @@ func TestListKeys(t *testing.T) {
 	}
 }
 
-var readWritePolicyTests = []struct {
-	Allow []string
-	Deny  []string
-}{
-	{Allow: []string{}, Deny: []string{}},
-	{Allow: []string{"/version"}},
-	{Allow: []string{"/v1/key/create/*", "/v1/key/delete/*"}},
-	{Allow: []string{"/v1/key/create/*", "/v1/key/delete/*", "/v1/key/generate/my-minio-key"}},
-	{Allow: []string{"/v1/policy/delete/my-policy", "/v1/policy/create/my-*"}},
-	{Allow: []string{"/v1/key/*/*", "/v1/identity/*/*"}},
-	{Allow: []string{"/v1/key/create/*", "/v1/key/generate/*"}, Deny: []string{"/v1/key/decrypt/*"}},
-	{Allow: []string{"/v1/key/list/*"}, Deny: []string{"/v1/key/list/my-*", "/v1/key/list/some-*"}},
-}
-
-func TestReadWritePolicy(t *testing.T) {
-	if !*IsIntegrationTest {
-		t.SkipNow()
-	}
-
-	client, err := newClient()
-	if err != nil {
-		t.Fatalf("Failed to create KES client: %v", err)
-	}
-
-	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
-	for i, test := range readWritePolicyTests {
-		policy := &kes.Policy{
-			Allow: test.Allow,
-			Deny:  test.Deny,
-		}
-		if err := client.SetPolicy(context.Background(), name, policy); err != nil {
-			t.Fatalf("Test %d: Failed to create policy '%s': %v", i, name, err)
-		}
-		if _, err = client.GetPolicy(context.Background(), name); err != nil {
-			client.DeletePolicy(context.Background(), name) // cleanup
-			t.Fatalf("Test %d: Failed to read policy '%s': %v", i, name, err)
-		}
-		client.DeletePolicy(context.Background(), name) // cleanup
-	}
-}
-
-func TestAssignPolicy(t *testing.T) {
-	if !*IsIntegrationTest {
-		t.SkipNow()
-	}
-
-	client, err := newClient()
-	if err != nil {
-		t.Fatalf("Failed to create KES client: %v", err)
-	}
-
-	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
-	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
-		t.Fatalf("Failed to create policy '%s': %v", name, err)
-	}
-	defer client.DeletePolicy(context.Background(), name)
-
-	identity := kes.Identity(hex.EncodeToString(randomBytes(32)))
-	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
-		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
-	}
-}
-
-func TestDeleteIdentity(t *testing.T) {
-	if !*IsIntegrationTest {
-		t.SkipNow()
-	}
-
-	client, err := newClient()
-	if err != nil {
-		t.Fatalf("Failed to create KES client: %v", err)
-	}
-
-	name := fmt.Sprintf("KES-test-%x", randomBytes(12))
-	if err := client.SetPolicy(context.Background(), name, newPolicy("/version")); err != nil {
-		t.Fatalf("Failed to create policy '%s': %v", name, err)
-	}
-	defer client.DeletePolicy(context.Background(), name)
-
-	identity := kes.Identity(hex.EncodeToString(randomBytes(32)))
-	if err := client.AssignPolicy(context.Background(), name, identity); err != nil {
-		t.Fatalf("Failed to assign identity '%s' to policy '%s': %v", identity, name, err)
-	}
-	if err := client.DeleteIdentity(context.Background(), identity); err != nil {
-		t.Fatalf("Failed to forget identity '%s': %v", identity, err)
-	}
-}
-
 func TestMetrics(t *testing.T) {
 	if !*IsIntegrationTest {
 		t.SkipNow()
@@ -514,10 +425,6 @@ func newClient() (*kes.Client, error) {
 		Certificates:       []tls.Certificate{certificate},
 		InsecureSkipVerify: *InsecureSkipVerify,
 	}), nil
-}
-
-func newPolicy(patterns ...string) *kes.Policy {
-	return &kes.Policy{Allow: patterns}
 }
 
 func mustDecodeB64(s string) []byte {
