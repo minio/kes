@@ -55,6 +55,11 @@ type Env[T string | kes.Identity | time.Duration] struct {
 // The current implementation is very primitive but good enough
 // for the moment.
 
+// MarshalText returns a text representation of the Env[T].
+//
+// If Env[T] refers to an environment variable then MarshalText
+// returns the environment variable name as "${variable}".
+// Otherwise, it returns a text representation of T.
 func (e Env[_]) MarshalText() ([]byte, error) {
 	if name := strings.TrimSpace(e.Name); name != "" {
 		switch hasPrefix, hasSuffix := strings.HasPrefix(name, "${"), strings.HasSuffix(name, "}"); {
@@ -69,6 +74,14 @@ func (e Env[_]) MarshalText() ([]byte, error) {
 	return marshalText(e.Value)
 }
 
+// UnmarshalText parses the text as Env[T].
+//
+// If the given text refers to an environment variable then
+// UnmarshalText looks up the value from the environment.
+// It returns an error if no such environment variable exists.
+//
+// Otherwise, it parses the text as T and sets the Env[T] name
+// to the empty string.
 func (e *Env[_]) UnmarshalText(text []byte) error {
 	s := strings.TrimSpace(string(text))
 	switch hasPrefix, hasSuffix := strings.HasPrefix(s, "${"), strings.HasSuffix(s, "}"); {
