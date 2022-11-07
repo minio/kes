@@ -96,15 +96,23 @@ func (r *retry) Send(ctx context.Context, method string, endpoints []string, pat
 		}
 
 		response, err = r.Do(request)
-		if err == nil {
-			return response, nil
-		}
 		if errors.Is(err, context.Canceled) {
 			return nil, err
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
+		if err != nil {
+			continue
+		}
+		if code := response.StatusCode; code >= http.StatusInternalServerError && code != http.StatusNotImplemented {
+			// When a KES server returns an 5xx error code it might
+			// have lost connection to the KMS backend. In such a
+			// case we retry the request if there are multiple
+			// endpoints.
+			continue
+		}
+		return response, nil
 	}
 	if urlErr, ok := err.(*url.Error); ok {
 		if connErr, ok := urlErr.Err.(*ConnError); ok {
