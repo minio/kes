@@ -47,6 +47,9 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 	if c.AppRole.Retry == 0 {
 		c.AppRole.Retry = 5 * time.Second
 	}
+	if c.AppRole.Engine == "" {
+		c.AppRole.Engine = EngineAppRole
+	}
 	if c.K8S.Engine == "" {
 		c.K8S.Engine = EngineKubernetes
 	}
