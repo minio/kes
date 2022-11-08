@@ -177,6 +177,15 @@ func startServer(path string, sConfig serverConfig) {
 	}
 	certificate.ErrorLog = errorLog
 
+	if c, _ := certificate.GetCertificate(nil); c != nil && c.Leaf != nil {
+		if len(c.Leaf.DNSNames) == 0 && len(c.Leaf.IPAddresses) == 0 {
+			// Support for TLS certificates with a subject CN but without any SAN
+			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
+			// Therefore, we require at least one SAN for the server certificate.
+			cli.Fatal("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
+		}
+	}
+
 	clientAuth := tls.RequireAnyClientCert
 	if init.VerifyClientCerts.Value() {
 		clientAuth = tls.RequireAndVerifyClientCert
