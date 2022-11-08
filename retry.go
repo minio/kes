@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -58,6 +59,128 @@ func withHeader(key, value string) requestOption {
 	}
 }
 
+// loadBalancer sends HTTP requests to a set of endpoints.
+// For each request it picks an endpoint at random and
+// retries requests that fail due to a network error or
+// HTTP 5xx response.
+//
+// The loadBalancer marks endpoints as offline when they
+// fail to respond. Since an endpoint might have temp.
+// issues, offline endpoints will be marked online after
+// a while again.
+type loadBalancer struct {
+	lock      sync.Mutex
+	endpoints map[string]time.Time
+}
+
+// Send creates a new HTTP request with the given method, context
+// request body and request options, if any. It randomly iterates
+// over the given endpoints until it receives a HTTP response.
+//
+// If sending a request to one endpoint fails due to e.g. a network
+// or DNS error, Send tries the next endpoint. It aborts once the
+// context is canceled or its deadline exceeded.
+//
+// Any endpoint that fails to respond gets marked offline for some
+// time period. Offline endpoints will be marked online periodically.
+func (lb *loadBalancer) Send(ctx context.Context, client *retry, method string, endpoints []string, path string, body io.ReadSeeker, options ...requestOption) (*http.Response, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.New("kes: no server endpoint")
+	}
+	if len(endpoints) == 1 {
+		request, err := http.NewRequestWithContext(ctx, method, endpoint(endpoints[0], path), retryBody(body))
+		if err != nil {
+			return nil, err
+		}
+		for _, opt := range options {
+			opt(request)
+		}
+		response, err := client.Do(request)
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		if urlErr, ok := err.(*url.Error); ok {
+			if connErr, ok := urlErr.Err.(*ConnError); ok {
+				return nil, connErr
+			}
+		}
+		return response, err
+	}
+
+	var (
+		request  *http.Request
+		response *http.Response
+		err      error
+		R        = rand.Intn(len(endpoints)) // randomize endpoints => avoid hitting the same endpoint all the time.
+	)
+
+retry:
+	for i := range endpoints {
+		nextEndpoint := endpoints[(i+R)%len(endpoints)]
+
+		lb.lock.Lock()
+		t, ok := lb.endpoints[nextEndpoint]
+		switch {
+		case ok && !t.IsZero() && t.Before(time.Now().Add(5*time.Minute)):
+			lb.lock.Unlock()
+			continue
+		case ok && !t.IsZero():
+			// Reset time, so we do try this on other threads.
+			// A success will reset the time and re-enable the endpoint.
+			lb.endpoints[nextEndpoint] = time.Now()
+		case !ok:
+			lb.endpoints[nextEndpoint] = time.Time{}
+		}
+		lb.lock.Unlock()
+
+		request, err = http.NewRequestWithContext(ctx, method, endpoint(nextEndpoint, path), retryBody(body))
+		if err != nil {
+			return nil, err
+		}
+		for _, opt := range options {
+			opt(request)
+		}
+
+		response, err = client.Do(request)
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		if err != nil || (response.StatusCode >= http.StatusInternalServerError && response.StatusCode != http.StatusNotImplemented) {
+			lb.lock.Lock()
+			lb.endpoints[nextEndpoint] = time.Now()
+			lb.lock.Unlock()
+			continue
+		}
+
+		if !t.IsZero() { // When the request succeeded we mark the endpoint as online again
+			lb.lock.Lock()
+			lb.endpoints[nextEndpoint] = time.Time{}
+			lb.lock.Unlock()
+		}
+		return response, nil
+	}
+	if response == nil && err == nil {
+		lb.lock.Lock()
+		for _, endpoint := range endpoints {
+			lb.endpoints[endpoint] = time.Time{}
+		}
+		lb.lock.Unlock()
+		goto retry
+	}
+	if urlErr, ok := err.(*url.Error); ok {
+		if connErr, ok := urlErr.Err.(*ConnError); ok {
+			return nil, connErr
+		}
+	}
+	return response, err
+}
+
 // retry is an http.Client that implements
 // a retry mechanism for requests that fail
 // due to a temporary network error.
@@ -67,60 +190,6 @@ func withHeader(key, value string) requestOption {
 // Otherwise, it cannot guarantee that the entire request
 // body gets sent when retrying a request.
 type retry http.Client
-
-// Send creates a new HTTP request with the given method, context
-// request body and request options, if any. It randomly iterates
-// over the given endpoints until it receives a HTTP response.
-//
-// If sending a request to one endpoint fails due to e.g. a network
-// or DNS error, Send tries the next endpoint. It aborts once the
-// context is canceled or its deadline exceeded.
-func (r *retry) Send(ctx context.Context, method string, endpoints []string, path string, body io.ReadSeeker, options ...requestOption) (*http.Response, error) {
-	if len(endpoints) == 0 {
-		return nil, errors.New("kes: no server endpoint")
-	}
-	var (
-		request  *http.Request
-		response *http.Response
-		err      error
-		R        = rand.Intn(len(endpoints)) // randomize endpoints => avoid hitting the same endpoint all the time.
-	)
-	for i := range endpoints {
-		nextEndpoint := endpoints[(i+R)%len(endpoints)]
-		request, err = http.NewRequestWithContext(ctx, method, endpoint(nextEndpoint, path), retryBody(body))
-		if err != nil {
-			return nil, err
-		}
-		for _, opt := range options {
-			opt(request)
-		}
-
-		response, err = r.Do(request)
-		if errors.Is(err, context.Canceled) {
-			return nil, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
-		}
-		if err != nil {
-			continue
-		}
-		if code := response.StatusCode; code >= http.StatusInternalServerError && code != http.StatusNotImplemented {
-			// When a KES server returns an 5xx error code it might
-			// have lost connection to the KMS backend. In such a
-			// case we retry the request if there are multiple
-			// endpoints.
-			continue
-		}
-		return response, nil
-	}
-	if urlErr, ok := err.(*url.Error); ok {
-		if connErr, ok := urlErr.Err.(*ConnError); ok {
-			return nil, connErr
-		}
-	}
-	return response, err
-}
 
 // Get issues a GET to the specified URL.
 // It is a wrapper around retry.Do.

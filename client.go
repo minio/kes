@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"aead.dev/mem"
@@ -73,6 +74,9 @@ type Client struct {
 	//
 	// It must not be modified concurrently.
 	HTTPClient http.Client
+
+	init sync.Once
+	lb   *loadBalancer
 }
 
 // NewClient returns a new KES client with the given
@@ -138,8 +142,10 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 		StatusOK       = http.StatusOK
 		MaxResponeSize = 1024 // 1 KB
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return "", err
 	}
@@ -165,8 +171,10 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		StatusOK        = http.StatusOK
 		MaxResponseSize = 1 * mem.MiB
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return State{}, err
 	}
@@ -205,8 +213,10 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 		StatusOK        = http.StatusOK
 		MaxResponseSize = 1 * mem.MiB
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -252,6 +262,8 @@ func (c *Client) CreateEnclave(ctx context.Context, name string, admin Identity)
 	type Request struct {
 		Admin Identity `json:"admin"`
 	}
+	c.init.Do(c.initLoadBalancer)
+
 	body, err := json.Marshal(Request{
 		Admin: admin,
 	})
@@ -259,7 +271,7 @@ func (c *Client) CreateEnclave(ctx context.Context, name string, admin Identity)
 		return err
 	}
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, join(APIPath, name), bytes.NewReader(body))
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -287,12 +299,14 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
 	}
+	c.init.Do(c.initLoadBalancer)
+
 	if name == "" {
 		name = "default"
 	}
 
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, join(APIPath, name), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -322,8 +336,10 @@ func (c *Client) DeleteEnclave(ctx context.Context, name string) error {
 		Method   = http.MethodDelete
 		StatusOK = http.StatusOK
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, join(APIPath, name), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -342,6 +358,7 @@ func (c *Client) CreateKey(ctx context.Context, name string) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.CreateKey(ctx, name)
 }
@@ -353,6 +370,7 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.ImportKey(ctx, name, key)
 }
@@ -363,6 +381,7 @@ func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error)
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DescribeKey(ctx, name)
 }
@@ -373,6 +392,7 @@ func (c *Client) DeleteKey(ctx context.Context, name string) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DeleteKey(ctx, name)
 }
@@ -399,6 +419,7 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.GenerateKey(ctx, name, context)
 }
@@ -414,6 +435,7 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.Encrypt(ctx, name, plaintext, context)
 }
@@ -429,6 +451,7 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
@@ -444,6 +467,7 @@ func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DecryptAll(ctx, name, ciphertexts...)
 }
@@ -458,6 +482,7 @@ func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, er
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.ListKeys(ctx, pattern)
 }
@@ -470,6 +495,7 @@ func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) err
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.SetPolicy(ctx, name, policy)
 }
@@ -480,6 +506,7 @@ func (c *Client) DescribePolicy(ctx context.Context, name string) (*PolicyInfo, 
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DescribePolicy(ctx, name)
 }
@@ -491,6 +518,7 @@ func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.GetPolicy(ctx, name)
 }
@@ -503,6 +531,7 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DeletePolicy(ctx, name)
 }
@@ -516,6 +545,7 @@ func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyItera
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.ListPolicies(ctx, pattern)
 }
@@ -529,6 +559,7 @@ func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Ident
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.AssignPolicy(ctx, policy, identity)
 }
@@ -538,6 +569,7 @@ func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*Iden
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DescribeIdentity(ctx, identity)
 }
@@ -552,6 +584,7 @@ func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, erro
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DescribeSelf(ctx)
 }
@@ -565,6 +598,7 @@ func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.DeleteIdentity(ctx, identity)
 }
@@ -577,6 +611,7 @@ func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityI
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
 	return enclave.ListIdentities(ctx, pattern)
 }
@@ -594,8 +629,10 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 		Method   = http.MethodGet
 		StatusOK = http.StatusOK
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -618,8 +655,10 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 		Method   = http.MethodGet
 		StatusOK = http.StatusOK
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -640,8 +679,10 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		StatusOK       = http.StatusOK
 		MaxResponeSize = 1 * mem.MiB
 	)
+	c.init.Do(c.initLoadBalancer)
+
 	client := retry(c.HTTPClient)
-	resp, err := client.Send(ctx, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
 	if err != nil {
 		return Metric{}, err
 	}
@@ -742,6 +783,12 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		}
 	}
 	return metric, nil
+}
+
+func (c *Client) initLoadBalancer() {
+	if c.lb == nil {
+		c.lb = &loadBalancer{endpoints: map[string]time.Time{}}
+	}
 }
 
 // Join joins any number of arguments with the API path.
