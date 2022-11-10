@@ -52,3 +52,25 @@ func TestReadCertificate(t *testing.T) {
 		}
 	}
 }
+
+var loadCertPoolTests = []struct {
+	CAPath     string
+	ShouldFail bool
+}{
+	{CAPath: "testdata/certificates/single.pem"},
+	{CAPath: "testdata/certificates/with_whitespaces.pem"},
+	{CAPath: "testdata/certificates/with_privatekey.pem", ShouldFail: true},
+	{CAPath: "testdata/certificates", ShouldFail: true},
+}
+
+func TestLoadCertPool(t *testing.T) {
+	for i, test := range loadCertPoolTests {
+		_, err := LoadCertPool(test.CAPath)
+		if err != nil && !test.ShouldFail {
+			t.Fatalf("Test %d: failed to load certificate pool %s: %v", i, test.CAPath, err)
+		}
+		if err == nil && test.ShouldFail {
+			t.Fatalf("Test %d: reading certificate %s should have failed", i, test.CAPath)
+		}
+	}
+}

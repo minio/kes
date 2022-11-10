@@ -16,6 +16,13 @@ tls:
   key:      ./server.key   # Path to the TLS private key
   cert:     ./server.cert  # Path to the TLS certificate
   password: ""             # An optional password to decrypt the TLS private key
+  
+  # An optional path to a file or directory containing X.509 certificate(s).
+  # If set, the certificate(s) get added to the list of CA certificates for
+  # verifying the mTLS certificates sent by the KES clients.
+  #
+  # If empty, the system root CAs will be used.
+  ca:       ""        
 
   # The TLS proxy configuration. A TLS proxy, like nginx, sits in
   # between a KES client and the KES server and usually acts as a

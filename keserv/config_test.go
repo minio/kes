@@ -29,6 +29,7 @@ var readServerConfigTests = []struct {
 	ShouldFail bool
 }{
 	{Filename: "./testdata/fs.yml"},
+	{Filename: "./testdata/with_tls_ca.yml"},
 
 	{Filename: "./testdata/invalid_keys.yml", ShouldFail: true},
 	{Filename: "./testdata/invalid_root.yml", ShouldFail: true},
@@ -58,6 +59,7 @@ var roundtripServerConfigTests = []ServerConfig{
 			Password:    Env[string]{Value: "horse battery staple"},
 			PrivateKey:  Env[string]{Value: "/tmp/private.key"},
 			Certificate: Env[string]{Value: "/tmp/public.crt"},
+			CAPath:      Env[string]{Value: "/tmp/CAs"},
 			Proxies: []Env[kes.Identity]{
 				{Value: "bf8d6fd2cffc6bf98f423013c13559ae2c25cfd3cd0c76f626901c95aa8c3eff"},
 			},

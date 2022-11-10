@@ -123,6 +123,15 @@ type TLSConfig struct {
 	// Certificate is the path to the KES server's TLS certificate.
 	Certificate Env[string]
 
+	// CAPath is an optional path to a X.509 certificate or directory
+	// containing X.509 certificates that the KES server uses, in
+	// addition to the system root certificates, as authorities when
+	// verify client certificates.
+	//
+	// If empty, the KES server will only use the system root
+	// certificates.
+	CAPath Env[string]
+
 	// Password is an optional password to decrypt the KES server's
 	// private key.
 	Password Env[string]
