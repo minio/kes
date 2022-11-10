@@ -20,6 +20,7 @@ type serverConfigYAML struct {
 	TLS struct {
 		PrivateKey  Env[string] `yaml:"key"`
 		Certificate Env[string] `yaml:"cert"`
+		CAPath      Env[string] `yaml:"ca,omitempty"`
 		Password    Env[string] `yaml:"password,omitempty"`
 
 		Proxy struct {
@@ -182,6 +183,7 @@ func serverConfigToYAML(config *ServerConfig) *serverConfigYAML {
 	// TLS
 	yml.TLS.PrivateKey = config.TLS.PrivateKey
 	yml.TLS.Certificate = config.TLS.Certificate
+	yml.TLS.CAPath = config.TLS.CAPath
 	yml.TLS.Password = config.TLS.Password
 	yml.TLS.Proxy.Identities = config.TLS.Proxies
 	yml.TLS.Proxy.Header.ClientCert = config.TLS.ForwardCertHeader
@@ -239,6 +241,7 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 	// TLS
 	config.TLS.PrivateKey = yml.TLS.PrivateKey
 	config.TLS.Certificate = yml.TLS.Certificate
+	config.TLS.CAPath = yml.TLS.CAPath
 	config.TLS.Password = yml.TLS.Password
 	config.TLS.Proxies = yml.TLS.Proxy.Identities
 	config.TLS.ForwardCertHeader = yml.TLS.Proxy.Header.ClientCert

@@ -12,12 +12,68 @@ import (
 	"encoding/pem"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	xlog "github.com/minio/kes/internal/log"
 )
+
+// LoadCertPool returns a X.509 certificate pool that contains
+// all system root certificates from  x509.SystemCertPool and
+// the certificates loaded from the given caPath.
+//
+// If caPath is a directory LoadCertPool parses all files inside
+// caPath as PEM-encoded X.509 certificate and adds them to the
+// certificate pool.
+// Otherwise LoadCertPool parses caPath as PEM-encoded X.509
+// certificate file and adds it to the certificate pool.
+//
+// It returns the first error it encounters, if any, when parsing
+// a X.509 certificate file.
+func LoadCertPool(caPath string) (*x509.CertPool, error) {
+	addCertificate := func(pool *x509.CertPool, filename string) error {
+		b, err := readCertificate(filename)
+		if err != nil {
+			return err
+		}
+		if !pool.AppendCertsFromPEM(b) {
+			return errors.New("http: failed to add '" + filename + "' as CA certificate")
+		}
+		return nil
+	}
+
+	stat, err := os.Stat(caPath)
+	if err != nil {
+		return nil, err
+	}
+
+	pool, _ := x509.SystemCertPool()
+	if pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !stat.IsDir() {
+		if err = addCertificate(pool, caPath); err != nil {
+			return nil, err
+		}
+		return pool, nil
+	}
+
+	files, err := os.ReadDir(caPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		if err = addCertificate(pool, filepath.Join(caPath, file.Name())); err != nil {
+			return nil, err
+		}
+	}
+	return pool, nil
+}
 
 // LoadCertificate returns a new Certificate from the
 // given certificate and private key files.

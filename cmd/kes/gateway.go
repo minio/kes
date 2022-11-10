@@ -187,6 +187,14 @@ func startGateway(gConfig gatewayConfig) {
 		}
 	}
 
+	var rootCAs *x509.CertPool
+	if config.TLS.CAPath.Value != "" {
+		rootCAs, err = xhttp.LoadCertPool(config.TLS.CAPath.Value)
+		if err != nil {
+			cli.Fatalf("failed to load TLS CA certificate: %v", err)
+		}
+	}
+
 	metrics := metric.New()
 	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
@@ -207,6 +215,7 @@ func startGateway(gConfig gatewayConfig) {
 			GetCertificate:   certificate.GetCertificate,
 			CipherSuites:     fips.TLSCiphers(),
 			CurvePreferences: fips.TLSCurveIDs(),
+			RootCAs:          rootCAs,
 		},
 		ErrorLog: errorLog.Log(),
 
