@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
@@ -213,7 +214,7 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 	}
 
 	var (
-		decoder  = json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize))
+		decoder  = json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize))
 		response Response
 	)
 	if err = decoder.Decode(&response); err != nil {
@@ -336,8 +337,8 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	defer resp.Body.Close()
 
-	const MaxBodySize = 1 << 20
-	size := resp.ContentLength
+	const MaxBodySize = 1 * mem.MiB
+	size := mem.Size(resp.ContentLength)
 	if size < 0 || size > MaxBodySize {
 		size = MaxBodySize
 	}
@@ -348,14 +349,14 @@ func parseErrorResponse(resp *http.Response) error {
 			Message string `json:"message"`
 		}
 		var response Response
-		if err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response); err != nil {
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
 		}
 		return kes.NewError(resp.StatusCode, response.Message)
 	}
 
 	var sb strings.Builder
-	if _, err := io.Copy(&sb, io.LimitReader(resp.Body, size)); err != nil {
+	if _, err := io.Copy(&sb, mem.LimitReader(resp.Body, size)); err != nil {
 		return err
 	}
 	return kes.NewError(resp.StatusCode, sb.String())

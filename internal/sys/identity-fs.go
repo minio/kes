@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
@@ -63,9 +64,9 @@ func (fs *identityFS) Admin(_ context.Context) (kes.Identity, error) {
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var ciphertext bytes.Buffer
-	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&ciphertext, mem.LimitReader(file, MaxSize)); err != nil {
 		return "", err
 	}
 	plaintext, err := fs.rootKey.Unwrap(ciphertext.Bytes(), []byte(path.Join(AdminDir, admin)))
@@ -256,9 +257,9 @@ func (fs *identityFS) GetIdentity(_ context.Context, identity kes.Identity) (aut
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var ciphertext bytes.Buffer
-	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&ciphertext, mem.LimitReader(file, MaxSize)); err != nil {
 		return auth.IdentityInfo{}, err
 	}
 	plaintext, err := fs.rootKey.Unwrap(ciphertext.Bytes(), associatedData)

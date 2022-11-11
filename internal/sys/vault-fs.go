@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
@@ -47,9 +48,9 @@ func (v *vaultFS) Unseal(ctx context.Context, unsealKeys ...UnsealKey) error {
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var buffer bytes.Buffer
-	if _, err = io.Copy(&buffer, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&buffer, mem.LimitReader(file, MaxSize)); err != nil {
 		return err
 	}
 
@@ -159,9 +160,9 @@ func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error)
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var ciphertext bytes.Buffer
-	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&ciphertext, mem.LimitReader(file, MaxSize)); err != nil {
 		return nil, err
 	}
 	plaintext, err := v.rootKey.Unwrap(ciphertext.Bytes(), []byte(name))
@@ -194,9 +195,9 @@ func (v *vaultFS) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo,
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var ciphertext bytes.Buffer
-	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&ciphertext, mem.LimitReader(file, MaxSize)); err != nil {
 		return EnclaveInfo{}, err
 	}
 	plaintext, err := v.rootKey.Unwrap(ciphertext.Bytes(), []byte(name))

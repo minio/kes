@@ -9,13 +9,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/Azure/go-autorest/autorest"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
@@ -146,12 +146,12 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 		}, nil
 	}
 
-	limit := resp.ContentLength
+	limit := mem.Size(resp.ContentLength)
 	if limit < 0 || limit > key.MaxSize {
 		limit = key.MaxSize
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return "", status{}, err
 	}
 
@@ -309,14 +309,14 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 		}, nil
 	}
 
-	const MaxSize = 10 * 1 << 20
-	limit := resp.ContentLength
+	const MaxSize = 10 * mem.MiB
+	limit := mem.Size(resp.ContentLength)
 	if limit < 0 || limit > MaxSize {
 		limit = MaxSize
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return "", status{}, err
 	}
 	if response.NextLink != "" {
@@ -392,13 +392,13 @@ func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, st
 		}, nil
 	}
 
-	const MaxSize = 10 * (1 << 20)
-	limit := resp.ContentLength
+	const MaxSize = 10 * mem.MiB
+	limit := mem.Size(resp.ContentLength)
 	if limit < 0 || limit > MaxSize {
 		limit = MaxSize
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
 		return nil, "", status{}, err
 	}
 	secrets := make([]string, 0, len(response.Values))

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
@@ -98,9 +99,9 @@ func (fs *policyFS) GetPolicy(_ context.Context, name string) (auth.Policy, erro
 	}
 	defer file.Close()
 
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var ciphertext bytes.Buffer
-	if _, err = io.Copy(&ciphertext, io.LimitReader(file, MaxSize)); err != nil {
+	if _, err = io.Copy(&ciphertext, mem.LimitReader(file, MaxSize)); err != nil {
 		return auth.Policy{}, err
 	}
 

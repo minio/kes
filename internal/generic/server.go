@@ -128,9 +128,9 @@ func (s *KeyStore) CreateKey(w http.ResponseWriter, r *http.Request) {
 	type Request struct {
 		Bytes []byte `json:"bytes"`
 	}
-	const MaxSize = 1 << 20
+	const MaxSize = 1 * mem.MiB
 	var request Request
-	if err := json.NewDecoder(io.LimitReader(r.Body, MaxSize)).Decode(&request); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(r.Body, MaxSize)).Decode(&request); err != nil {
 		xhttp.Error(w, kes.NewError(http.StatusBadRequest, err.Error()))
 		return
 	}

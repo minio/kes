@@ -10,11 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"time"
 
+	"aead.dev/mem"
 	xhttp "github.com/minio/kes/internal/http"
 )
 
@@ -88,9 +88,9 @@ func (c *client) Authenticate(ctx context.Context, endpoint string, login Creden
 		return fmt.Errorf("%s: %s (%d)", resp.Status, response.Message, response.Code)
 	}
 
-	const MaxSize = 1 << 20 // An auth. token response should not exceed 1 MiB
+	const MaxSize = 1 * mem.MiB // An auth. token response should not exceed 1 MiB
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, MaxSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxSize)).Decode(&response); err != nil {
 		return err
 	}
 	if response.Token == "" {

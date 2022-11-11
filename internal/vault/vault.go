@@ -16,12 +16,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path"
 	"time"
 
+	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
 	"github.com/minio/kes/kms"
@@ -413,8 +413,8 @@ func (s *Conn) List(ctx context.Context) (kms.Iter, error) {
 	// (reasonable) way to parse the response in batches or use some
 	// form of pagination. Therefore, we limit the response body to
 	// a some reasonable limit to not exceed memory resources.
-	const MaxBody = 32 * 1 << 20
-	secret, err := vaultapi.ParseSecret(io.LimitReader(resp.Body, MaxBody))
+	const MaxBody = 32 * mem.MiB
+	secret, err := vaultapi.ParseSecret(mem.LimitReader(resp.Body, MaxBody))
 	if err != nil {
 		return nil, fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
