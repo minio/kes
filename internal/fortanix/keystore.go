@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
@@ -152,7 +153,7 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 		Token string `json:"access_token"` // Raw bearer token - clients have to set 'Authorization: Bearer <token>'
 	}
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, 1*mem.MiB)).Decode(&response); err != nil {
 		return nil, fmt.Errorf("fortanix: failed to authenticate to '%s': %v", config.Endpoint, err)
 	}
 
@@ -301,7 +302,7 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 		KeyID string `json:"kid"`
 	}
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
 		return fmt.Errorf("fortanix: failed to delete '%s': failed to parse key metadata: %v", name, err)
 	}
 
@@ -376,7 +377,7 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 		Enabled bool   `json:"enabled"`
 	}
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
 		return nil, fmt.Errorf("fortanix: failed to fetch '%s': failed to parse server response %v", name, err)
 	}
 	if !response.Enabled {
@@ -433,7 +434,7 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 				Name string `json:"name"`
 			}
 			var keys []Response
-			if err := json.NewDecoder(io.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
+			if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
 				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
 				return
 			}
@@ -530,8 +531,8 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	defer resp.Body.Close()
 
-	const MaxSize = 1 << 20
-	size := resp.ContentLength
+	const MaxSize = 1 * mem.MiB
+	size := mem.Size(resp.ContentLength)
 	if size < 0 || size > MaxSize {
 		size = MaxSize
 	}
@@ -541,14 +542,14 @@ func parseErrorResponse(resp *http.Response) error {
 			Message string `json:"message"`
 		}
 		var response Response
-		if err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response); err != nil {
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
 		}
 		return kes.NewError(resp.StatusCode, response.Message)
 	}
 
 	var sb strings.Builder
-	if _, err := io.Copy(&sb, io.LimitReader(resp.Body, size)); err != nil {
+	if _, err := io.Copy(&sb, mem.LimitReader(resp.Body, size)); err != nil {
 		return err
 	}
 	return kes.NewError(resp.StatusCode, sb.String())

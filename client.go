@@ -140,7 +140,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 		APIPath        = "/version"
 		Method         = http.MethodGet
 		StatusOK       = http.StatusOK
-		MaxResponeSize = 1024 // 1 KB
+		MaxResponeSize = 1 * mem.KiB
 	)
 	c.init.Do(c.initLoadBalancer)
 
@@ -149,6 +149,8 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return "", parseErrorResponse(resp)
 	}
@@ -157,7 +159,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 		Version string `json:"version"`
 	}
 	var response Response
-	if err = json.NewDecoder(limitBody(resp, MaxResponeSize)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponeSize)).Decode(&response); err != nil {
 		return "", err
 	}
 	return response.Version, nil
@@ -178,6 +180,8 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return State{}, parseErrorResponse(resp)
 	}
@@ -194,7 +198,7 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		StackAlloc uint64 `json:"mem_stack_used"`
 	}
 	var response Response
-	if err = json.NewDecoder(limitBody(resp, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return State{}, err
 	}
 	return State(response), nil
@@ -220,6 +224,8 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
@@ -231,7 +237,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 		Timeout int64  `json:"timeout"` // Timeout in seconds
 	}
 	var responses []Response
-	if err = json.NewDecoder(limitBody(resp, int64(MaxResponseSize))).Decode(&responses); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&responses); err != nil {
 		return nil, err
 	}
 
@@ -275,6 +281,8 @@ func (c *Client) CreateEnclave(ctx context.Context, name string, admin Identity)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -310,12 +318,14 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &EnclaveInfo{
@@ -343,6 +353,8 @@ func (c *Client) DeleteEnclave(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -686,10 +698,11 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 	if err != nil {
 		return Metric{}, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return Metric{}, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
 
 	const (
 		MetricRequestOK         = "kes_http_request_success"
@@ -712,7 +725,7 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 		metric       Metric
 		metricFamily dto.MetricFamily
 	)
-	decoder := expfmt.NewDecoder(limitBody(resp, int64(MaxResponeSize)), expfmt.ResponseFormat(resp.Header))
+	decoder := expfmt.NewDecoder(mem.LimitReader(resp.Body, MaxResponeSize), expfmt.ResponseFormat(resp.Header))
 	for {
 		err := decoder.Decode(&metricFamily)
 		if err == io.EOF {
@@ -820,16 +833,4 @@ func endpoint(endpoint string, elems ...string) string {
 		endpoint += "/"
 	}
 	return endpoint + path.Join(elems...)
-}
-
-// limitBody returns the response body limited to at most
-// maxLen bytes. If the response content length is smaller
-// then maxLen, the returned io.Reader may return less than
-// maxLen bytes.
-func limitBody(r *http.Response, maxLen int64) io.Reader {
-	size := r.ContentLength
-	if size < 0 || size > maxLen {
-		size = maxLen
-	}
-	return io.LimitReader(r.Body, size)
 }

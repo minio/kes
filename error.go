@@ -156,8 +156,8 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	defer resp.Body.Close()
 
-	const MaxBodySize = int64(1 * mem.MiB)
-	size := resp.ContentLength
+	const MaxBodySize = 1 * mem.MiB
+	size := mem.Size(resp.ContentLength)
 	if size < 0 || size > MaxBodySize {
 		size = MaxBodySize
 	}
@@ -168,7 +168,7 @@ func parseErrorResponse(resp *http.Response) error {
 			Message string `json:"message"`
 		}
 		var response Response
-		if err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response); err != nil {
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
 		}
 
@@ -184,7 +184,7 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 
 	var sb strings.Builder
-	if _, err := io.Copy(&sb, io.LimitReader(resp.Body, size)); err != nil {
+	if _, err := io.Copy(&sb, mem.LimitReader(resp.Body, size)); err != nil {
 		return err
 	}
 	return NewError(resp.StatusCode, sb.String())

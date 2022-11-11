@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/kms"
@@ -98,7 +99,7 @@ func (fs *keyFS) GetKey(_ context.Context, name string) (key.Key, error) {
 	defer file.Close()
 
 	var ciphertext bytes.Buffer
-	if _, err := io.Copy(&ciphertext, io.LimitReader(file, key.MaxSize)); err != nil {
+	if _, err := io.Copy(&ciphertext, mem.LimitReader(file, key.MaxSize)); err != nil {
 		return key.Key{}, err
 	}
 	plaintext, err := fs.rootKey.Unwrap(ciphertext.Bytes(), []byte(name))

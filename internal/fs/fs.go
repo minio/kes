@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/kms"
 )
@@ -98,7 +99,7 @@ func (c *Conn) Create(_ context.Context, name string, value []byte) error {
 // directory. It returns kes.ErrKeyNotFound if no such file
 // exists.
 func (c *Conn) Get(_ context.Context, name string) ([]byte, error) {
-	const MaxSize = 1 << 20 // 1 MiB
+	const MaxSize = 1 * mem.MiB
 
 	if err := validName(name); err != nil {
 		return nil, err
@@ -115,7 +116,7 @@ func (c *Conn) Get(_ context.Context, name string) ([]byte, error) {
 	}
 	defer file.Close()
 
-	value, err := io.ReadAll(io.LimitReader(file, MaxSize))
+	value, err := io.ReadAll(mem.LimitReader(file, MaxSize))
 	if err != nil {
 		return nil, err
 	}

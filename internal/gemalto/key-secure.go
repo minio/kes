@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/kms"
@@ -199,7 +200,7 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, 2*mem.MiB)).Decode(&response); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
@@ -311,8 +312,8 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 				break
 			}
 
-			const MaxBody = 32 * (1 << 20) // A page should not be larger than 32 MiB.
-			if err := json.NewDecoder(io.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
+			const MaxBody = 32 * mem.MiB // A page should not be larger than 32 MiB.
+			if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					iterator.SetErr(err)
 				} else {
@@ -389,8 +390,8 @@ type errResponse struct {
 }
 
 func parseServerError(resp *http.Response) (errResponse, error) {
-	const MaxSize = 1 << 20 // max. 1 MiB
-	size := resp.ContentLength
+	const MaxSize = 1 * mem.MiB
+	size := mem.Size(resp.ContentLength)
 	if size < 0 || size > MaxSize {
 		size = MaxSize
 	}
@@ -410,12 +411,12 @@ func parseServerError(resp *http.Response) (errResponse, error) {
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if strings.HasPrefix(contentType, "application/json") {
 		var response errResponse
-		err := json.NewDecoder(io.LimitReader(resp.Body, size)).Decode(&response)
+		err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response)
 		return response, err
 	}
 
 	var s strings.Builder
-	if _, err := io.Copy(&s, io.LimitReader(resp.Body, size)); err != nil {
+	if _, err := io.Copy(&s, mem.LimitReader(resp.Body, size)); err != nil {
 		return errResponse{}, err
 	}
 	message := strings.TrimSpace(s.String())

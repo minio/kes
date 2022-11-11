@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -188,12 +187,14 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 
 	var response Response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &KeyInfo{
@@ -219,6 +220,8 @@ func (e *Enclave) DeleteKey(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -272,13 +275,14 @@ func (e *Enclave) GenerateKey(ctx context.Context, name string, context []byte) 
 	if err != nil {
 		return DEK{}, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return DEK{}, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return DEK{}, err
 	}
 	return DEK(response), nil
@@ -321,13 +325,14 @@ func (e *Enclave) Encrypt(ctx context.Context, name string, plaintext, context [
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return response.Ciphertext, nil
@@ -369,13 +374,14 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return response.Plaintext, nil
@@ -424,13 +430,14 @@ func (e *Enclave) DecryptAll(ctx context.Context, name string, ciphertexts ...CC
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
-	defer resp.Body.Close()
 
 	var responses []Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&responses); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&responses); err != nil {
 		return nil, err
 	}
 
@@ -503,6 +510,8 @@ func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity Iden
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -530,6 +539,8 @@ func (e *Enclave) SetPolicy(ctx context.Context, name string, policy *Policy) er
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -556,12 +567,14 @@ func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo,
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &PolicyInfo{
@@ -594,12 +607,14 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &Policy{
@@ -630,6 +645,8 @@ func (e *Enclave) DeletePolicy(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -689,11 +706,13 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, parseErrorResponse(resp)
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, err
 	}
 	return &IdentityInfo{
@@ -740,11 +759,13 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 	if err != nil {
 		return nil, nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return nil, nil, parseErrorResponse(resp)
 	}
 	var response Response
-	if err = json.NewDecoder(io.LimitReader(resp.Body, int64(MaxResponseSize))).Decode(&response); err != nil {
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
 		return nil, nil, err
 	}
 	info := &IdentityInfo{
@@ -784,6 +805,8 @@ func (e *Enclave) DeleteIdentity(ctx context.Context, identity Identity) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != StatusOK {
 		return parseErrorResponse(resp)
 	}
