@@ -151,7 +151,7 @@ func (e *Unreachable) Error() string {
 	if e.Err == nil {
 		return "kms is unreachable"
 	}
-	return "kms is unreachable: " + e.Error()
+	return "kms is unreachable: " + e.Err.Error()
 }
 
 // Unwrap returns the Unreachable's underlying error,
@@ -190,7 +190,7 @@ func (e *Unavailable) Error() string {
 	if e.Err == nil {
 		return "kms is not available"
 	}
-	return "kms is not available: " + e.Error()
+	return "kms is not available: " + e.Err.Error()
 }
 
 // Unwrap returns the Unavailable's underlying error,
