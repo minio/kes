@@ -285,7 +285,7 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 	case yml.KeyStore.Aws.SecretsManager.Endpoint.Value != "":
 		config.KMS = new(SecretsManagerConfig)
 	case yml.KeyStore.GCP.SecretManager.ProjectID.Value != "":
-		config.KMS = new(SecretsManagerConfig)
+		config.KMS = new(SecretManagerConfig)
 	case yml.KeyStore.Azure.KeyVault.Endpoint.Value != "":
 		config.KMS = new(KeyVaultConfig)
 	case yml.KeyStore.Gemalto.KeySecure.Endpoint.Value != "":
