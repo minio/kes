@@ -3,14 +3,14 @@ module github.com/minio/kes
 go 1.18
 
 require (
-	aead.dev/mem v0.1.0
+	aead.dev/mem v0.2.0
+	aead.dev/minisign v0.2.0
 	cloud.google.com/go v0.65.0
 	github.com/Azure/go-autorest/autorest v0.11.17
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.7
 	github.com/aws/aws-sdk-go v1.30.27
 	github.com/blang/semver/v4 v4.0.0
 	github.com/charmbracelet/lipgloss v0.5.0
-	github.com/cheggaaa/pb/v3 v3.0.5
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/selfupdate v0.4.0
@@ -36,7 +36,6 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.0 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
-	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/armon/go-metrics v0.3.9 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
