@@ -5,165 +5,275 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
-	"strings"
 	"time"
 
+	"aead.dev/mem"
+	"aead.dev/minisign"
 	"github.com/blang/semver/v4"
-	"github.com/cheggaaa/pb/v3"
 	"github.com/minio/kes/internal/cli"
+	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/selfupdate"
 	flag "github.com/spf13/pflag"
 )
 
 const updateCmdUsage = `Usage:
-    kes update [options]
+    kes update [options] [<version>]
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -d, --downgrade          Allow downgrading to a previous version.
+    -o, --output <file>      Save new binary to a file instead of
+                             replacing the current binary.
+        --os <OS>            Download a binary for the specified OS.
+        --arch <arch>        Download a binary for the specified CPU
+                             architecture.
+        --minisign-key <key> Use the specified minisign public key to
+                             verify the binary signature.
     -h, --help               Print command line options.
 
 Examples:
     $ kes update
+    $ kes update v0.21.0
+    $ kes update -o ./kes-darwin-arm64 --os darwin --arch arm64
 `
+
+const defaultMinisignKey = "RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav"
 
 func updateCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, updateCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		downgrade          bool
+		outputFile         string
+		osFlag             string
+		archFlag           string
+		minisignKey        string
+	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.BoolVarP(&downgrade, "downgrade", "d", false, "Allow downgrading to a previous version")
+	cmd.StringVarP(&outputFile, "output", "o", "", "Save new binary to a file instead of replacing the current binary")
+	cmd.StringVar(&osFlag, "os", runtime.GOOS, "Download a binary for the specified OS")
+	cmd.StringVar(&archFlag, "arch", runtime.GOARCH, "Download a binary for the specified CPU architecture")
+	cmd.StringVar(&minisignKey, "minisign-key", defaultMinisignKey, "Use the specified minisign public key to verify the binary signature")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
 		}
 		cli.Fatalf("%v. See 'kes update --help'", err)
 	}
-
-	if cmd.NArg() != 0 {
+	if cmd.NArg() > 1 {
 		cli.Fatal("too many arguments. See 'kes update --help'")
 	}
-	if err := updateInplace(); err != nil {
+	if osFlag != runtime.GOOS && outputFile == "" {
+		cli.Fatalf("cannot update to a '%s' binary on %s-%s. Use '--output'", osFlag, runtime.GOOS, runtime.GOARCH)
+	}
+	if archFlag != runtime.GOARCH && outputFile == "" {
+		cli.Fatalf("cannot update to a '%s' binary on %s-%s. Use '--output'", archFlag, runtime.GOOS, runtime.GOARCH)
+	}
+
+	const (
+		Latest      = "latest"
+		DownloadURL = "https://github.com/minio/kes/releases/download/%s/kes-%s-%s"
+	)
+	var publicKey minisign.PublicKey
+	if err := publicKey.UnmarshalText([]byte(minisignKey)); err != nil {
+		cli.Fatalf("failed to parse public key: %v", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	client := xhttp.Retry{
+		N: 2,
+		Client: http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          100,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: insecureSkipVerify,
+				},
+			},
+		},
+	}
+	// First, we check what's the latest version and do some
+	// version comparison - i.e. are we already running the
+	// latest version, are we downgrading, etc.
+	var version semver.Version
+	if n := cmd.NArg(); n == 0 || n == 1 && cmd.Arg(0) == Latest {
+		const (
+			MaxBody   = 5 * mem.MiB
+			LatestURL = "https://api.github.com/repos/minio/kes/releases/latest"
+			Tag       = "tag_name"
+		)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, LatestURL, nil)
+		if err != nil {
+			cli.Fatal(err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			cli.Fatalf("failed to download KES release information: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var response map[string]any
+		if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
+			cli.Fatalf("failed to download KES release information: %v", err)
+		}
+		tag, ok := response[Tag].(string)
+		if !ok {
+			cli.Fatalf("failed to download KES release information: invalid release tag '%v", response[Tag])
+		}
+		version, err = semver.ParseTolerant(tag)
+		if err != nil {
+			cli.Fatalf("failed to download KES release information: invalid release tag '%s': %v", tag, err)
+		}
+	} else {
+		v, err := semver.ParseTolerant(cmd.Arg(0))
+		if err != nil {
+			cli.Fatalf("invalid release version '%s': %v", cmd.Arg(0), err)
+		}
+		version = v
+	}
+	if cv, err := semver.ParseTolerant(sys.BinaryInfo().Version); err == nil {
+		switch version.Compare(cv) {
+		case 0:
+			cli.Println(fmt.Sprintf("Already on v%v", version))
+			return
+		case -1:
+			if !downgrade {
+				cli.Fatalf("'v%v' is older than the current version 'v%v'", version, cv)
+			}
+		}
+	}
+
+	// We have to download the KES binary and the corresponding minisign signature
+	// file. We start with the signature.
+	binaryURL, err := url.JoinPath(
+		"https://github.com/minio/kes/releases/download/",
+		fmt.Sprintf("v%v", version),
+		fmt.Sprintf("kes-%s-%s", osFlag, archFlag),
+	)
+	if err != nil {
+		cli.Fatalf("failed to download minisign signature: %v", err)
+	}
+
+	cli.Print("Downloading KES minisign signature...")
+	startTime := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, binaryURL+".minisig", nil)
+	if err != nil {
 		cli.Fatal(err)
 	}
-}
-
-func getUpdateTransport(timeout time.Duration) http.RoundTripper {
-	var updateTransport http.RoundTripper = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   timeout,
-			KeepAlive: timeout,
-			DualStack: true,
-		}).DialContext,
-		IdleConnTimeout:       timeout,
-		TLSHandshakeTimeout:   timeout,
-		ExpectContinueTimeout: timeout,
-		DisableCompression:    true,
-	}
-	return updateTransport
-}
-
-func getUpdateReaderFromURL(u string, transport http.RoundTripper) (io.ReadCloser, int64, error) {
-	clnt := &http.Client{
-		Transport: transport,
-	}
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, -1, err
+		cli.Fatalf("failed to download minisign signature: %v", err)
 	}
+	defer resp.Body.Close()
 
-	resp, err := clnt.Do(req)
+	bytes, err := io.ReadAll(io.LimitReader(resp.Body, int64(1*mem.MB)))
 	if err != nil {
-		return nil, -1, err
+		cli.Fatalf("failed to download minisign signature: %v", err)
 	}
-	return resp.Body, resp.ContentLength, nil
-}
+	var signature minisign.Signature
+	if err = signature.UnmarshalText(bytes); err != nil {
+		cli.Fatal(err)
+	}
+	cli.Println(fmt.Sprintf("\033[2K\rDownloaded KES minisign signature in %0.1f seconds", time.Since(startTime).Seconds()))
 
-const defaultPubKey = "RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav"
-
-func getLatestRelease(tr http.RoundTripper) (string, error) {
-	releaseURL := "https://api.github.com/repos/minio/kes/releases/latest"
-
-	body, _, err := getUpdateReaderFromURL(releaseURL, tr)
+	// Now download the actual KES binary.
+	cli.Print("Downloading KES binary ...")
+	startTime = time.Now()
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, binaryURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("unable to access github release URL %w", err)
+		cli.Fatalf("failed to download binary: %v", err)
 	}
-	defer body.Close()
-
-	lm := make(map[string]interface{})
-	if err = json.NewDecoder(body).Decode(&lm); err != nil {
-		return "", err
-	}
-	rel, ok := lm["tag_name"].(string)
-	if !ok {
-		return "", errors.New("unable to find latest release tag")
-	}
-	return rel, nil
-}
-
-func updateInplace() error {
-	transport := getUpdateTransport(30 * time.Second)
-	rel, err := getLatestRelease(transport)
+	resp, err = client.Do(req)
 	if err != nil {
-		return err
+		cli.Fatalf("failed to download binary: %v", err)
 	}
+	defer resp.Body.Close()
 
-	latest, err := semver.Make(strings.TrimPrefix(rel, "v"))
-	if err != nil {
-		return err
-	}
-
-	version := sys.BinaryInfo().Version
-	current, err := semver.Make(version)
-	if err != nil {
-		return err
-	}
-
-	if current.GTE(latest) {
-		fmt.Printf("You are already running the latest version v%q.\n", version)
-		return nil
-	}
-
-	kesBin := fmt.Sprintf("https://github.com/minio/kes/releases/download/%s/kes-%s-%s", rel, runtime.GOOS, runtime.GOARCH)
-	reader, length, err := getUpdateReaderFromURL(kesBin, transport)
-	if err != nil {
-		return fmt.Errorf("unable to fetch binary from %s: %w", kesBin, err)
-	}
-
-	minisignPubkey := os.Getenv("KES_MINISIGN_PUBKEY")
-	if minisignPubkey == "" {
-		minisignPubkey = defaultPubKey
-	}
-
-	v := selfupdate.NewVerifier()
-	if err = v.LoadFromURL(kesBin+".minisig", minisignPubkey, transport); err != nil {
-		return fmt.Errorf("unable to fetch binary signature for %s: %w", kesBin, err)
-	}
-	opts := selfupdate.Options{
-		Verifier: v,
-	}
-
-	tmpl := `{{ red "Downloading:" }} {{bar . (red "[") (green "=") (red "]")}} {{speed . | rndcolor }}`
-	bar := pb.ProgressBarTemplate(tmpl).Start64(length)
-	barReader := bar.NewProxyReader(reader)
-	if err = selfupdate.Apply(barReader, opts); err != nil {
-		bar.Finish()
-		if rerr := selfupdate.RollbackError(err); rerr != nil {
-			return rerr
+	// If the outputFile does not exist we create an empty
+	// one such that selfupdate can do a successful rename
+	// later on.
+	// Otherwise, the selfupdate binary swap (via rename)
+	// fails since the "original" file does not exist.
+	if outputFile != "" {
+		_, err = os.Stat(outputFile)
+		if errors.Is(err, os.ErrNotExist) {
+			if err = os.WriteFile(outputFile, nil, 0o755); err != nil {
+				cli.Fatal(err)
+			}
 		}
-		return err
+		if err != nil {
+			cli.Fatal(err)
+		}
 	}
 
-	bar.Finish()
-	fmt.Printf("Updated 'kes' to latest release %s\n", rel)
-	return nil
+	totalSize := mem.Size(resp.ContentLength)
+	verifier := &minisignVerifier{
+		src:       minisign.NewReader(resp.Body),
+		key:       publicKey,
+		signature: bytes,
+	}
+	progress := mem.NewProgressReader(verifier, 500*time.Millisecond, func(p mem.Progress) {
+		fmt.Print("\033[2K\r")
+		if !p.Done() {
+			fmt.Printf(
+				"Downloading KES binary %s/%s  (%s/s)",
+				mem.FormatSize(p.Total, 'D', 2),
+				mem.FormatSize(totalSize, 'D', 2),
+				mem.FormatSize(2*p.N, 'D', 2),
+			)
+		}
+	})
+
+	if err = selfupdate.Apply(progress, selfupdate.Options{TargetPath: outputFile}); err != nil {
+		if err = selfupdate.RollbackError(err); err != nil {
+			cli.Fatalf("failed to download binary: %v", err)
+		}
+		cli.Fatalf("failed to download binary: %v", err)
+	}
+	cli.Println(fmt.Sprintf("Downloaded KES binary in %0.1f seconds", time.Since(startTime).Seconds()))
+	cli.Println()
+	cli.Println(fmt.Sprintf("Updated to KES v%v", version))
+}
+
+type minisignVerifier struct {
+	src       *minisign.Reader
+	key       minisign.PublicKey
+	signature []byte
+}
+
+func (r *minisignVerifier) Read(b []byte) (int, error) {
+	n, err := r.src.Read(b)
+	if errors.Is(err, io.EOF) {
+		if !r.src.Verify(r.key, r.signature) {
+			return 0, errors.New("kes: minisign signature verification failed")
+		}
+	}
+	return n, err
 }
