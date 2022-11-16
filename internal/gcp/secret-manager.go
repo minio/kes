@@ -35,10 +35,10 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 	if c == nil {
 		c = &Config{}
 	}
-	c.setDefaults()
 
-	options := []option.ClientOption{
-		option.WithEndpoint(c.Endpoint),
+	var options []option.ClientOption
+	if c.Endpoint != "" {
+		options = append(options, option.WithEndpoint(c.Endpoint))
 	}
 	// We only pass credentials to the GCP client if they
 	// are not empty. When running inside GCP, e.g. on app engine,

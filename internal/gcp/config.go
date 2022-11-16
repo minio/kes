@@ -7,6 +7,8 @@ package gcp
 import (
 	"encoding/json"
 	"log"
+	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -45,17 +47,26 @@ func (c Credentials) MarshalJSON() ([]byte, error) {
 		AuthProviderCertURL string `json:"auth_provider_x509_cert_url"`
 		ClientCertURL       string `json:"client_x509_cert_url"`
 	}
+	clientCertURL, err := url.JoinPath("https://www.googleapis.com/robot/v1/metadata/x509", url.QueryEscape(c.Client))
+	if err != nil {
+		return nil, err
+	}
+	// A single-quoted YAML string ('foo') will represent newline characters as
+	// two runes (i.e. a "\" followed by "n"). Typically a private key contains
+	// newline characters. Hence, we replace the two rune string "\\n" with the
+	// newline character '\n'. Otherwise, the GCP SDK will fail to parse the private
+	// key.
 	return json.Marshal(CredentialsJSON{
 		Type:                "service_account",
 		ProjectID:           c.projectID,
 		PrivateKeyID:        c.KeyID,
-		PrivateKey:          c.Key,
+		PrivateKey:          strings.ReplaceAll(c.Key, "\\n", "\n"),
 		ClientEmail:         c.Client,
 		ClientID:            c.ClientID,
 		AuthURI:             "https://accounts.google.com/o/oauth2/auth",
 		TokenURI:            "https://accounts.google.com/o/oauth2/token",
 		AuthProviderCertURL: "https://www.googleapis.com/oauth2/v1/certs",
-		ClientCertURL:       "https://www.googleapis.com/robot/v1/metadata/x509/service-account-email",
+		ClientCertURL:       clientCertURL,
 	})
 }
 
@@ -107,10 +118,4 @@ func (c *Config) Clone() *Config {
 		clone.Scopes = append(clone.Scopes, c.Scopes...)
 	}
 	return clone
-}
-
-func (c *Config) setDefaults() {
-	if c.Endpoint == "" {
-		c.Endpoint = "secretmanager.googleapis.com:443"
-	}
 }
