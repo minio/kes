@@ -850,7 +850,7 @@ func (e *Enclave) path(api string, args ...string) string {
 		api = path.Join(api, url.PathEscape(arg))
 	}
 	if e.Name != "" {
-		api = "?enclave=" + url.QueryEscape(e.Name)
+		api += "?enclave=" + url.QueryEscape(e.Name)
 	}
 	return api
 }
