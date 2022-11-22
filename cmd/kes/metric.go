@@ -12,9 +12,10 @@ import (
 	"os"
 	"os/signal"
 	"sort"
-	"strconv"
+	"sync"
 	"time"
 
+	"aead.dev/mem"
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
@@ -107,7 +108,14 @@ func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Durat
 			red.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestFail)/float64(metric.RequestN()))),
 		)
 		fmt.Println(header.Render("System       UpTime            Heap           Stack       CPUs        Threads"))
-		fmt.Printf("%19s%16s%16s%11d%15d\n\n", metric.UpTime, formatMemory(metric.HeapAlloc), formatMemory(metric.StackAlloc), metric.UsableCPUs, metric.Threads)
+		fmt.Printf(
+			"%19s%16s%16s%11d%15d\n\n",
+			metric.UpTime,
+			mem.FormatSize(mem.Size(metric.HeapAlloc), 'D', 1),
+			mem.FormatSize(mem.Size(metric.StackAlloc), 'D', 1),
+			metric.UsableCPUs,
+			metric.Threads,
+		)
 	}
 	clearScreen := func() {
 		fmt.Print(EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine)
@@ -122,32 +130,38 @@ func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Durat
 	fmt.Print(HideCursor)
 	defer fmt.Print(ShowCursor)
 
-	ticker := time.NewTicker(rate)
-	for {
-		var err error
-		metric, err = client.Metrics(ctx)
-		if err != nil {
-			continue
-		}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(rate)
+		for {
+			var err error
+			metric, err = client.Metrics(ctx)
+			if err != nil {
+				continue
+			}
 
-		// Compute the current request rate
-		if requestN == 0 {
+			// Compute the current request rate
+			if requestN == 0 {
+				requestN = metric.RequestN()
+			}
+			reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
 			requestN = metric.RequestN()
-		}
-		reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
-		requestN = metric.RequestN()
 
-		if drawn {
-			clearScreen()
+			if drawn {
+				clearScreen()
+			}
+			draw(&metric, reqRate)
+			drawn = true
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
-		draw(&metric, reqRate)
-		drawn = true
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+	}()
+	wg.Wait()
 }
 
 // avgLatency computes the arithmetic mean latency o
@@ -173,25 +187,4 @@ func avgLatency(histogram map[time.Duration]uint64) time.Duration {
 		n += histogram[l] - n
 	}
 	return time.Duration(avg)
-}
-
-func formatMemory(size uint64) string {
-	const (
-		KiB = 1024
-		MiB = 1024 * KiB
-		GiB = 1024 * MiB
-		TiB = 1024 * GiB
-	)
-	switch {
-	case size < KiB:
-		return strconv.FormatUint(size, 10) + " B"
-	case size < MiB:
-		return strconv.FormatUint(size/KiB, 10) + " KiB"
-	case size < GiB:
-		return strconv.FormatUint(size/MiB, 10) + " MiB"
-	case size < TiB:
-		return strconv.FormatUint(size/GiB, 10) + " GiB"
-	default:
-		return strconv.FormatUint(size/TiB, 10) + " TiB"
-	}
 }
