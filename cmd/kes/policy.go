@@ -74,6 +74,8 @@ const createPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -e, --enclave <name>     Operate within the specified enclave.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -84,8 +86,12 @@ func createPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprintf(os.Stderr, createPolicyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		enclaveName        string
+	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -117,8 +123,8 @@ func createPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
-	if err := client.SetPolicy(ctx, name, &policy); err != nil {
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	if err := enclave.SetPolicy(ctx, name, &policy); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
@@ -131,6 +137,8 @@ const assignPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -e, --enclave <name>     Operate within the specified enclave.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -141,8 +149,12 @@ func assignPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprintf(os.Stderr, assignPolicyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		enclaveName        string
+	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -158,13 +170,13 @@ func assignPolicyCmd(args []string) {
 	}
 
 	policy := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
 	for _, identity := range cmd.Args()[1:] { // cmd.Arg(0) is the policy
-		if err := client.AssignPolicy(ctx, policy, kes.Identity(identity)); err != nil {
+		if err := enclave.AssignPolicy(ctx, policy, kes.Identity(identity)); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
@@ -184,6 +196,7 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
+    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -200,10 +213,12 @@ func lsPolicyCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
+		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -223,8 +238,8 @@ func lsPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
-	policies, err := client.ListPolicies(ctx, pattern)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	policies, err := enclave.ListPolicies(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -280,6 +295,8 @@ const rmPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -e, --enclave <name>     Operate within the specified enclave.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -291,8 +308,12 @@ func rmPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmPolicyCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		enclaveName        string
+	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -306,9 +327,9 @@ func rmPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	for _, name := range cmd.Args() {
-		if err := client.DeletePolicy(ctx, name); err != nil {
+		if err := enclave.DeletePolicy(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
@@ -328,6 +349,7 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
+    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -343,10 +365,12 @@ func infoPolicyCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
+		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print policy in JSON format.")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -361,8 +385,8 @@ func infoPolicyCmd(args []string) {
 	defer cancelCtx()
 
 	name := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
-	info, err := client.DescribePolicy(ctx, name)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	info, err := enclave.DescribePolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -404,7 +428,9 @@ const showPolicyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -e, --enclave <name>     Operate within the specified enclave.
         --json               Print policy in JSON format.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -418,9 +444,11 @@ func showPolicyCmd(args []string) {
 	var (
 		insecureSkipVerify bool
 		jsonFlag           bool
+		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print policy in JSON format.")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -432,12 +460,12 @@ func showPolicyCmd(args []string) {
 	}
 
 	name := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	policy, err := client.GetPolicy(ctx, name)
+	policy, err := enclave.GetPolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)

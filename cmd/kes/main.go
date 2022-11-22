@@ -169,6 +169,14 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 	})
 }
 
+func newEnclave(name string, insecureSkipVerify bool) *kes.Enclave {
+	client := newClient(insecureSkipVerify)
+	if name == "" {
+		name = os.Getenv("KES_ENCLAVE")
+	}
+	return client.Enclave(name)
+}
+
 func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
 
 func decodePrivateKey(pemBlock []byte) (*pem.Block, error) {
