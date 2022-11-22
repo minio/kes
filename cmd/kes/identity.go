@@ -340,6 +340,7 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
+    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -356,10 +357,12 @@ func infoIdentityCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
+		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print policy information in JSON format")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -389,9 +392,9 @@ func infoIdentityCmd(args []string) {
 		dotDenyStyle = dotDenyStyle.Foreground(ColorDotDeny)
 	}
 
-	client := newClient(insecureSkipVerify)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	if cmd.NArg() == 0 {
-		info, policy, err := client.DescribeSelf(ctx)
+		info, policy, err := enclave.DescribeSelf(ctx)
 		if err != nil {
 			cli.Fatal(err)
 		}
@@ -438,7 +441,7 @@ func infoIdentityCmd(args []string) {
 			}
 		}
 	} else {
-		info, err := client.DescribeIdentity(ctx, kes.Identity(cmd.Arg(0)))
+		info, err := enclave.DescribeIdentity(ctx, kes.Identity(cmd.Arg(0)))
 		if err != nil {
 			cli.Fatal(err)
 		}
@@ -478,6 +481,7 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
+    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -494,10 +498,12 @@ func lsIdentityCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
+		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -517,8 +523,8 @@ func lsIdentityCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
-	identities, err := client.ListIdentities(ctx, pattern)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	identities, err := enclave.ListIdentities(ctx, pattern)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -581,6 +587,8 @@ const rmIdentityCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
+    -e, --enclave <name>     Operate within the specified enclave.
+
     -h, --help               Print command line options.
 
 Examples:
@@ -591,8 +599,12 @@ func rmIdentityCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmIdentityCmdUsage) }
 
-	var insecureSkipVerify bool
+	var (
+		insecureSkipVerify bool
+		enclaveName        string
+	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -603,12 +615,12 @@ func rmIdentityCmd(args []string) {
 		cli.Fatal("no identity specified. See 'kes identity rm --help'")
 	}
 
-	client := newClient(insecureSkipVerify)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	for _, identity := range cmd.Args() {
-		if err := client.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
+		if err := enclave.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
