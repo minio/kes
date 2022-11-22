@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cpu"
@@ -88,7 +89,7 @@ func serverImportKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/import/"
-		MaxBody = 1 << 20
+		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
@@ -287,7 +288,7 @@ func serverGenerateKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/generate/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -369,7 +370,7 @@ func serverEncryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/encrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -441,7 +442,7 @@ func serverDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/decrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -517,7 +518,7 @@ func serverBulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/bulk/decrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 		MaxRequests = 1000 // For now, we limit the number of decryption requests in a single API call to 1000.

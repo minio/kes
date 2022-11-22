@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 )
@@ -81,7 +82,7 @@ func serverAssignPolicy(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/policy/assign/"
-		MaxBody = 1024 // 1 KB
+		MaxBody = int64(1 * mem.KiB)
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
@@ -223,7 +224,7 @@ func serverWritePolicy(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/policy/write/"
-		MaxBody = 1 << 20
+		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
