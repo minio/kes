@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/sys"
@@ -19,7 +20,7 @@ func serverCreateEnclave(mux *http.ServeMux, config *ServerConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/enclave/create/"
-		MaxBody = 1 << 20
+		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
 	)
 	type Request struct {

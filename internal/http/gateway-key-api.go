@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cpu"
@@ -81,7 +82,7 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/import/"
-		MaxBody = 1 << 20
+		MaxBody = 1 * mem.MiB
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
@@ -104,7 +105,7 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 			Error(w, err)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+		r.Body = http.MaxBytesReader(w, r.Body, int64(MaxBody))
 
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
 		if err := validateName(name); err != nil {
@@ -150,7 +151,7 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 	return API{
 		Method:  Method,
 		Path:    APIPath,
-		MaxBody: MaxBody,
+		MaxBody: int64(MaxBody),
 		Timeout: Timeout,
 	}
 }
@@ -264,7 +265,7 @@ func gatewayGenerateKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/generate/"
-		MaxBody     = 1 << 20
+		MaxBody     = 1 * mem.MiB
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -291,7 +292,7 @@ func gatewayGenerateKey(mux *http.ServeMux, config *GatewayConfig) API {
 			Error(w, err)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+		r.Body = http.MaxBytesReader(w, r.Body, int64(MaxBody))
 
 		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
 		if err := validateName(name); err != nil {
@@ -329,7 +330,7 @@ func gatewayGenerateKey(mux *http.ServeMux, config *GatewayConfig) API {
 	return API{
 		Method:  Method,
 		Path:    APIPath,
-		MaxBody: MaxBody,
+		MaxBody: int64(MaxBody),
 		Timeout: Timeout,
 	}
 }
@@ -338,7 +339,7 @@ func gatewayEncryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/encrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -406,7 +407,7 @@ func gatewayDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/decrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 	)
@@ -474,7 +475,7 @@ func gatewayBulkDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 	const (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/bulk/decrypt/"
-		MaxBody     = 1 << 20
+		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
 		ContentType = "application/json"
 		MaxRequests = 1000 // For now, we limit the number of decryption requests in a single API call to 1000.
