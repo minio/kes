@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"aead.dev/mem"
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
@@ -161,11 +162,11 @@ func statusCmd(args []string) {
 		fmt.Println(faint.Render(fmt.Sprintf("  %-8s", "Memory")))
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%3s %-6s", "·", "Heap")),
-			formatMemory(status.HeapAlloc),
+			mem.FormatSize(mem.Size(status.HeapAlloc), 'D', 1),
 		)
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%3s %-6s", "·", "Stack")),
-			formatMemory(status.StackAlloc),
+			mem.FormatSize(mem.Size(status.StackAlloc), 'D', 1),
 		)
 	}
 
