@@ -5,6 +5,8 @@
 package gcp
 
 import (
+	"path"
+
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	gcpiterator "google.golang.org/api/iterator"
 )
@@ -29,7 +31,7 @@ func (i *iterator) Next() bool {
 		i.err = err
 		return false
 	}
-	i.last = v.GetName()
+	i.last = path.Base(v.GetName())
 	return true
 }
 

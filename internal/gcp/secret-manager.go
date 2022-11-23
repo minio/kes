@@ -185,7 +185,7 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 // List returns a new Iterator over the names of
 // all stored keys.
 func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
-	location := path.Join("projects", c.config.ProjectID, "*")
+	location := path.Join("projects", c.config.ProjectID)
 	return &iterator{
 		src: c.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
 			Parent: location,
