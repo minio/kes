@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -368,41 +369,42 @@ func connect(ctx context.Context, config *keserv.ServerConfig, errorLog *log.Log
 }
 
 func description(config *keserv.ServerConfig) (kind, endpoint string, err error) {
-	/*
-		switch {
-		case config.KMS.FS.Path.Value != "":
-			kind = "Filesystem"
-			if endpoint, err = filepath.Abs(config.KMS.FS.Path.Value); err != nil {
-				endpoint = config.KMS.FS.Path.Value
-			}
-		case config.KeyStore.Generic.Endpoint.Value() != "":
-			kind = "Generic"
-			endpoint = config.KeyStore.Generic.Endpoint.Value()
-		case config.KMS.Vault.Endpoint.Value != "":
-			kind = "Hashicorp Vault"
-			endpoint = config.KMS.Vault.Endpoint.Value
-		case config.KMS.Fortanix.Endpoint.Value != "":
-			kind = "Fortanix SDKMS"
-			endpoint = config.KMS.Fortanix.Endpoint.Value
-		case config.KMS.SecretsManager.Endpoint.Value != "":
-			kind = "AWS SecretsManager"
-			endpoint = config.KMS.SecretsManager.Endpoint.Value
-		case config.KMS.KeySecure.Endpoint.Value != "":
-			kind = "Gemalto KeySecure"
-			endpoint = config.KMS.KeySecure.Endpoint.Value
-		case config.KMS.SecretManager.ProjectID.Value != "":
-			kind = "GCP SecretManager"
-			endpoint = config.KMS.SecretManager.Endpoint.Value + " | Project: " + config.KMS.SecretManager.ProjectID.Value
-		case config.KMS.KeyVault.Endpoint.Value != "":
-			kind = "Azure KeyVault"
-			endpoint = config.KMS.KeyVault.Endpoint.Value
-		default:
-			kind = "In-Memory"
-			endpoint = "non-persistent"
+	if config.KMS == nil {
+		return "", "", errors.New("no KMS backend specified")
+	}
+
+	switch kms := config.KMS.(type) {
+	case *keserv.FSConfig:
+		kind = "Filesystem"
+		if endpoint, err = filepath.Abs(kms.Dir.Value); err != nil {
+			endpoint = kms.Dir.Value
 		}
-		return kind, endpoint, nil
-	*/
-	return "undefined", "undefined", nil
+	case *keserv.KMSPluginConfig:
+		kind = "Plugin"
+		endpoint = kms.Endpoint.Value
+	case *keserv.VaultConfig:
+		kind = "Hashicorp Vault"
+		endpoint = kms.Endpoint.Value
+	case *keserv.FortanixConfig:
+		kind = "Fortanix SDKMS"
+		endpoint = kms.Endpoint.Value
+	case *keserv.SecretsManagerConfig:
+		kind = "AWS SecretsManager"
+		endpoint = kms.Endpoint.Value
+	case *keserv.KeySecureConfig:
+		kind = "Gemalto KeySecure"
+		endpoint = kms.Endpoint.Value
+	case *keserv.SecretManagerConfig:
+		kind = "GCP SecretManager"
+		endpoint = "Project: " + kms.ProjectID.Value
+	case *keserv.KeyVaultConfig:
+		kind = "Azure KeyVault"
+		endpoint = kms.Endpoint.Value
+	default:
+		kind = "In-Memory"
+		endpoint = "non-persistent"
+	}
+	return kind, endpoint, nil
 }
 
 // policySetFromConfig returns an in-memory PolicySet
