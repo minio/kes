@@ -566,7 +566,7 @@ type SecretsManagerConfig struct {
 func (c *SecretsManagerConfig) Connect(ctx context.Context) (kms.Conn, error) {
 	return aws.Connect(ctx, &aws.Config{
 		Addr:     c.Endpoint.Value,
-		Region:   c.Endpoint.Value,
+		Region:   c.Region.Value,
 		KMSKeyID: c.KMSKey.Value,
 		Login: aws.Credentials{
 			AccessKey:    c.AccessKey.Value,
