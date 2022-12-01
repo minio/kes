@@ -11,6 +11,8 @@ import (
 )
 
 type serverConfigYAML struct {
+	Version string `yaml:"version"`
+
 	Addr Env[string] `yaml:"address,omitempty"`
 
 	Admin struct {
@@ -176,7 +178,10 @@ type serverConfigYAML struct {
 }
 
 func serverConfigToYAML(config *ServerConfig) *serverConfigYAML {
+	const Version = "v1"
+
 	yml := new(serverConfigYAML)
+	yml.Version = Version
 	yml.Addr = config.Addr
 	yml.Admin.Identity = config.Admin
 

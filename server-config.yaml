@@ -1,5 +1,9 @@
+# The config file version. Currently this field is optional but future
+# KES versions will require it. The only valid value is "v1". 
+version: v1
+
 # The TCP address (ip:port) for the KES server to listen on.
-address: 0.0.0.0:7373
+address: 0.0.0.0:7373 # The pseudo address 0.0.0.0 refers to all network interfaces 
 
 admin:
   # The admin identity identifies the public/private key pair
