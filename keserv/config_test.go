@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/minio/kes"
+	"gopkg.in/yaml.v3"
 )
 
 func TestReadServerConfig(t *testing.T) {
@@ -30,9 +31,11 @@ var readServerConfigTests = []struct {
 }{
 	{Filename: "./testdata/fs.yml"},
 	{Filename: "./testdata/with_tls_ca.yml"},
+	{Filename: "./testdata/with_version.yml"},
 
 	{Filename: "./testdata/invalid_keys.yml", ShouldFail: true},
 	{Filename: "./testdata/invalid_root.yml", ShouldFail: true},
+	{Filename: "./testdata/invalid_version.yml", ShouldFail: true},
 }
 
 func TestRoundtripServerConfig(t *testing.T) {
@@ -101,5 +104,97 @@ var roundtripServerConfigTests = []ServerConfig{
 		KMS: &FSConfig{
 			Dir: Env[string]{Value: "/tmp/keys"},
 		},
+	},
+}
+
+func TestFindVersion(t *testing.T) {
+	for i, test := range findVersionsTests {
+		version, err := findVersion(test.Root)
+		if err == nil && test.ShouldFail {
+			t.Fatalf("Test %d should fail but passed", i)
+		}
+		if err != nil && !test.ShouldFail {
+			t.Fatalf("Test %d: failed to find version: %v", i, err)
+		}
+		if !test.ShouldFail && version != test.Version {
+			t.Fatalf("Test %d: got '%s' - want '%s'", i, version, test.Version)
+		}
+	}
+}
+
+var findVersionsTests = []struct {
+	Version    string
+	Root       *yaml.Node
+	ShouldFail bool
+}{
+	{ // 0 - Document tree without a "version" node
+		Version: "",
+		Root: &yaml.Node{
+			Kind:    yaml.DocumentNode,
+			Content: []*yaml.Node{{Content: []*yaml.Node{{}}}},
+		},
+	},
+	{ // 1 - Document tree with a "version" node
+		Version: "v1",
+		Root: &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{Content: []*yaml.Node{
+					{
+						Kind:  yaml.ScalarNode,
+						Value: "version",
+					},
+					{
+						Kind:  yaml.ScalarNode,
+						Value: "v1",
+					},
+				}},
+			},
+		},
+	},
+
+	{ // 2
+		Root:       nil,
+		ShouldFail: true,
+	},
+	{ // 3
+		Root:       &yaml.Node{Kind: yaml.ScalarNode},
+		ShouldFail: true,
+	},
+	{ // 3
+		Root:       &yaml.Node{Kind: yaml.DocumentNode},
+		ShouldFail: true,
+	},
+	{ // 4
+		Root:       &yaml.Node{Kind: yaml.DocumentNode, Content: make([]*yaml.Node, 2)},
+		ShouldFail: true,
+	},
+	{ // 5
+		Root: &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{Content: []*yaml.Node{
+					{
+						Kind:  yaml.DocumentNode,
+						Value: "version",
+					},
+				}},
+			},
+		},
+		ShouldFail: true,
+	},
+	{ // 6
+		Root: &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{Content: []*yaml.Node{
+					{
+						Kind:  yaml.ScalarNode,
+						Value: "version",
+					},
+				}},
+			},
+		},
+		ShouldFail: true,
 	},
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/minio/kes"
@@ -28,11 +29,26 @@ import (
 // DecodeServerConfig parses and returns a new ServerConfig
 // from an io.Reader.
 func DecodeServerConfig(r io.Reader) (*ServerConfig, error) {
+	const Version = "v1"
+
 	decoder := yaml.NewDecoder(r)
 	decoder.KnownFields(false)
 
+	var node yaml.Node
+	if err := decoder.Decode(&node); err != nil {
+		return nil, err
+	}
+
+	version, err := findVersion(&node)
+	if err != nil {
+		return nil, err
+	}
+	if version != "" && version != Version {
+		return nil, errors.New("keserv: invalid server config version '" + version + "'")
+	}
+
 	var config serverConfigYAML
-	if err := decoder.Decode(&config); err != nil {
+	if err := node.Decode(&config); err != nil {
 		return nil, err
 	}
 	return yamlToServerConfig(&config), nil
@@ -76,6 +92,41 @@ func WriteServerConfig(filename string, config *ServerConfig) error {
 		return err
 	}
 	return file.Close()
+}
+
+// findVersion finds the version field in the
+// the given YAML document AST.
+//
+// If the top level of the AST does not contain
+// a version field the returned version is empty.
+func findVersion(root *yaml.Node) (string, error) {
+	if root == nil {
+		return "", errors.New("keserv: invalid server config")
+	}
+	if root.Kind != yaml.DocumentNode {
+		return "", errors.New("keserv: invalid server config")
+	}
+	if len(root.Content) != 1 {
+		return "", errors.New("keserv: invalid server config")
+	}
+
+	doc := root.Content[0]
+	for i, n := range doc.Content {
+		if n.Value == "version" {
+			if n.Kind != yaml.ScalarNode {
+				return "", errors.New("keserv: invalid server config version at line " + strconv.Itoa(n.Line))
+			}
+			if i == len(doc.Content)-1 {
+				return "", errors.New("keserv: invalid server config version at line " + strconv.Itoa(n.Line))
+			}
+			v := doc.Content[i+1]
+			if v.Kind != yaml.ScalarNode {
+				return "", errors.New("keserv: invalid server config version at line " + strconv.Itoa(v.Line))
+			}
+			return v.Value, nil
+		}
+	}
+	return "", nil
 }
 
 // ServerConfig is a structure that holds configuration
