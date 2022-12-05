@@ -24,6 +24,7 @@ func gatewayVersion(mux *http.ServeMux, config *GatewayConfig) API {
 	)
 	type Response struct {
 		Version string `json:"version"`
+		Commit  string `json:"commit"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -34,6 +35,7 @@ func gatewayVersion(mux *http.ServeMux, config *GatewayConfig) API {
 		}
 		json.NewEncoder(w).Encode(Response{
 			Version: sys.BinaryInfo().Version,
+			Commit:  sys.BinaryInfo().CommitID,
 		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))

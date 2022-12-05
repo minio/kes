@@ -1,7 +1,7 @@
 project_name: kes
 
 release:
-   name_template: "Release version {{.Version}}"
+   name_template: Release {{ replace .CommitDate ":" "-" }}
 
    github:
     owner: minio
@@ -10,6 +10,7 @@ release:
 before:
   hooks:
     - go mod tidy
+    - sh -c 'git diff --quiet || (echo "Repo contains modified files. Run git checkout" && exit 1)'
 
 builds:
   -
@@ -30,7 +31,7 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
-      - --tags=version=v{{.Version}}
+      - -buildvcs=true
     ldflags:
       - "-s -w"
 
@@ -60,44 +61,44 @@ signs:
     artifacts: all
 
 snapshot:
-  name_template: v0.0.0@{{.ShortCommit}}
+  name_template: '{{ replace .CommitDate ":" "-" }}'
 
 changelog:
   sort: asc
 
 dockers:
 - image_templates:
-  - "minio/kes:{{ .Tag }}-amd64"
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/amd64"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/amd64'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "minio/kes:{{ .Tag }}-ppc64le"
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/ppc64le"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/ppc64le'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "minio/kes:{{ .Tag }}-s390x"
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/s390x"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/s390x'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "minio/kes:{{ .Tag }}-arm64"
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
   use: buildx
   goarch: arm64
   dockerfile: Dockerfile.release
@@ -105,40 +106,40 @@ dockers:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/arm64"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/arm64'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "quay.io/minio/kes:{{ .Tag }}-amd64"
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/amd64"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/amd64'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "quay.io/minio/kes:{{ .Tag }}-ppc64le"
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/ppc64le"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/ppc64le'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "quay.io/minio/kes:{{ .Tag }}-s390x"
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
   use: buildx
   dockerfile: Dockerfile.release
   extra_files:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/s390x"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/s390x'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - "quay.io/minio/kes:{{ .Tag }}-arm64"
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
   use: buildx
   goarch: arm64
   dockerfile: Dockerfile.release
@@ -146,24 +147,24 @@ dockers:
     - LICENSE
     - CREDITS
   build_flag_templates:
-  - "--platform=linux/arm64"
-  - "--build-arg=TAG={{ .Tag }}"
+  - '--platform=linux/arm64'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 docker_manifests:
-- name_template: minio/kes:{{ .Tag }}
+- name_template: minio/kes:{{ replace .CommitDate ":" "-" }}
   image_templates:
-  - minio/kes:{{ .Tag }}-amd64
-  - minio/kes:{{ .Tag }}-arm64
-  - minio/kes:{{ .Tag }}-ppc64le
-  - minio/kes:{{ .Tag }}-s390x
-- name_template: quay.io/minio/kes:{{ .Tag }}
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
+- name_template: quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}
   image_templates:
-  - quay.io/minio/kes:{{ .Tag }}-amd64
-  - quay.io/minio/kes:{{ .Tag }}-arm64
-  - quay.io/minio/kes:{{ .Tag }}-ppc64le
-  - quay.io/minio/kes:{{ .Tag }}-s390x
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
 - name_template: minio/kes:latest
   image_templates:
-  - minio/kes:{{ .Tag }}-amd64
-  - minio/kes:{{ .Tag }}-arm64
-  - minio/kes:{{ .Tag }}-ppc64le
-  - minio/kes:{{ .Tag }}-s390x
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
+  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
