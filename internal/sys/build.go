@@ -8,8 +8,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
-
-	"github.com/blang/semver/v4"
 )
 
 // BuildInfo contains build information
@@ -32,7 +30,7 @@ func BinaryInfo() BuildInfo {
 
 func readBinaryInfo() BuildInfo {
 	const (
-		DefaultVersion  = "v0.0.0-dev"
+		DefaultVersion  = "<unknown>"
 		DefaultCommitID = "<unknown>"
 	)
 	binaryInfo := BuildInfo{
@@ -46,23 +44,12 @@ func readBinaryInfo() BuildInfo {
 	}
 
 	const (
-		TagKey         = "-tags"
+		GitTimeKey     = "vcs.time"
 		GitRevisionKey = "vcs.revision"
-
-		VersionTag = "version="
 	)
 	for _, setting := range info.Settings {
-		if strings.HasPrefix(setting.Key, TagKey) {
-			keys := strings.Split(setting.Value, ",")
-			for _, key := range keys {
-				if strings.HasPrefix(key, VersionTag) {
-					v := strings.TrimPrefix(key, VersionTag)
-					if _, err := semver.ParseTolerant(v); err == nil {
-						binaryInfo.Version = v
-					}
-					break
-				}
-			}
+		if setting.Key == GitTimeKey {
+			binaryInfo.Version = strings.ReplaceAll(setting.Value, ":", "-")
 		}
 		if setting.Key == GitRevisionKey {
 			binaryInfo.CommitID = setting.Value

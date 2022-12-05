@@ -25,7 +25,7 @@ func ExampleGateway() {
 	fmt.Println(version)
 
 	// Output:
-	// v0.0.0-dev
+	// <unknown>
 }
 
 func ExampleGateway_IssueClientCertificate() {
