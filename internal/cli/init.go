@@ -5,7 +5,9 @@
 package cli
 
 import (
+	"errors"
 	"os"
+	"strconv"
 
 	"github.com/minio/kes/internal/yml"
 	"gopkg.in/yaml.v3"
@@ -15,6 +17,8 @@ import (
 // possible KES initialization configuration
 // fields.
 type InitConfig struct {
+	Version string `yaml:"version"`
+
 	Address yml.String `yaml:"address"`
 
 	System struct {
@@ -68,10 +72,57 @@ func ReadInitConfig(filename string) (*InitConfig, error) {
 	}
 	defer f.Close()
 
-	var config InitConfig
-	if err := yaml.NewDecoder(f).Decode(&config); err != nil {
+	var node yaml.Node
+	if err := yaml.NewDecoder(f).Decode(&node); err != nil {
 		return nil, err
 	}
 
+	version, err := findVersion(&node)
+	if err != nil {
+		return nil, err
+	}
+	if version != "v1" {
+		return nil, errors.New("cli: invalid init config version '" + version + "'")
+	}
+
+	var config InitConfig
+	if err := node.Decode(&config); err != nil {
+		return nil, err
+	}
 	return &config, nil
+}
+
+// findVersion finds the version field in the
+// the given YAML document AST.
+//
+// It returns an error if the top level of the
+// AST does not contain a version field.
+func findVersion(root *yaml.Node) (string, error) {
+	if root == nil {
+		return "", errors.New("cli: invalid init config: root not found")
+	}
+	if root.Kind != yaml.DocumentNode {
+		return "", errors.New("cli: invalid init config: not document node")
+	}
+	if len(root.Content) != 1 {
+		return "", errors.New("cli: invalid init config: none or several root nodes")
+	}
+
+	doc := root.Content[0]
+	for i, n := range doc.Content {
+		if n.Value == "version" {
+			if n.Kind != yaml.ScalarNode {
+				return "", errors.New("cli: invalid init config version at line " + strconv.Itoa(n.Line))
+			}
+			if i == len(doc.Content)-1 {
+				return "", errors.New("cli: invalid init config version at line " + strconv.Itoa(n.Line))
+			}
+			v := doc.Content[i+1]
+			if v.Kind != yaml.ScalarNode {
+				return "", errors.New("cli: invalid init config version at line " + strconv.Itoa(v.Line))
+			}
+			return v.Value, nil
+		}
+	}
+	return "", errors.New("cli: invalid init config: missing 'version' field")
 }
