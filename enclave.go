@@ -165,6 +165,50 @@ func (e *Enclave) ImportKey(ctx context.Context, name string, key []byte) error 
 	return nil
 }
 
+// ExportKey exports the specified key from a KES server. It
+// returns ErrKeyNotFound if a key with the given name does not
+// exists.
+func (e *Enclave) ExportKey(ctx context.Context, name string) ([]byte, *KeyInfo, error) {
+	const (
+		APIPath         = "/v1/key/export"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Name      string    `json:"name"`
+		Algorithm string    `json:"algorithm"`
+		ID        string    `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
+
+		Bytes []byte `json:"bytes"`
+	}
+	e.init.Do(e.initLoadBalancer)
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, nil, err
+	}
+	info := &KeyInfo{
+		Name:      response.Name,
+		Algorithm: response.Algorithm,
+		ID:        response.ID,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}
+	return response.Bytes, info, nil
+}
+
 // DescribeKey returns the KeyInfo for the given key.
 // It returns ErrKeyNotFound if no such key exists.
 func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
@@ -176,6 +220,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	)
 	type Response struct {
 		Name      string    `json:"name"`
+		Algorithm string    `json:"algorithm"`
 		ID        string    `json:"id"`
 		CreatedAt time.Time `json:"created_at"`
 		CreatedBy Identity  `json:"created_by"`
@@ -199,6 +244,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	}
 	return &KeyInfo{
 		Name:      response.Name,
+		Algorithm: response.Algorithm,
 		ID:        response.ID,
 		CreatedAt: response.CreatedAt,
 		CreatedBy: response.CreatedBy,

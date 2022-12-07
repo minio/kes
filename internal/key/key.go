@@ -137,6 +137,11 @@ func (k *Key) ID() string {
 	return hex.EncodeToString(h[:Size])
 }
 
+func (k *Key) Bytes() []byte {
+	b := make([]byte, 0, len(k.bytes))
+	return append(b, k.bytes...)
+}
+
 // Clone returns a deep copy of the key.
 func (k *Key) Clone() Key {
 	return Key{

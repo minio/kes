@@ -14,8 +14,10 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )
@@ -26,6 +28,7 @@ const keyCmdUsage = `Usage:
 Commands:
     create                   Create a new crypto key.
     import                   Import a crypto key.
+    export                   Export a crypto key.
     info                     Get information about a crypto key. 
     ls                       List crypto keys.
     rm                       Delete a crypto key.
@@ -45,6 +48,7 @@ func keyCmd(args []string) {
 	subCmds := commands{
 		"create": createKeyCmd,
 		"import": importKeyCmd,
+		"export": exportKeyCmd,
 		"info":   describeKeyCmd,
 		"ls":     lsKeyCmd,
 		"rm":     rmKeyCmd,
@@ -181,6 +185,135 @@ func importKeyCmd(args []string) {
 	}
 }
 
+const exportKeyCmdUsage = `Usage:
+    kes key export [options] <name>
+
+Options:
+    -k, --insecure           Skip TLS certificate validation.
+        --json               Print keys in JSON format. 
+        --color <when>       Specify when to use colored output. The automatic
+                             mode only enables colors if an interactive terminal
+                             is detected - colors are automatically disabled if
+                             the output goes to a pipe.
+                             Possible values: *auto*, never, always.
+    -e, --enclave <name>     Operate within the specified enclave.
+
+    -h, --help               Print command line options.
+
+Examples:
+    $ kes key export my-key
+`
+
+func exportKeyCmd(args []string) {
+	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, exportKeyCmdUsage) }
+
+	var (
+		jsonFlag           bool
+		colorFlag          colorOption
+		insecureSkipVerify bool
+		enclaveName        string
+	)
+	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
+	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
+	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	if err := cmd.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(2)
+		}
+		cli.Fatalf("%v. See 'kes key export --help'", err)
+	}
+
+	if cmd.NArg() == 0 {
+		cli.Fatal("no crypto key specified. See 'kes key export --help'")
+	}
+	if cmd.NArg() > 1 {
+		cli.Fatal("too many arguments. See 'kes key export --help'")
+	}
+	name := cmd.Arg(0)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	key, info, err := enclave.ExportKey(ctx, name)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatalf("failed to export %q: %v", name, err)
+	}
+	if jsonFlag {
+		type JSON struct {
+			Name      string       `json:"name"`
+			Bytes     []byte       `json:"bytes"`
+			Algorithm string       `json:"algorithm,omitempty"`
+			ID        string       `json:"id,omitempty"`
+			CreatedAt time.Time    `json:"created_at,omitempty"`
+			CreatedBy kes.Identity `json:"created_by,omitempty"`
+		}
+		err = json.NewEncoder(os.Stdout).Encode(JSON{
+			Bytes:     key,
+			Name:      info.Name,
+			Algorithm: info.Algorithm,
+			ID:        info.ID,
+			CreatedAt: info.CreatedAt,
+			CreatedBy: info.CreatedBy,
+		})
+		if err != nil {
+			cli.Fatalf("failed to describe keys: %v", err)
+		}
+		return
+	}
+
+	var faint, nameStyle tui.Style
+	if colorFlag.Colorize() {
+		const ColorName tui.Color = "#2e42d1"
+		faint = faint.Faint(true).Bold(true)
+		nameStyle = nameStyle.Foreground(ColorName)
+	}
+	year, month, day := info.CreatedAt.Date()
+	hour, min, sec := info.CreatedAt.Clock()
+
+	fmt.Println(
+		faint.Render(fmt.Sprintf("%-11s", "Name")),
+		nameStyle.Render(info.Name),
+	)
+	if info.Algorithm != "" {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
+			info.Algorithm,
+		)
+	}
+	if info.ID != "" {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "ID")),
+			info.ID,
+		)
+	}
+	fmt.Println(
+		faint.Render(fmt.Sprintf("%-11s", "Created At")),
+		fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+	)
+	if info.CreatedBy.IsUnknown() {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Created By")),
+			"<unknown>",
+		)
+	} else {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Created By")),
+			info.CreatedBy,
+		)
+	}
+	fmt.Println()
+	fmt.Println(
+		faint.Render(fmt.Sprintf("%-11s", "Key")),
+		base64.StdEncoding.EncodeToString(key),
+	)
+}
+
 const describeKeyCmdUsage = `Usage:
     kes key info [options] <name>
 
@@ -260,6 +393,12 @@ func describeKeyCmd(args []string) {
 		faint.Render(fmt.Sprintf("%-11s", "Name")),
 		nameStyle.Render(info.Name),
 	)
+	if info.Algorithm != "" {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
+			info.Algorithm,
+		)
+	}
 	if info.ID != "" {
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "ID")),

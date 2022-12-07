@@ -50,6 +50,7 @@ type PCP struct {
 // KeyInfo describes a cryptographic key at a KES server.
 type KeyInfo struct {
 	Name      string    `json:"name"`                 // Name of the cryptographic key
+	Algorithm string    `json:"algorithm,omitempty"`  // Cryptographic algorithm the key can be used for
 	ID        string    `json:"id,omitempty"`         // ID of the cryptographic key
 	CreatedAt time.Time `json:"created_at,omitempty"` // Point in time when the key was created
 	CreatedBy Identity  `json:"created_by,omitempty"` // Identity that created the key

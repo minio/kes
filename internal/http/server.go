@@ -59,6 +59,7 @@ func NewServerMux(config *ServerConfig) *http.ServeMux {
 
 	config.APIs = append(config.APIs, serverCreateKey(mux, config))
 	config.APIs = append(config.APIs, serverImportKey(mux, config))
+	config.APIs = append(config.APIs, serverExportKey(mux, config))
 	config.APIs = append(config.APIs, serverDescribeKey(mux, config))
 	config.APIs = append(config.APIs, serverDeleteKey(mux, config))
 	config.APIs = append(config.APIs, serverGenerateKey(mux, config))

@@ -387,6 +387,18 @@ func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
 	return enclave.ImportKey(ctx, name, key)
 }
 
+// ExportKey exports the specified key from a KES server. It
+// returns ErrKeyNotFound if a key with the given name does not
+// exists.
+func (c *Client) ExportKey(ctx context.Context, name string) ([]byte, *KeyInfo, error) {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.ExportKey(ctx, name)
+}
+
 // DescribeKey returns the KeyInfo for the given key.
 // It returns ErrKeyNotFound if no such key exists.
 func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {

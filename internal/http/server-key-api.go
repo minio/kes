@@ -176,6 +176,7 @@ func serverDescribeKey(mux *http.ServeMux, config *ServerConfig) API {
 	)
 	type Response struct {
 		Name      string       `json:"name"`
+		Algorithm string       `json:"algorithm,omitempty"`
 		ID        string       `json:"id,omitempty"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
@@ -218,9 +219,80 @@ func serverDescribeKey(mux *http.ServeMux, config *ServerConfig) API {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			Name:      strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath)),
+			Algorithm: key.Algorithm().String(),
 			ID:        key.ID(),
 			CreatedAt: key.CreatedAt(),
 			CreatedBy: key.CreatedBy(),
+		})
+	}
+	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
+	return API{
+		Method:  Method,
+		Path:    APIPath,
+		MaxBody: MaxBody,
+		Timeout: Timeout,
+	}
+}
+
+func serverExportKey(mux *http.ServeMux, config *ServerConfig) API {
+	const (
+		Method  = http.MethodGet
+		APIPath = "/v1/key/export/"
+		MaxBody = 0
+		Timeout = 15 * time.Second
+	)
+	type Response struct {
+		Name      string       `json:"name"`
+		Algorithm string       `json:"algorithm,omitempty"`
+		ID        string       `json:"id,omitempty"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy kes.Identity `json:"created_by,omitempty"`
+
+		Bytes []byte `json:"bytes"`
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w = audit(w, r, config.AuditLog.Log())
+
+		if r.Method != Method {
+			w.Header().Set("Accept", Method)
+			Error(w, errMethodNotAllowed)
+			return
+		}
+		if err := normalizeURL(r.URL, APIPath); err != nil {
+			Error(w, err)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+
+		key, err := VSync(config.Vault.RLocker(), func() (key.Key, error) {
+			enclave, err := lookupEnclave(config.Vault, r)
+			if err != nil {
+				return key.Key{}, err
+			}
+			return VSync(enclave.RLocker(), func() (key.Key, error) {
+				if err = enclave.VerifyRequest(r); err != nil {
+					return key.Key{}, err
+				}
+				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
+				if err = validateName(name); err != nil {
+					return key.Key{}, err
+				}
+				return enclave.GetKey(r.Context(), name)
+			})
+		})
+		if err != nil {
+			Error(w, err)
+			return
+		}
+		w.Header().Set("Content-Length", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(Response{
+			Name:      strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath)),
+			Algorithm: key.Algorithm().String(),
+			ID:        key.ID(),
+			CreatedAt: key.CreatedAt(),
+			CreatedBy: key.CreatedBy(),
+			Bytes:     key.Bytes(),
 		})
 	}
 	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
