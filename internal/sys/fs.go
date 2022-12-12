@@ -5,12 +5,18 @@
 package sys
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 
+	"aead.dev/mem"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/secret"
 	"github.com/minio/kes/kms"
 )
 
@@ -70,6 +76,29 @@ type KeyFS interface {
 
 	// ListKeys returns an iterator over all key entries.
 	ListKeys(ctx context.Context) (kms.Iter, error)
+}
+
+// SecretFS provides access to secrets within a particular
+// Enclave.
+type SecretFS interface {
+	// CreateSecret creates a new entry for the given secret
+	// if and only if no such entry exists already.
+	//
+	// It returns ErrSecretExists if such a secret already exists.
+	CreateSecret(ctx context.Context, name string, secret secret.Secret) error
+
+	// GetSecret returns the requested secret.
+	//
+	// It returns ErrSecretNotFound if no such secret exists.
+	GetSecret(ctx context.Context, name string) (secret.Secret, error)
+
+	// DeleteSecret deletes the specified secret.
+	//
+	// It returns ErrSecretNotFound if no such secret exists.
+	DeleteSecret(ctx context.Context, name string) error
+
+	// ListSecrets returns an iterator over all secret entries.
+	ListSecrets(ctx context.Context) (secret.Iter, error)
 }
 
 // PolicyFS provides access to policies within a particular Enclave.
@@ -133,4 +162,101 @@ func valid(name string) error {
 		}
 	}
 	return nil
+}
+
+func createFile(filename string, key key.Key, plaintext, associatedData []byte) error {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	ciphertext, err := key.Wrap(plaintext, associatedData)
+	if err != nil {
+		return err
+	}
+
+	n, err := file.Write(ciphertext)
+	if err != nil {
+		return err
+	}
+	if n != len(ciphertext) {
+		return io.ErrShortWrite
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	return file.Close()
+}
+
+func readFile(filename string, key key.Key, limit mem.Size, associatedData []byte) ([]byte, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var ciphertext bytes.Buffer
+	if _, err := io.Copy(&ciphertext, mem.LimitReader(file, limit)); err != nil {
+		return nil, err
+	}
+	plaintext, err := key.Unwrap(ciphertext.Bytes(), associatedData)
+	if err != nil {
+		return nil, err
+	}
+	return plaintext, file.Close()
+}
+
+type iter struct {
+	ctx   context.Context
+	file  *os.File
+	names []string
+
+	err    error
+	closed bool
+}
+
+func (i *iter) Next() bool {
+	if i.closed || i.err != nil {
+		return false
+	}
+	if len(i.names) > 0 {
+		i.names = i.names[1:]
+		return true
+	}
+
+	select {
+	case <-i.ctx.Done():
+		i.Close()
+		if i.err == nil {
+			i.err = i.ctx.Err()
+		}
+		return false
+	default:
+	}
+
+	i.names, i.err = i.file.Readdirnames(250)
+	if i.err == nil {
+		return true
+	}
+	if len(i.names) > 0 && errors.Is(i.err, io.EOF) {
+		i.err = nil
+		return true
+	}
+	return false
+}
+
+func (i *iter) Name() string {
+	if len(i.names) > 0 {
+		return i.names[0]
+	}
+	return ""
+}
+
+func (i *iter) Close() error {
+	if !i.closed {
+		i.closed = true
+		i.err = i.file.Close()
+	}
+	return i.err
 }

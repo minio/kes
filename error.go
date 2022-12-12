@@ -36,6 +36,14 @@ var (
 	// to create a cryptographic key which already exists.
 	ErrKeyExists = NewError(http.StatusBadRequest, "key already exists")
 
+	// ErrSecretNotFound is returned by a KES server when a client tries to
+	// access a secret which does not exist.
+	ErrSecretNotFound = NewError(http.StatusNotFound, "secret does not exist")
+
+	// ErrKeyExists is returned by a KES server when a client tries
+	// to create a secret which already exists.
+	ErrSecretExists = NewError(http.StatusNotFound, "secret already exists")
+
 	// ErrPolicyNotFound is returned by a KES server when a client
 	// tries to access a policy which does not exist.
 	ErrPolicyNotFound = NewError(http.StatusNotFound, "policy does not exist")

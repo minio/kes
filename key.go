@@ -328,7 +328,7 @@ func (i *KeyIterator) Values(n int) ([]KeyInfo, error) {
 	return values, nil
 }
 
-// Close closes the IdentityIterator and releases
+// Close closes the KeyIterator and releases
 // any associated resources.
 func (i *KeyIterator) Close() error {
 	if !i.closed {

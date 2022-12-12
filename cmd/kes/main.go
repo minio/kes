@@ -33,6 +33,7 @@ Commands:
 
     enclave                  Manage KES enclaves.
     key                      Manage cryptographic keys.
+    secret                   Manage KES secrets.
     policy                   Manage KES policies.
     identity                 Manage KES identities.
 
@@ -63,6 +64,7 @@ func main() {
 
 		"enclave":  enclaveCmd,
 		"key":      keyCmd,
+		"secret":   secretCmd,
 		"policy":   policyCmd,
 		"identity": identityCmd,
 

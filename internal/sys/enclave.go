@@ -19,6 +19,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/secret"
 	"github.com/minio/kes/kms"
 )
 
@@ -35,6 +36,10 @@ type EnclaveInfo struct {
 	// KeyStoreKey is the root encryption key used to
 	// en/decrypt the key store.
 	KeyStoreKey key.Key
+
+	// SecretKey is the root encryption key used to
+	// en/decrypt the secret store.
+	SecretKey key.Key
 
 	// PolicyKey is the root encryption key used to
 	// en/decrypt the policy set.
@@ -57,6 +62,7 @@ func (e EnclaveInfo) MarshalBinary() ([]byte, error) {
 	type GOB struct {
 		Name        string
 		KeyStoreKey key.Key
+		SecretKey   key.Key
 		PolicyKey   key.Key
 		IdentityKey key.Key
 		CreatedAt   time.Time
@@ -75,6 +81,7 @@ func (e *EnclaveInfo) UnmarshalBinary(b []byte) error {
 	type GOB struct {
 		Name        string
 		KeyStoreKey key.Key
+		SecretKey   key.Key
 		PolicyKey   key.Key
 		IdentityKey key.Key
 		CreatedAt   time.Time
@@ -87,6 +94,7 @@ func (e *EnclaveInfo) UnmarshalBinary(b []byte) error {
 	}
 	e.Name = value.Name
 	e.KeyStoreKey = value.KeyStoreKey
+	e.SecretKey = value.SecretKey
 	e.PolicyKey = value.PolicyKey
 	e.IdentityKey = value.IdentityKey
 	e.CreatedAt = value.CreatedAt
@@ -96,13 +104,15 @@ func (e *EnclaveInfo) UnmarshalBinary(b []byte) error {
 
 // NewEnclave returns a new Enclave with the
 // given key store, policy set and identity set.
-func NewEnclave(keys KeyFS, policies PolicyFS, identities IdentityFS) *Enclave {
+func NewEnclave(keys KeyFS, secrets SecretFS, policies PolicyFS, identities IdentityFS) *Enclave {
 	return &Enclave{
 		keys:       keys,
+		secrets:    secrets,
 		policies:   policies,
 		identities: identities,
 
 		keyCache:      map[string]key.Key{},
+		secretCache:   map[string]secret.Secret{},
 		policyCache:   map[string]auth.Policy{},
 		identityCache: map[kes.Identity]auth.IdentityInfo{},
 	}
@@ -112,6 +122,7 @@ func NewEnclave(keys KeyFS, policies PolicyFS, identities IdentityFS) *Enclave {
 // stores keys, policies and identities.
 type Enclave struct {
 	keys       KeyFS
+	secrets    SecretFS
 	policies   PolicyFS
 	identities IdentityFS
 	lock       sync.RWMutex
@@ -119,6 +130,7 @@ type Enclave struct {
 	cacheLock     sync.Mutex
 	admin         kes.Identity
 	keyCache      map[string]key.Key
+	secretCache   map[string]secret.Secret
 	policyCache   map[string]auth.Policy
 	identityCache map[kes.Identity]auth.IdentityInfo
 }
@@ -184,6 +196,57 @@ func (e *Enclave) GetKey(ctx context.Context, name string) (key.Key, error) {
 // It does not provide any ordering guarantees.
 func (e *Enclave) ListKeys(ctx context.Context) (kms.Iter, error) {
 	return e.keys.ListKeys(ctx)
+}
+
+// CreateSecret stores the given secret if and only if no entry with
+// the given name exists.
+//
+// It returns kes.ErrSecretExists if such an entry exists.
+func (e *Enclave) CreateSecret(ctx context.Context, name string, secret secret.Secret) error {
+	if _, ok := e.secretCache[name]; ok {
+		return kes.ErrSecretExists
+	}
+	return e.secrets.CreateSecret(ctx, name, secret)
+}
+
+// GetSecret returns the secret associated with the given name.
+//
+// It returns kes.ErrSecretNotFound if no such entry exists.
+func (e *Enclave) GetSecret(ctx context.Context, name string) (secret.Secret, error) {
+	if s, ok := e.secretCache[name]; ok {
+		return s, nil
+	}
+
+	e.cacheLock.Lock()
+	defer e.cacheLock.Unlock()
+
+	if s, ok := e.secretCache[name]; ok {
+		return s, nil
+	}
+	s, err := e.secrets.GetSecret(ctx, name)
+	if err != nil {
+		return secret.Secret{}, err
+	}
+	e.secretCache[name] = s
+	return s, nil
+}
+
+// DeleteSecret deletes the secret associated with the given name.
+//
+// It returns kes.ErrSecretNotFound if no such entry exists.
+func (e *Enclave) DeleteSecret(ctx context.Context, name string) error {
+	delete(e.secretCache, name)
+	return e.secrets.DeleteSecret(ctx, name)
+}
+
+// ListSecrets returns a new iterator over all secrets within the
+// Enclave.
+//
+// The iterator makes no guarantees about whether concurrent changes
+// to the enclave - i.e. creation or deletion of secrets - are reflected.
+// It does not provide any ordering guarantees.
+func (e *Enclave) ListSecrets(ctx context.Context) (secret.Iter, error) {
+	return e.secrets.ListSecrets(ctx)
 }
 
 // SetPolicy creates or overwrites the policy with the given name.

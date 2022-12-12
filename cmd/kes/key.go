@@ -226,7 +226,7 @@ func describeKeyCmd(args []string) {
 	case cmd.NArg() == 0:
 		cli.Fatal("no key name specified. See 'kes key info --help'")
 	case cmd.NArg() > 1:
-		cli.Fatal("too many arguments. See 'kes key ls --help'")
+		cli.Fatal("too many arguments. See 'kes key info --help'")
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
