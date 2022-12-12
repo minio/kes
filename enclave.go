@@ -166,6 +166,7 @@ func (e *Enclave) ImportKey(ctx context.Context, name string, key []byte) error 
 }
 
 // DescribeKey returns the KeyInfo for the given key.
+//
 // It returns ErrKeyNotFound if no such key exists.
 func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
 	const (
@@ -481,6 +482,190 @@ func (e *Enclave) ListKeys(ctx context.Context, pattern string) (*KeyIterator, e
 		return nil, parseErrorResponse(resp)
 	}
 	return &KeyIterator{
+		decoder: json.NewDecoder(resp.Body),
+		closer:  resp.Body,
+	}, nil
+}
+
+// CreateSecret creates a new secret with the given name.
+//
+// It returns ErrSecretExists if a secret with the same name
+// already exists.
+func (e *Enclave) CreateSecret(ctx context.Context, name string, value []byte, options *SecretOptions) error {
+	const (
+		APIPath  = "/v1/secret/create"
+		Method   = http.MethodPost
+		StatusOK = http.StatusOK
+	)
+	e.init.Do(e.initLoadBalancer)
+
+	type Request struct {
+		Bytes []byte     `json:"bytes"`
+		Type  SecretType `json:"type,omitempty"`
+	}
+
+	req := Request{
+		Bytes: value,
+		Type:  SecretGeneric,
+	}
+	if options != nil {
+		req.Type = options.Type
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, name), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
+}
+
+// DescribeSecret returns the SecretInfo for the given secret.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (e *Enclave) DescribeSecret(ctx context.Context, name string) (*SecretInfo, error) {
+	const (
+		APIPath         = "/v1/secret/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	e.init.Do(e.initLoadBalancer)
+
+	type Response struct {
+		Name      string     `json:"name"`
+		Type      SecretType `json:"type"`
+		CreatedAt time.Time  `json:"created_at"`
+		CreatedBy Identity   `json:"created_by"`
+	}
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &SecretInfo{
+		Name:      name,
+		Type:      response.Type,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
+// ReadSecret returns the secret with the given name.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (e *Enclave) ReadSecret(ctx context.Context, name string) ([]byte, *SecretInfo, error) {
+	const (
+		APIPath         = "/v1/secret/read"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	e.init.Do(e.initLoadBalancer)
+
+	type Response struct {
+		Bytes     []byte     `json:"bytes"`
+		Name      string     `json:"name"`
+		Type      SecretType `json:"type"`
+		CreatedAt time.Time  `json:"created_at"`
+		CreatedBy Identity   `json:"created_by"`
+	}
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, nil, err
+	}
+	return response.Bytes, &SecretInfo{
+		Name:      name,
+		Type:      response.Type,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
+}
+
+// DeleteSecret deletes the secret with the given name.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (e *Enclave) DeleteSecret(ctx context.Context, name string) error {
+	const (
+		APIPath  = "/v1/secret/delete"
+		Method   = http.MethodDelete
+		StatusOK = http.StatusOK
+	)
+	e.init.Do(e.initLoadBalancer)
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, name), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
+}
+
+// ListSecrets returns a SecretIter that iterates over all secrets
+// matching the pattern.
+//
+// The '*' pattern matches any secret. If pattern is empty the
+// SecretIter iterates over all secrets names.
+func (e *Enclave) ListSecrets(ctx context.Context, pattern string) (*SecretIter, error) {
+	const (
+		APIPath  = "/v1/secret/list"
+		Method   = http.MethodGet
+		StatusOK = http.StatusOK
+	)
+	e.init.Do(e.initLoadBalancer)
+
+	if pattern == "" { // The empty pattern never matches anything
+		const MatchAll = "*"
+		pattern = MatchAll
+	}
+
+	client := retry(e.HTTPClient)
+	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, e.path(APIPath, pattern), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	return &SecretIter{
 		decoder: json.NewDecoder(resp.Body),
 		closer:  resp.Body,
 	}, nil
