@@ -56,11 +56,11 @@ func serverCreateKey(mux *http.ServeMux, config *ServerConfig) API {
 					return err
 				}
 
-				var algorithm key.Algorithm
+				var algorithm kes.KeyAlgorithm
 				if fips.Enabled || cpu.HasAESGCM() {
-					algorithm = key.AES256_GCM_SHA256
+					algorithm = kes.AES256_GCM_SHA256
 				} else {
-					algorithm = key.XCHACHA20_POLY1305
+					algorithm = kes.XCHACHA20_POLY1305
 				}
 
 				key, err := key.Random(algorithm, auth.Identify(r))
@@ -93,8 +93,8 @@ func serverImportKey(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
-		Bytes     []byte `json:"bytes"`
-		Algorithm string `json:"algorithm"`
+		Bytes     []byte           `json:"bytes"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -127,25 +127,14 @@ func serverImportKey(mux *http.ServeMux, config *ServerConfig) API {
 
 				var req Request
 				if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-					return err
+					return kes.NewError(http.StatusBadRequest, err.Error())
 				}
 
-				var algorithm key.Algorithm
-				switch key.Algorithm(req.Algorithm) {
-				case key.AES256_GCM_SHA256:
-					algorithm = key.AES256_GCM_SHA256
-				case key.XCHACHA20_POLY1305:
-					algorithm = key.XCHACHA20_POLY1305
-				case key.AlgorithmGeneric:
-					algorithm = key.AlgorithmGeneric
-				default:
-					return kes.NewError(http.StatusBadRequest, "invalid algorithm")
-				}
-
-				if len(req.Bytes) != algorithm.KeySize() {
+				if len(req.Bytes) != key.Len(req.Algorithm) {
 					return kes.NewError(http.StatusBadRequest, "invalid key size")
 				}
-				key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
+
+				key, err := key.New(req.Algorithm, req.Bytes, auth.Identify(r))
 				if err != nil {
 					return err
 				}
@@ -175,10 +164,11 @@ func serverDescribeKey(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type Response struct {
-		Name      string       `json:"name"`
-		ID        string       `json:"id,omitempty"`
-		CreatedAt time.Time    `json:"created_at,omitempty"`
-		CreatedBy kes.Identity `json:"created_by,omitempty"`
+		Name      string           `json:"name"`
+		ID        string           `json:"id,omitempty"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm,omitempty"`
+		CreatedAt time.Time        `json:"created_at,omitempty"`
+		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -219,6 +209,7 @@ func serverDescribeKey(mux *http.ServeMux, config *ServerConfig) API {
 		json.NewEncoder(w).Encode(Response{
 			Name:      strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath)),
 			ID:        key.ID(),
+			Algorithm: key.Algorithm(),
 			CreatedAt: key.CreatedAt(),
 			CreatedBy: key.CreatedBy(),
 		})
@@ -612,10 +603,11 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
-		Name      string       `json:"name,omitempty"`
-		ID        string       `json:"id,omitempty"`
-		CreatedAt time.Time    `json:"created_at,omitempty"`
-		CreatedBy kes.Identity `json:"created_by,omitempty"`
+		Name      string           `json:"name,omitempty"`
+		ID        string           `json:"id,omitempty"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm,omitempty"`
+		CreatedAt time.Time        `json:"created_at,omitempty"`
+		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 
 		Err string `json:"error,omitempty"`
 	}
@@ -672,6 +664,7 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 					err = encoder.Encode(Response{
 						Name:      iterator.Name(),
 						ID:        key.ID(),
+						Algorithm: key.Algorithm(),
 						CreatedAt: key.CreatedAt(),
 						CreatedBy: key.CreatedBy(),
 					})

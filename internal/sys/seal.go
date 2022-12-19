@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/key"
 )
 
@@ -67,7 +68,7 @@ func SealFromEnvironment(name string) (Sealer, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := key.New(key.AES256_GCM_SHA256, b, "")
+	key, err := key.New(kes.AES256_GCM_SHA256, b, "")
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +136,7 @@ func (envUnsealer) Unseal(stanza *Stanza, keys ...UnsealKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := key.New(key.AES256_GCM_SHA256, b, "")
+	key, err := key.New(kes.AES256_GCM_SHA256, b, "")
 	if err != nil {
 		return nil, err
 	}

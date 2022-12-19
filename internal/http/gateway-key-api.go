@@ -51,11 +51,11 @@ func gatewayCreateKey(mux *http.ServeMux, config *GatewayConfig) API {
 			return
 		}
 
-		var algorithm key.Algorithm
+		var algorithm kes.KeyAlgorithm
 		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = key.AES256_GCM_SHA256
+			algorithm = kes.AES256_GCM_SHA256
 		} else {
-			algorithm = key.XCHACHA20_POLY1305
+			algorithm = kes.XCHACHA20_POLY1305
 		}
 
 		key, err := key.Random(algorithm, auth.Identify(r))
@@ -86,8 +86,8 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type Request struct {
-		Bytes     []byte `json:"bytes"`
-		Algorithm string `json:"algorithm"`
+		Bytes     []byte           `json:"bytes"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -115,28 +115,15 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Error(w, err)
+			Error(w, kes.NewError(http.StatusBadRequest, err.Error()))
 			return
 		}
 
-		var algorithm key.Algorithm
-		switch key.Algorithm(req.Algorithm) {
-		case key.AES256_GCM_SHA256:
-			algorithm = key.AES256_GCM_SHA256
-		case key.XCHACHA20_POLY1305:
-			algorithm = key.XCHACHA20_POLY1305
-		case key.AlgorithmGeneric:
-			algorithm = key.AlgorithmGeneric
-		default:
-			Error(w, kes.NewError(http.StatusBadRequest, "invalid algorithm"))
-			return
-		}
-
-		if len(req.Bytes) != algorithm.KeySize() {
+		if len(req.Bytes) != key.Len(req.Algorithm) {
 			Error(w, kes.NewError(http.StatusBadRequest, "invalid key size"))
 			return
 		}
-		key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
+		key, err := key.New(req.Algorithm, req.Bytes, auth.Identify(r))
 		if err != nil {
 			Error(w, err)
 			return
@@ -164,10 +151,11 @@ func gatewayDescribeKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Timeout = 15 * time.Second
 	)
 	type Response struct {
-		Name      string       `json:"name"`
-		ID        string       `json:"id,omitempty"`
-		CreatedAt time.Time    `json:"created_at,omitempty"`
-		CreatedBy kes.Identity `json:"created_by,omitempty"`
+		Name      string           `json:"name"`
+		ID        string           `json:"id,omitempty"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm,omitempty"`
+		CreatedAt time.Time        `json:"created_at,omitempty"`
+		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w = audit(w, r, config.AuditLog.Log())
@@ -203,6 +191,7 @@ func gatewayDescribeKey(mux *http.ServeMux, config *GatewayConfig) API {
 		json.NewEncoder(w).Encode(Response{
 			Name:      name,
 			ID:        key.ID(),
+			Algorithm: key.Algorithm(),
 			CreatedAt: key.CreatedAt(),
 			CreatedBy: key.CreatedBy(),
 		})

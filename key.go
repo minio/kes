@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 	"time"
 )
 
@@ -47,12 +48,117 @@ type PCP struct {
 	Context   []byte
 }
 
+// All valid cryptographic algorithms that can be used with keys.
+const (
+	KeyAlgorithmUndefined KeyAlgorithm = iota
+	AES256_GCM_SHA256
+	XCHACHA20_POLY1305
+)
+
+// KeyAlgorithm is an enum representing the algorithm
+// a cryptographic key can be used with.
+type KeyAlgorithm uint
+
+// String returns the KeyAlgorithm's string representation.
+func (a KeyAlgorithm) String() string {
+	switch a {
+	case KeyAlgorithmUndefined:
+		return "undefined"
+	case AES256_GCM_SHA256:
+		return "AES256-GCM_SHA256"
+	case XCHACHA20_POLY1305:
+		return "XCHACHA20-POLY1305"
+	default:
+		return "invalid algorithm '" + strconv.Itoa(int(a)) + "'"
+	}
+}
+
+// MarshalText returns the KeyAlgorithm's text representation.
+// In contrast to String, it represents KeyAlgorithmUndefined
+// as empty string and returns an error if the KeyAlgorithm
+// isn't valid.
+func (a KeyAlgorithm) MarshalText() ([]byte, error) {
+	switch a {
+	case KeyAlgorithmUndefined:
+		return []byte{}, nil
+	case AES256_GCM_SHA256:
+		return []byte("AES256-GCM_SHA256"), nil
+	case XCHACHA20_POLY1305:
+		return []byte("XCHACHA20-POLY1305"), nil
+	default:
+		return nil, errors.New("key: invalid algorithm '" + strconv.Itoa(int(a)) + "'")
+	}
+}
+
+// UnmarshalText parses text as KeyAlgorithm text representation.
+func (a *KeyAlgorithm) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*a = KeyAlgorithmUndefined
+		return nil
+	}
+
+	switch s := string(text); s {
+	case "undefined":
+		*a = KeyAlgorithmUndefined
+		return nil
+	case "AES256-GCM_SHA256":
+		*a = AES256_GCM_SHA256
+		return nil
+	case "XCHACHA20-POLY1305":
+		*a = XCHACHA20_POLY1305
+		return nil
+	default:
+		return errors.New("key: invalid algorithm '" + s + "'")
+	}
+}
+
 // KeyInfo describes a cryptographic key at a KES server.
 type KeyInfo struct {
-	Name      string    `json:"name"`                 // Name of the cryptographic key
-	ID        string    `json:"id,omitempty"`         // ID of the cryptographic key
-	CreatedAt time.Time `json:"created_at,omitempty"` // Point in time when the key was created
-	CreatedBy Identity  `json:"created_by,omitempty"` // Identity that created the key
+	Name      string       // Name of the cryptographic key
+	ID        string       // ID of the cryptographic key
+	Algorithm KeyAlgorithm // Cryptographic algorithm the key can be used with
+	CreatedAt time.Time    // Point in time when the key was created
+	CreatedBy Identity     // Identity that created the key
+}
+
+// MarshalJSON returns the KeyInfo's JSON representation.
+func (k *KeyInfo) MarshalJSON() ([]byte, error) {
+	type JSON struct {
+		Name      string       `json:"name"`
+		ID        string       `json:"id,omitempty"`
+		Algorithm KeyAlgorithm `json:"algorithm,omitempty"`
+		CreatedAt time.Time    `json:"created_at,omitempty"`
+		CreatedBy Identity     `json:"created_by,omitempty"`
+	}
+	return json.Marshal(JSON{
+		Name:      k.Name,
+		ID:        k.ID,
+		Algorithm: k.Algorithm,
+		CreatedAt: k.CreatedAt,
+		CreatedBy: k.CreatedBy,
+	})
+}
+
+// UnmarshalJSON parses text as KeyInfo JSON representation.
+func (k *KeyInfo) UnmarshalJSON(text []byte) error {
+	type JSON struct {
+		Name      string       `json:"name"`
+		ID        string       `json:"id"`
+		Algorithm KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy Identity     `json:"created_by"`
+	}
+	var v JSON
+	if err := json.Unmarshal(text, &v); err != nil {
+		return err
+	}
+
+	k.Name = v.Name
+	k.ID = v.ID
+	k.Algorithm = v.Algorithm
+	k.CreatedAt = v.CreatedAt
+	k.CreatedBy = v.CreatedBy
+	return nil
 }
 
 // KeyIterator iterates over a stream of KeyInfo objects.
@@ -82,6 +188,10 @@ func (i *KeyIterator) Name() string { return i.current.Name }
 // short-hand for Value().ID.
 func (i *KeyIterator) ID() string { return i.current.ID }
 
+// Algorithm returns the KeyAlgorithm of the current key. It is a
+// short-hand for Value().Algorithm.
+func (i *KeyIterator) Algorithm() KeyAlgorithm { return i.current.Algorithm }
+
 // CreatedAt returns the created-at timestamp of the current
 // key. It is a short-hand for Value().CreatedAt.
 func (i *KeyIterator) CreatedAt() time.Time { return i.current.CreatedAt }
@@ -96,10 +206,11 @@ func (i *KeyIterator) CreatedBy() Identity { return i.current.CreatedBy }
 // error.
 func (i *KeyIterator) Next() bool {
 	type Response struct {
-		Name      string    `json:"name"`
-		ID        string    `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		CreatedBy Identity  `json:"created_by"`
+		Name      string       `json:"name"`
+		ID        string       `json:"id"`
+		Algorithm KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy Identity     `json:"created_by"`
 
 		Err string `json:"error"`
 	}
@@ -121,6 +232,8 @@ func (i *KeyIterator) Next() bool {
 	}
 	i.current = KeyInfo{
 		Name:      resp.Name,
+		ID:        resp.ID,
+		Algorithm: resp.Algorithm,
 		CreatedAt: resp.CreatedAt,
 		CreatedBy: resp.CreatedBy,
 	}
@@ -133,12 +246,13 @@ func (i *KeyIterator) Next() bool {
 // encounterred, if any.
 func (i *KeyIterator) WriteTo(w io.Writer) (int64, error) {
 	type Response struct {
-		Name      string    `json:"name,omitempty"`
-		ID        string    `json:"id,omitempty"`
-		CreatedAt time.Time `json:"created_at,omitempty"`
-		CreatedBy Identity  `json:"created_by,omitempty"`
+		Name      string       `json:"name"`
+		ID        string       `json:"id"`
+		Algorithm KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy Identity     `json:"created_by"`
 
-		Err string `json:"error,omitempty"`
+		Err string `json:"error"`
 	}
 	if i.err != nil {
 		return 0, i.err
@@ -163,7 +277,14 @@ func (i *KeyIterator) WriteTo(w io.Writer) (int64, error) {
 			i.err = errors.New(resp.Err)
 			return cw.N, i.err
 		}
-		if err := encoder.Encode(resp); err != nil {
+		info := KeyInfo{
+			Name:      resp.Name,
+			ID:        resp.ID,
+			Algorithm: resp.Algorithm,
+			CreatedAt: resp.CreatedAt,
+			CreatedBy: resp.CreatedBy,
+		}
+		if err := encoder.Encode(info); err != nil {
 			i.err = err
 			return cw.N, err
 		}

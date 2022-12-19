@@ -157,11 +157,11 @@ func startGateway(gConfig gatewayConfig) {
 	defer cache.Stop()
 
 	for _, k := range config.Keys {
-		var algorithm key.Algorithm
+		var algorithm kes.KeyAlgorithm
 		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = key.AES256_GCM_SHA256
+			algorithm = kes.AES256_GCM_SHA256
 		} else {
-			algorithm = key.XCHACHA20_POLY1305
+			algorithm = kes.XCHACHA20_POLY1305
 		}
 
 		key, err := key.Random(algorithm, config.Admin.Value)

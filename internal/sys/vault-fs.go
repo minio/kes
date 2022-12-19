@@ -88,9 +88,9 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 		return EnclaveInfo{}, err
 	}
 
-	algorithm := key.AES256_GCM_SHA256
+	algorithm := kes.AES256_GCM_SHA256
 	if !fips.Enabled && !cpu.HasAESGCM() {
-		algorithm = key.XCHACHA20_POLY1305
+		algorithm = kes.XCHACHA20_POLY1305
 	}
 	keyStoreKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
 	if err != nil {
