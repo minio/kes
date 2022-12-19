@@ -34,33 +34,6 @@ const (
 	Size = 256 / 8
 )
 
-// ValidName returns true if and only if name is
-// a valid name for a key.
-func ValidName(name string) bool {
-	const (
-		DigitStart     = '0'
-		DigitEnd       = '9'
-		UpperCaseStart = 'A'
-		UpperCaseEnd   = 'Z'
-		LowerCaseStart = 'a'
-		LowerCaseEnd   = 'z'
-		Hyphen         = '-'
-		Underscore     = '_'
-	)
-	for _, r := range name {
-		switch {
-		case r >= DigitStart || r <= DigitEnd:
-		case r >= UpperCaseStart || r <= UpperCaseEnd:
-		case r >= LowerCaseStart || r <= LowerCaseEnd:
-		case r == Hyphen:
-		case r == Underscore:
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // Parse parses b as encoded Key.
 func Parse(b []byte) (Key, error) {
 	var key Key
@@ -70,11 +43,25 @@ func Parse(b []byte) (Key, error) {
 	return key, nil
 }
 
+// Len returns the length of keys for the given Algorithm in bytes.
+func Len(a kes.KeyAlgorithm) int {
+	switch a {
+	case kes.AES256_GCM_SHA256:
+		return 256 / 8
+	case kes.XCHACHA20_POLY1305:
+		return 256 / 8
+	case kes.KeyAlgorithmUndefined:
+		return 256 / 8 // For generic/unknown keys, return 256 bit.
+	default:
+		return -1
+	}
+}
+
 // New returns an new Key for the given cryptographic algorithm.
 // The key len must match algorithm's key size. The returned key
 // is owned to the specified identity.
-func New(algorithm Algorithm, key []byte, owner kes.Identity) (Key, error) {
-	if len(key) != algorithm.KeySize() {
+func New(algorithm kes.KeyAlgorithm, key []byte, owner kes.Identity) (Key, error) {
+	if len(key) != Len(algorithm) {
 		return Key{}, errors.New("key: invalid key size")
 	}
 	return Key{
@@ -87,8 +74,8 @@ func New(algorithm Algorithm, key []byte, owner kes.Identity) (Key, error) {
 
 // Random generates a new random Key for the cryptographic algorithm.
 // The returned key is owned to the specified identity.
-func Random(algorithm Algorithm, owner kes.Identity) (Key, error) {
-	key, err := randomBytes(algorithm.KeySize())
+func Random(algorithm kes.KeyAlgorithm, owner kes.Identity) (Key, error) {
+	key, err := randomBytes(Len(algorithm))
 	if err != nil {
 		return Key{}, err
 	}
@@ -107,7 +94,7 @@ func randomBytes(length int) ([]byte, error) {
 type Key struct {
 	bytes []byte
 
-	algorithm Algorithm
+	algorithm kes.KeyAlgorithm
 	createdAt time.Time
 	createdBy kes.Identity
 }
@@ -121,7 +108,7 @@ var (
 
 // Algorithm returns the cryptographic algorithm for which the
 // key can be used.
-func (k *Key) Algorithm() Algorithm { return k.algorithm }
+func (k *Key) Algorithm() kes.KeyAlgorithm { return k.algorithm }
 
 // CreatedAt returns the point in time when the key has
 // been created.
@@ -159,12 +146,14 @@ func (k *Key) Equal(other Key) bool {
 // MarshalText returns the key's text representation.
 func (k Key) MarshalText() ([]byte, error) {
 	type JSON struct {
-		Bytes     []byte       `json:"bytes"`
-		Algorithm Algorithm    `json:"algorithm,omitempty"`
-		CreatedAt time.Time    `json:"created_at,omitempty"`
-		CreatedBy kes.Identity `json:"created_by,omitempty"`
+		Version   version          `json:"version"`
+		Bytes     []byte           `json:"bytes"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm,omitempty"`
+		CreatedAt time.Time        `json:"created_at,omitempty"`
+		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 	}
 	return json.Marshal(JSON{
+		Version:   v1,
 		Bytes:     k.bytes,
 		Algorithm: k.Algorithm(),
 		CreatedAt: k.CreatedAt(),
@@ -175,10 +164,11 @@ func (k Key) MarshalText() ([]byte, error) {
 // UnmarshalText parses and decodes text as encoded key.
 func (k *Key) UnmarshalText(text []byte) error {
 	type JSON struct {
-		Bytes     []byte       `json:"bytes"`
-		Algorithm Algorithm    `json:"algorithm"`
-		CreatedAt time.Time    `json:"created_at"`
-		CreatedBy kes.Identity `json:"created_by"`
+		Version   version          `json:"version"`
+		Bytes     []byte           `json:"bytes"`
+		Algorithm kes.KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time        `json:"created_at"`
+		CreatedBy kes.Identity     `json:"created_by"`
 	}
 	var value JSON
 	if err := json.Unmarshal(text, &value); err != nil {
@@ -194,14 +184,16 @@ func (k *Key) UnmarshalText(text []byte) error {
 // MarshalBinary returns the Key's binary representation.
 func (k Key) MarshalBinary() ([]byte, error) {
 	type GOB struct {
+		Version   version
 		Bytes     []byte
-		Algorithm Algorithm
+		Algorithm kes.KeyAlgorithm
 		CreatedAt time.Time
 		CreatedBy kes.Identity
 	}
 
 	var buffer bytes.Buffer
 	err := gob.NewEncoder(&buffer).Encode(GOB{
+		Version:   v1,
 		Bytes:     k.bytes,
 		Algorithm: k.Algorithm(),
 		CreatedAt: k.CreatedAt(),
@@ -213,8 +205,9 @@ func (k Key) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary unmarshals the Key's binary representation.
 func (k *Key) UnmarshalBinary(b []byte) error {
 	type GOB struct {
+		Version   version
 		Bytes     []byte
-		Algorithm Algorithm
+		Algorithm kes.KeyAlgorithm
 		CreatedAt time.Time
 		CreatedBy kes.Identity
 	}
@@ -242,11 +235,11 @@ func (k *Key) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 	}
 
 	algorithm := k.Algorithm()
-	if algorithm == "" {
+	if algorithm == kes.KeyAlgorithmUndefined {
 		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = AES256_GCM_SHA256
+			algorithm = kes.AES256_GCM_SHA256
 		} else {
-			algorithm = XCHACHA20_POLY1305
+			algorithm = kes.XCHACHA20_POLY1305
 		}
 	}
 	cipher, err := newAEAD(algorithm, k.bytes, iv)
@@ -282,7 +275,7 @@ func (k *Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
 	if text.ID != "" && text.ID != k.ID() { // Ciphertexts generated in the past may not contain a key ID
 		return nil, kes.ErrDecrypt
 	}
-	if k.algorithm != "" && text.Algorithm != k.Algorithm() {
+	if k.algorithm != kes.KeyAlgorithmUndefined && text.Algorithm != k.Algorithm() {
 		return nil, kes.ErrDecrypt
 	}
 
@@ -299,13 +292,9 @@ func (k *Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
 
 // newAEAD returns a new AEAD cipher that implements the given
 // algorithm and is initialized with the given key and iv.
-func newAEAD(algorithm Algorithm, Key, IV []byte) (cipher.AEAD, error) {
-	const (
-		LEGACY_AES256_GCM_SHA256  = "AES-256-GCM-HMAC-SHA-256"
-		LEGACY_XCHACHA20_POLY1305 = "ChaCha20Poly1305"
-	)
+func newAEAD(algorithm kes.KeyAlgorithm, Key, IV []byte) (cipher.AEAD, error) {
 	switch algorithm {
-	case AES256_GCM_SHA256, LEGACY_AES256_GCM_SHA256:
+	case kes.AES256_GCM_SHA256:
 		mac := hmac.New(sha256.New, Key)
 		mac.Write(IV)
 		sealingKey := mac.Sum(nil)
@@ -315,7 +304,7 @@ func newAEAD(algorithm Algorithm, Key, IV []byte) (cipher.AEAD, error) {
 			return nil, err
 		}
 		return cipher.NewGCM(block)
-	case XCHACHA20_POLY1305, LEGACY_XCHACHA20_POLY1305:
+	case kes.XCHACHA20_POLY1305:
 		if fips.Enabled {
 			return nil, kes.ErrDecrypt
 		}

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )
@@ -264,6 +265,12 @@ func describeKeyCmd(args []string) {
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "ID")),
 			info.ID,
+		)
+	}
+	if info.Algorithm != kes.KeyAlgorithmUndefined {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
+			info.Algorithm,
 		)
 	}
 	fmt.Println(

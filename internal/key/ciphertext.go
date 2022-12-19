@@ -44,7 +44,7 @@ func decodeCiphertext(bytes []byte) (ciphertext, error) {
 // bytes and all relevant information to decrypt these
 // bytes again with a cryptographic key.
 type ciphertext struct {
-	Algorithm Algorithm
+	Algorithm kes.KeyAlgorithm
 	ID        string
 	IV        []byte
 	Nonce     []byte
@@ -108,7 +108,12 @@ func (c *ciphertext) UnmarshalBinary(b []byte) error {
 		return kes.ErrDecrypt
 	}
 
-	c.Algorithm = Algorithm(algorithm)
+	var alg kes.KeyAlgorithm
+	if err = alg.UnmarshalText([]byte(algorithm)); err != nil {
+		return kes.ErrDecrypt
+	}
+
+	c.Algorithm = alg
 	c.ID = id
 	c.IV = iv[:]
 	c.Nonce = nonce[:]
@@ -154,7 +159,11 @@ func (c *ciphertext) UnmarshalJSON(text []byte) error {
 		return kes.ErrDecrypt
 	}
 
-	c.Algorithm = Algorithm(value.Algorithm)
+	if value.Algorithm == AES256GCM {
+		c.Algorithm = kes.AES256_GCM_SHA256
+	} else {
+		c.Algorithm = kes.XCHACHA20_POLY1305
+	}
 	c.ID = value.ID
 	c.IV = value.IV
 	c.Nonce = value.Nonce

@@ -175,10 +175,11 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 		MaxResponseSize = 1 * mem.MiB
 	)
 	type Response struct {
-		Name      string    `json:"name"`
-		ID        string    `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		CreatedBy Identity  `json:"created_by"`
+		Name      string       `json:"name"`
+		ID        string       `json:"id"`
+		Algorithm KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy Identity     `json:"created_by"`
 	}
 	e.init.Do(e.initLoadBalancer)
 
@@ -200,6 +201,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	return &KeyInfo{
 		Name:      response.Name,
 		ID:        response.ID,
+		Algorithm: response.Algorithm,
 		CreatedAt: response.CreatedAt,
 		CreatedBy: response.CreatedBy,
 	}, nil
