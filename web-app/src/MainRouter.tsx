@@ -2,6 +2,7 @@ import React from 'react';
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Login from "./screens/login/Login";
 import App from "./App";
+import ProtectedRoute from './ProtectedRoute';
 
 const router = createBrowserRouter([
     {
@@ -9,8 +10,8 @@ const router = createBrowserRouter([
         element: <Login/>,
     },
     {
-        path: "/",
-        element: <App/>,
+        path: "/*",
+        element: <ProtectedRoute Component={App} />,
     },
 ]);
 
