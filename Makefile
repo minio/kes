@@ -13,3 +13,10 @@ clean:
 
 docker:
 	@docker build -t minio/kes .
+
+swagger-gen:
+	@echo "Cleaning"
+	@rm -rf models
+	@rm -rf restapi/operations
+	@echo "Generating swagger server code from yaml"
+	@swagger generate server -A kes --main-package=management --server-package=restapi --exclude-main -P models.Principal -f ./swagger.yaml -r NOTICE
