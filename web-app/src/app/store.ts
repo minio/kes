@@ -1,11 +1,13 @@
 import {Action, configureStore, ThunkAction} from '@reduxjs/toolkit';
-import counterReducer from '../features/counter/counterSlice';
+import systemSlice from '../systemSlice';
 import themeSlice from "../themeSlice";
+import consoleSlice from "../screens/console/consoleSlice";
 
 export const store = configureStore({
     reducer: {
-        counter: counterReducer,
         theme: themeSlice,
+        system: systemSlice,
+        console: consoleSlice,
     },
 });
 
