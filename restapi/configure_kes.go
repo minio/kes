@@ -1,5 +1,3 @@
-// This file is safe to edit. Once it exists it will not be overwritten
-
 // This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
@@ -21,10 +19,10 @@ package restapi
 
 import (
 	"crypto/tls"
-	"net/http"
-
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
+	"net/http"
+
 	"github.com/go-openapi/runtime/middleware"
 
 	"github.com/minio/kes/models"

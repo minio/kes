@@ -54,6 +54,7 @@ func main() {
 	subCmds := commands{
 		"server": serverCmd,
 		"init":   initCmd,
+		"ui":     uiCmd,
 
 		"enclave":  enclaveCmd,
 		"key":      keyCmd,
