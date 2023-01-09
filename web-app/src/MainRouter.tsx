@@ -1,7 +1,7 @@
 import React from 'react';
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Login from "./screens/login/Login";
-import App from "./App";
+import ConsoleApp from "./screens/console/ConsoleApp";
 import ProtectedRoute from './ProtectedRoute';
 
 const router = createBrowserRouter([
@@ -11,7 +11,7 @@ const router = createBrowserRouter([
     },
     {
         path: "/*",
-        element: <ProtectedRoute Component={App} />,
+        element: <ProtectedRoute Component={ConsoleApp} />,
     },
 ]);
 

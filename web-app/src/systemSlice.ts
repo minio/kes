@@ -109,5 +109,7 @@ export const {
 
 // Reducer selectors
 export const loggedIn = (state: RootState) => state.system.loggedIn;
+export const sidebarOpen = (state: RootState) => state.system.sidebarOpen;
+export const snackBar = (state: RootState) => state.system.snackBar;
 
 export default systemSlice.reducer;

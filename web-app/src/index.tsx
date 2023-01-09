@@ -5,6 +5,7 @@ import {store} from './app/store';
 import reportWebVitals from './reportWebVitals';
 import './index.css';
 import MainRouter from "./MainRouter";
+import StyleHandler from './StyleHandler';
 
 const container = document.getElementById('root')!;
 const root = createRoot(container);
@@ -13,7 +14,9 @@ const root = createRoot(container);
 root.render(
     <React.StrictMode>
         <Provider store={store}>
-            <MainRouter/>
+        <StyleHandler>
+            <MainRouter />
+        </StyleHandler>
         </Provider>
     </React.StrictMode>
 );
