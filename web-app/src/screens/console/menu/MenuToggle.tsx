@@ -102,63 +102,60 @@ const MenuToggle = ({ isOpen, onToggle }: MenuToggleProps) => {
           //   tooltip={"Click to Collapse Menu"}
           //   placement={"right"}
           // >
-            <div className={`logo ${stateClsName}`}>
-                <Fragment>
-                  <ApplicationLogo
-                    applicationName={"console"}
-                    subVariant={
-                      logoPlan as
-                        | "AGPL"
-                        | "simple"
-                        | "standard"
-                        | "enterprise"
-                        | undefined
-                    }
-                    inverse
-                  />
-                </Fragment>
-            </div>
-          // </TooltipWrapper>
-        ) : (
-          <Fragment>
-
           <div className={`logo ${stateClsName}`}>
-            <Suspense fallback={<div>...</div>}>
-              <h1>TODO: use version icon</h1>
-            </Suspense>
+            <Fragment>
+              <ApplicationLogo
+                applicationName={"console"}
+                subVariant={
+                  logoPlan as
+                    | "AGPL"
+                    | "simple"
+                    | "standard"
+                    | "enterprise"
+                    | undefined
+                }
+                inverse
+              />
+            </Fragment>
           </div>
-          <IconButton
-            className={`${stateClsName}`}
-            sx={{
-              height: "30px",
-              width: "30px",
-              "&.mini": {
-                "&:hover": {
-                  background: "#081C42",
+        ) : (
+          // </TooltipWrapper>
+          <Fragment>
+            <div className={`logo ${stateClsName}`}>
+              <Suspense fallback={<div>...</div>}>
+                <h1>TODO: use version icon</h1>
+              </Suspense>
+            </div>
+            <IconButton
+              className={`${stateClsName}`}
+              sx={{
+                height: "30px",
+                width: "30px",
+                "&.mini": {
+                  "&:hover": {
+                    background: "#081C42",
+                  },
                 },
-              },
 
-              "&:hover": {
-                borderRadius: "50%",
-                background: "#073052",
-              },
-              "& svg": {
-                fill: "#ffffff",
-                height: "18px",
-                width: "18px",
-              },
-            }}
-            onClick={() => {
-              onToggle(true);
-            }}
-            size="small"
-          >
-            <MenuIcon />
-          </IconButton>
+                "&:hover": {
+                  borderRadius: "50%",
+                  background: "#073052",
+                },
+                "& svg": {
+                  fill: "#ffffff",
+                  height: "18px",
+                  width: "18px",
+                },
+              }}
+              onClick={() => {
+                onToggle(true);
+              }}
+              size="small"
+            >
+              <MenuIcon />
+            </IconButton>
           </Fragment>
-          
         )}
-
       </Box>
     </Box>
   );

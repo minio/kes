@@ -59,7 +59,7 @@ const MenuItem = ({
   previewMenuGroup: string;
 }) => {
   const childrenMenuList = page?.children?.filter(
-    (item: any) =>item.forceDisplay && !item.fsHidden
+    (item: any) => item.forceDisplay && !item.fsHidden
   );
 
   let hasChildren = childrenMenuList?.length;

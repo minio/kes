@@ -16,8 +16,6 @@
 
 import storage from "local-storage-fallback";
 
-
-
 export const setCookie = (name: string, val: string) => {
   const date = new Date();
   const value = val;

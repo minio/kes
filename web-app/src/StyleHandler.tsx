@@ -39,7 +39,6 @@ interface IStyleHandler {
 }
 
 const StyleHandler = ({ children }: IStyleHandler) => {
-
   let thm = theme;
   let globalBody: any = {};
   let rowColor: any = { color: "#393939" };

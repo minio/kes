@@ -16,8 +16,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { ISessionResponse } from "./types";
-import { RootState } from '../../app/store';
-
+import { RootState } from "../../app/store";
 
 export interface ConsoleState {
   session: ISessionResponse;

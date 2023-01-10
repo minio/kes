@@ -86,7 +86,7 @@ const Menu = ({ classes }: IMenuProps) => {
 
   const sidebarOpen = useAppSelector((state) => state.system.sidebarOpen);
 
-//   const allowedMenuItems = validRoutes(features, operatorMode, directPVMode);
+  //   const allowedMenuItems = validRoutes(features, operatorMode, directPVMode);
 
   return (
     <Drawer
