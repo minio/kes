@@ -92,8 +92,364 @@ paths:
             $ref: "#/definitions/error"
       tags:
         - Auth
-
-
+  /kms/status:
+    get:
+      summary: KMS status
+      operationId: KMSStatus
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsStatusResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/metrics:
+    get:
+      summary: KMS metrics
+      operationId: KMSMetrics
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsMetricsResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/apis:
+    get:
+      summary: KMS apis
+      operationId: KMSAPIs
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsAPIsResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/version:
+    get:
+      summary: KMS version
+      operationId: KMSVersion
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsVersionResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/keys:
+    post:
+      summary: KMS create key
+      operationId: KMSCreateKey
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/kmsCreateKeyRequest"
+      responses:
+        201:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+    get:
+      summary: KMS list keys
+      operationId: KMSListKeys
+      parameters:
+        - name: pattern
+          description: pattern to retrieve keys
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsListKeysResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/keys/{name}:
+    get:
+      summary: KMS key status
+      operationId: KMSKeyStatus
+      parameters:
+        - name: name
+          description: KMS key name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsKeyStatusResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+    delete:
+      summary: KMS delete key
+      operationId: KMSDeleteKey
+      parameters:
+        - name: name
+          description: KMS key name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/keys/{name}/import:
+    post:
+      summary: KMS import key
+      operationId: KMSImportKey
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/kmsImportKeyRequest"
+        - name: name
+          description: KMS key name
+          in: path
+          required: true
+          type: string
+      responses:
+        201:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/policies:
+    post:
+      summary: KMS set policy
+      operationId: KMSSetPolicy
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/kmsSetPolicyRequest"
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+    get:
+      summary: KMS list policies
+      operationId: KMSListPolicies
+      parameters:
+        - name: pattern
+          description: pattern to retrieve policies
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsListPoliciesResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/policies/{name}:
+    get:
+      summary: KMS get policy
+      operationId: KMSGetPolicy
+      parameters:
+        - name: name
+          description: KMS policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsGetPolicyResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+    delete:
+      summary: KMS delete policy
+      operationId: KMSDeletePolicy
+      parameters:
+        - name: name
+          description: KMS policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/policies/{name}/assign:
+    post:
+      summary: KMS assign policy
+      operationId: KMSAssignPolicy
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/kmsAssignPolicyRequest"
+        - name: name
+          description: KMS policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/policies/{name}/describe:
+    get:
+      summary: KMS describe policy
+      operationId: KMSDescribePolicy
+      parameters:
+        - name: name
+          description: KMS policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsDescribePolicyResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/identities/{name}:
+    delete:
+      summary: KMS delete identity
+      operationId: KMSDeleteIdentity
+      parameters:
+        - name: name
+          description: KMS identity name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/identities/{name}/describe:
+    get:
+      summary: KMS describe identity
+      operationId: KMSDescribeIdentity
+      parameters:
+        - name: name
+          description: KMS identity name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsDescribeIdentityResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/describe-self/identity:
+    get:
+      summary: KMS describe self identity
+      operationId: KMSDescribeSelfIdentity
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsDescribeSelfIdentityResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
+  /kms/identities:
+    get:
+      summary: KMS list identities
+      operationId: KMSListIdentities
+      parameters:
+        - name: pattern
+          description: pattern to retrieve identities
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/kmsListIdentitiesResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - KMS
 
 definitions:
   # Structure that holds the `Bearer {TOKEN}` present on authenticated requests
@@ -166,4 +522,248 @@ definitions:
       redirect:
         type: string
       displayName:
+        type: string
+  kmsStatusResponse:
+    type: object
+    properties:
+      name:
+        type: string
+      defaultKeyID:
+        type: string
+      endpoints:
+        type: array
+        items:
+          $ref: "#/definitions/kmsEndpoint"
+  kmsEndpoint:
+    type: object
+    properties:
+      url:
+        type: string
+      status:
+        type: string
+
+  kmsKeyStatusResponse:
+    type: object
+    properties:
+      keyID:
+        type: string
+      encryptionErr:
+        type: string
+      decryptionErr:
+        type: string
+  kmsCreateKeyRequest:
+    type: object
+    required:
+      - key
+    properties:
+      key:
+        type: string
+  kmsImportKeyRequest:
+    type: object
+    required:
+      - bytes
+    properties:
+      bytes:
+        type: string
+  kmDeleteKeyRequest:
+    type: object
+  kmsListKeysResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/kmsKeyInfo"
+  kmsKeyInfo:
+    type: object
+    properties:
+      name:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+
+  kmsGetPolicyResponse:
+    type: object
+    properties:
+      allow:
+        type: array
+        items:
+          type: string
+      deny:
+        type: array
+        items:
+          type: string
+  kmsSetPolicyRequest:
+    type: object
+    required:
+      - policy
+    properties:
+      policy:
+        type: string
+      allow:
+        type: array
+        items:
+          type: string
+      deny:
+        type: array
+        items:
+          type: string
+  kmsDescribePolicyResponse:
+    type: object
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      name:
+        type: string
+  kmsAssignPolicyRequest:
+    type: object
+    properties:
+      identity:
+        type: string
+  kmsListPoliciesResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/kmsPolicyInfo"
+  kmsPolicyInfo:
+    type: object
+    properties:
+      name:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+
+  kmsDescribeIdentityResponse:
+      type: object
+      properties:
+        policy:
+          type: string
+        identity:
+          type: string
+        admin:
+          type: boolean
+        createdAt:
+          type: string
+        createdBy:
+          type: string
+  kmsDescribeSelfIdentityResponse:
+      type: object
+      properties:
+        identity:
+          type: string
+        policyName:
+          type: string
+        admin:
+          type: boolean
+        createdAt:
+          type: string
+        createdBy:
+          type: string
+        policy:
+          $ref: "#/definitions/kmsGetPolicyResponse"
+  kmsListIdentitiesResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/definitions/kmsIdentityInfo"
+  kmsIdentityInfo:
+    type: object
+    properties:
+      identity:
+        type: string
+      policy:
+        type: string
+      error:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+  kmsMetricsResponse:
+    type: object
+    required:
+      - requestOK
+      - requestErr
+      - requestFail
+      - requestActive
+      - auditEvents
+      - errorEvents
+      - latencyHistogram
+      - uptime
+      - cpus
+      - usableCPUs
+      - threads
+      - heapAlloc
+      - stackAlloc
+    properties:
+      requestOK:
+        type: integer
+      requestErr:
+        type: integer
+      requestFail:
+        type: integer
+      requestActive:
+        type: integer
+      auditEvents:
+        type: integer
+      errorEvents:
+        type: integer
+      latencyHistogram:
+        type: array
+        items:
+          $ref:  "#/definitions/kmsLatencyHistogram"
+      uptime:
+        type: integer
+      cpus:
+        type: integer
+      usableCPUs:
+        type: integer
+      threads:
+        type: integer
+      heapAlloc:
+        type: integer
+      heapObjects:
+        type: integer
+      stackAlloc:
+        type: integer
+  kmsLatencyHistogram:
+    type: object
+    properties:
+      duration:
+        type: integer
+      total:
+        type: integer
+
+  kmsAPIsResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/kmsAPI"
+  kmsAPI:
+    type: object
+    properties:
+      method:
+        type: string
+      path:
+        type: string
+      maxBody:
+        type: integer
+      timeout:
+        type: integer
+  kmsVersionResponse:
+    type: object
+    properties:
+      version:
         type: string

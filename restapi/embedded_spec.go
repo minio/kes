@@ -52,6 +52,555 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
+    "/kms/apis": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS apis",
+        "operationId": "KMSAPIs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsAPIsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/describe-self/identity": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe self identity",
+        "operationId": "KMSDescribeSelfIdentity",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribeSelfIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list identities",
+        "operationId": "KMSListIdentities",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve identities",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListIdentitiesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities/{name}": {
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete identity",
+        "operationId": "KMSDeleteIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities/{name}/describe": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe identity",
+        "operationId": "KMSDescribeIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribeIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list keys",
+        "operationId": "KMSListKeys",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve keys",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListKeysResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS create key",
+        "operationId": "KMSCreateKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsCreateKeyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys/{name}": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS key status",
+        "operationId": "KMSKeyStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsKeyStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete key",
+        "operationId": "KMSDeleteKey",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys/{name}/import": {
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS import key",
+        "operationId": "KMSImportKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsImportKeyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/metrics": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS metrics",
+        "operationId": "KMSMetrics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsMetricsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list policies",
+        "operationId": "KMSListPolicies",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve policies",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListPoliciesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS set policy",
+        "operationId": "KMSSetPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsSetPolicyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS get policy",
+        "operationId": "KMSGetPolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsGetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete policy",
+        "operationId": "KMSDeletePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}/assign": {
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS assign policy",
+        "operationId": "KMSAssignPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsAssignPolicyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}/describe": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe policy",
+        "operationId": "KMSDescribePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribePolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/status": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS status",
+        "operationId": "KMSStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/version": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS version",
+        "operationId": "KMSVersion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsVersionResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/login": {
       "get": {
         "security": [],
@@ -175,6 +724,371 @@ func init() {
           "type": "string"
         },
         "message": {
+          "type": "string"
+        }
+      }
+    },
+    "kmDeleteKeyRequest": {
+      "type": "object"
+    },
+    "kmsAPI": {
+      "type": "object",
+      "properties": {
+        "maxBody": {
+          "type": "integer"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsAPIsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsAPI"
+          }
+        }
+      }
+    },
+    "kmsAssignPolicyRequest": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsCreateKeyRequest": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribeIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribePolicyResponse": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribeSelfIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/definitions/kmsGetPolicyResponse"
+        },
+        "policyName": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsEndpoint": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsGetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "kmsIdentityInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsImportKeyRequest": {
+      "type": "object",
+      "required": [
+        "bytes"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsKeyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsKeyStatusResponse": {
+      "type": "object",
+      "properties": {
+        "decryptionErr": {
+          "type": "string"
+        },
+        "encryptionErr": {
+          "type": "string"
+        },
+        "keyID": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsLatencyHistogram": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsListIdentitiesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsIdentityInfo"
+          }
+        }
+      }
+    },
+    "kmsListKeysResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsKeyInfo"
+          }
+        }
+      }
+    },
+    "kmsListPoliciesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsPolicyInfo"
+          }
+        }
+      }
+    },
+    "kmsMetricsResponse": {
+      "type": "object",
+      "required": [
+        "requestOK",
+        "requestErr",
+        "requestFail",
+        "requestActive",
+        "auditEvents",
+        "errorEvents",
+        "latencyHistogram",
+        "uptime",
+        "cpus",
+        "usableCPUs",
+        "threads",
+        "heapAlloc",
+        "stackAlloc"
+      ],
+      "properties": {
+        "auditEvents": {
+          "type": "integer"
+        },
+        "cpus": {
+          "type": "integer"
+        },
+        "errorEvents": {
+          "type": "integer"
+        },
+        "heapAlloc": {
+          "type": "integer"
+        },
+        "heapObjects": {
+          "type": "integer"
+        },
+        "latencyHistogram": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsLatencyHistogram"
+          }
+        },
+        "requestActive": {
+          "type": "integer"
+        },
+        "requestErr": {
+          "type": "integer"
+        },
+        "requestFail": {
+          "type": "integer"
+        },
+        "requestOK": {
+          "type": "integer"
+        },
+        "stackAlloc": {
+          "type": "integer"
+        },
+        "threads": {
+          "type": "integer"
+        },
+        "uptime": {
+          "type": "integer"
+        },
+        "usableCPUs": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsPolicyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsSetPolicyRequest": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsStatusResponse": {
+      "type": "object",
+      "properties": {
+        "defaultKeyID": {
+          "type": "string"
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsEndpoint"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
           "type": "string"
         }
       }
@@ -304,6 +1218,555 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
+    "/kms/apis": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS apis",
+        "operationId": "KMSAPIs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsAPIsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/describe-self/identity": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe self identity",
+        "operationId": "KMSDescribeSelfIdentity",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribeSelfIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list identities",
+        "operationId": "KMSListIdentities",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve identities",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListIdentitiesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities/{name}": {
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete identity",
+        "operationId": "KMSDeleteIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/identities/{name}/describe": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe identity",
+        "operationId": "KMSDescribeIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribeIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list keys",
+        "operationId": "KMSListKeys",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve keys",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListKeysResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS create key",
+        "operationId": "KMSCreateKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsCreateKeyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys/{name}": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS key status",
+        "operationId": "KMSKeyStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsKeyStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete key",
+        "operationId": "KMSDeleteKey",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/keys/{name}/import": {
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS import key",
+        "operationId": "KMSImportKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsImportKeyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "KMS key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/metrics": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS metrics",
+        "operationId": "KMSMetrics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsMetricsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS list policies",
+        "operationId": "KMSListPolicies",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve policies",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsListPoliciesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS set policy",
+        "operationId": "KMSSetPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsSetPolicyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS get policy",
+        "operationId": "KMSGetPolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsGetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS delete policy",
+        "operationId": "KMSDeletePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}/assign": {
+      "post": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS assign policy",
+        "operationId": "KMSAssignPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/kmsAssignPolicyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/policies/{name}/describe": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS describe policy",
+        "operationId": "KMSDescribePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "KMS policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsDescribePolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/status": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS status",
+        "operationId": "KMSStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/kms/version": {
+      "get": {
+        "tags": [
+          "KMS"
+        ],
+        "summary": "KMS version",
+        "operationId": "KMSVersion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/kmsVersionResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/login": {
       "get": {
         "security": [],
@@ -427,6 +1890,371 @@ func init() {
           "type": "string"
         },
         "message": {
+          "type": "string"
+        }
+      }
+    },
+    "kmDeleteKeyRequest": {
+      "type": "object"
+    },
+    "kmsAPI": {
+      "type": "object",
+      "properties": {
+        "maxBody": {
+          "type": "integer"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsAPIsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsAPI"
+          }
+        }
+      }
+    },
+    "kmsAssignPolicyRequest": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsCreateKeyRequest": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribeIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribePolicyResponse": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsDescribeSelfIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/definitions/kmsGetPolicyResponse"
+        },
+        "policyName": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsEndpoint": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsGetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "kmsIdentityInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsImportKeyRequest": {
+      "type": "object",
+      "required": [
+        "bytes"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsKeyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsKeyStatusResponse": {
+      "type": "object",
+      "properties": {
+        "decryptionErr": {
+          "type": "string"
+        },
+        "encryptionErr": {
+          "type": "string"
+        },
+        "keyID": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsLatencyHistogram": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsListIdentitiesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsIdentityInfo"
+          }
+        }
+      }
+    },
+    "kmsListKeysResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsKeyInfo"
+          }
+        }
+      }
+    },
+    "kmsListPoliciesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsPolicyInfo"
+          }
+        }
+      }
+    },
+    "kmsMetricsResponse": {
+      "type": "object",
+      "required": [
+        "requestOK",
+        "requestErr",
+        "requestFail",
+        "requestActive",
+        "auditEvents",
+        "errorEvents",
+        "latencyHistogram",
+        "uptime",
+        "cpus",
+        "usableCPUs",
+        "threads",
+        "heapAlloc",
+        "stackAlloc"
+      ],
+      "properties": {
+        "auditEvents": {
+          "type": "integer"
+        },
+        "cpus": {
+          "type": "integer"
+        },
+        "errorEvents": {
+          "type": "integer"
+        },
+        "heapAlloc": {
+          "type": "integer"
+        },
+        "heapObjects": {
+          "type": "integer"
+        },
+        "latencyHistogram": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsLatencyHistogram"
+          }
+        },
+        "requestActive": {
+          "type": "integer"
+        },
+        "requestErr": {
+          "type": "integer"
+        },
+        "requestFail": {
+          "type": "integer"
+        },
+        "requestOK": {
+          "type": "integer"
+        },
+        "stackAlloc": {
+          "type": "integer"
+        },
+        "threads": {
+          "type": "integer"
+        },
+        "uptime": {
+          "type": "integer"
+        },
+        "usableCPUs": {
+          "type": "integer"
+        }
+      }
+    },
+    "kmsPolicyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsSetPolicyRequest": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsStatusResponse": {
+      "type": "object",
+      "properties": {
+        "defaultKeyID": {
+          "type": "string"
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/kmsEndpoint"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "kmsVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
           "type": "string"
         }
       }
