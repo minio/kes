@@ -26,6 +26,7 @@ import ConsoleMenuList from "./ConsoleMenuList";
 // import { validRoutes } from "../valid-routes";
 import { useAppDispatch, useAppSelector } from "../../../app/hooks";
 import { menuOpen } from "../../../systemSlice";
+import { validRoutes } from "../valid-routes";
 // import { selFeatures } from "../consoleSlice";
 
 const drawerWidth = 250;
@@ -86,8 +87,6 @@ const Menu = ({ classes }: IMenuProps) => {
 
   const sidebarOpen = useAppSelector((state) => state.system.sidebarOpen);
 
-  //   const allowedMenuItems = validRoutes(features, operatorMode, directPVMode);
-
   return (
     <Drawer
       id="app-menu"
@@ -111,7 +110,7 @@ const Menu = ({ classes }: IMenuProps) => {
       />
 
       <ConsoleMenuList
-        menuItems={[]}
+        menuItems={validRoutes()}
         isOpen={sidebarOpen}
         displayHeaders={true}
       />

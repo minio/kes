@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React, { Fragment, Suspense } from "react";
-import { ApplicationLogo } from "mds";
+import { ApplicationLogo, VersionIcon } from "mds";
 
 // import { VersionIcon } from "../../../icons";
 import { Box, IconButton } from "@mui/material";
@@ -123,7 +123,7 @@ const MenuToggle = ({ isOpen, onToggle }: MenuToggleProps) => {
           <Fragment>
             <div className={`logo ${stateClsName}`}>
               <Suspense fallback={<div>...</div>}>
-                <h1>TODO: use version icon</h1>
+                <VersionIcon />
               </Suspense>
             </div>
             <IconButton

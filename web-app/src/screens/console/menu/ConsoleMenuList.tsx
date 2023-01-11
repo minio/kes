@@ -30,6 +30,7 @@ import {
 import MenuItem from "./MenuItem";
 
 import MenuSectionHeader from "./MenuSectionHeader";
+import { LogoutIcon } from "mds";
 
 const ConsoleMenuList = ({
   menuItems,
@@ -165,7 +166,7 @@ const ConsoleMenuList = ({
               ...LogoutItemIconStyle,
             }}
           >
-            <h1>TODO: add icon</h1>
+            <LogoutIcon />
           </ListItemIcon>
           <ListItemText
             primary="Sign Out"
