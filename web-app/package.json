@@ -23,7 +23,7 @@
     "@types/react-grid-layout": "^1.1.1",
     "kbar": "^0.1.0-beta.39",
     "local-storage-fallback": "^4.1.2",
-    "mds": "https://github.com/minio/mds.git#v0.0.8",
+    "mds": "https://github.com/minio/mds.git#v0.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-redux": "^8.0.5",
@@ -40,6 +40,10 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
+  },
+  "proxy": "http://localhost:9090/",
+  "devDependencies": {
+    "prettier": "2.7.1"
   },
   "eslintConfig": {
     "extends": [

@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React, { Fragment, Suspense } from "react";
-import { ApplicationLogo } from "mds";
+import { ApplicationLogo, VersionIcon } from "mds";
 
 // import { VersionIcon } from "../../../icons";
 import { Box, IconButton } from "@mui/material";
@@ -102,63 +102,60 @@ const MenuToggle = ({ isOpen, onToggle }: MenuToggleProps) => {
           //   tooltip={"Click to Collapse Menu"}
           //   placement={"right"}
           // >
-            <div className={`logo ${stateClsName}`}>
-                <Fragment>
-                  <ApplicationLogo
-                    applicationName={"console"}
-                    subVariant={
-                      logoPlan as
-                        | "AGPL"
-                        | "simple"
-                        | "standard"
-                        | "enterprise"
-                        | undefined
-                    }
-                    inverse
-                  />
-                </Fragment>
-            </div>
-          // </TooltipWrapper>
-        ) : (
-          <Fragment>
-
           <div className={`logo ${stateClsName}`}>
-            <Suspense fallback={<div>...</div>}>
-              <h1>TODO: use version icon</h1>
-            </Suspense>
+            <Fragment>
+              <ApplicationLogo
+                applicationName={"console"}
+                subVariant={
+                  logoPlan as
+                    | "AGPL"
+                    | "simple"
+                    | "standard"
+                    | "enterprise"
+                    | undefined
+                }
+                inverse
+              />
+            </Fragment>
           </div>
-          <IconButton
-            className={`${stateClsName}`}
-            sx={{
-              height: "30px",
-              width: "30px",
-              "&.mini": {
-                "&:hover": {
-                  background: "#081C42",
+        ) : (
+          // </TooltipWrapper>
+          <Fragment>
+            <div className={`logo ${stateClsName}`}>
+              <Suspense fallback={<div>...</div>}>
+                <VersionIcon />
+              </Suspense>
+            </div>
+            <IconButton
+              className={`${stateClsName}`}
+              sx={{
+                height: "30px",
+                width: "30px",
+                "&.mini": {
+                  "&:hover": {
+                    background: "#081C42",
+                  },
                 },
-              },
 
-              "&:hover": {
-                borderRadius: "50%",
-                background: "#073052",
-              },
-              "& svg": {
-                fill: "#ffffff",
-                height: "18px",
-                width: "18px",
-              },
-            }}
-            onClick={() => {
-              onToggle(true);
-            }}
-            size="small"
-          >
-            <MenuIcon />
-          </IconButton>
+                "&:hover": {
+                  borderRadius: "50%",
+                  background: "#073052",
+                },
+                "& svg": {
+                  fill: "#ffffff",
+                  height: "18px",
+                  width: "18px",
+                },
+              }}
+              onClick={() => {
+                onToggle(true);
+              }}
+              size="small"
+            >
+              <MenuIcon />
+            </IconButton>
           </Fragment>
-          
         )}
-
       </Box>
     </Box>
   );

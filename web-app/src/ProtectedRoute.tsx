@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@ import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import api from "./common/api";
 import { ISessionResponse } from "./screens/console/types";
-import { userLogged, } from "./systemSlice";
+import { userLogged } from "./systemSlice";
 import { saveSessionResponse } from "./screens/console/consoleSlice";
 import { useAppDispatch, useAppSelector } from "./app/hooks";
 
@@ -28,7 +28,6 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
   const dispatch = useAppDispatch();
-
 
   const [sessionLoading, setSessionLoading] = useState<boolean>(true);
   const userLoggedIn = useAppSelector((state) => state.system.loggedIn);
@@ -47,7 +46,6 @@ const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
         dispatch(saveSessionResponse(res));
         dispatch(userLogged(true));
         setSessionLoading(false);
-
       })
       .catch(() => setSessionLoading(false));
   }, [dispatch]);

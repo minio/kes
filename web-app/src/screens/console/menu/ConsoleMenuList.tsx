@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -30,6 +30,7 @@ import {
 import MenuItem from "./MenuItem";
 
 import MenuSectionHeader from "./MenuSectionHeader";
+import { LogoutIcon } from "mds";
 
 const ConsoleMenuList = ({
   menuItems,
@@ -165,7 +166,7 @@ const ConsoleMenuList = ({
               ...LogoutItemIconStyle,
             }}
           >
-            <h1>TODO: add icon</h1>
+            <LogoutIcon />
           </ListItemIcon>
           <ListItemText
             primary="Sign Out"

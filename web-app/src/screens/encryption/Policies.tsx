@@ -14,25 +14,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import storage from "local-storage-fallback";
+import React, { Fragment } from "react";
 
-export const setCookie = (name: string, val: string) => {
-  const date = new Date();
-  const value = val;
-
-  // Set it expire in 45 minutes
-  date.setTime(date.getTime() + 45 * 60 * 1000);
-
-  // Set it
-  document.cookie =
-    name + "=" + value + "; expires=" + date.toUTCString() + "; path=/";
+const Policies = () => {
+  return (
+    <Fragment>
+      <h1>TODO: Implement Policies</h1>
+    </Fragment>
+  );
 };
 
-export const deleteCookie = (name: string) => {
-  document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-};
-
-export const clearSession = () => {
-  storage.removeItem("token");
-  deleteCookie("token");
-};
+export default Policies;

@@ -1,5 +1,5 @@
-// This file is part of MinIO KES
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of MinIO Console Server
+// Copyright (c) 3 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -14,25 +14,27 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import storage from "local-storage-fallback";
+export interface IMenuItem {
+  group?: string;
+  type?: string;
+  component?: any;
+  to?: string;
+  name: string;
+  id?: string;
+  icon: any;
+  onClick?: any;
+  forceDisplay?: boolean;
+  extraMargin?: boolean;
+  fsHidden?: boolean;
+  customPermissionFnc?: any;
+  children?: IMenuItem[];
+  badge?: any;
+}
 
-export const setCookie = (name: string, val: string) => {
-  const date = new Date();
-  const value = val;
-
-  // Set it expire in 45 minutes
-  date.setTime(date.getTime() + 45 * 60 * 1000);
-
-  // Set it
-  document.cookie =
-    name + "=" + value + "; expires=" + date.toUTCString() + "; path=/";
-};
-
-export const deleteCookie = (name: string) => {
-  document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-};
-
-export const clearSession = () => {
-  storage.removeItem("token");
-  deleteCookie("token");
-};
+export interface IRouteRule {
+  component: any;
+  path: string;
+  forceDisplay?: boolean;
+  fsHidden?: boolean;
+  customPermissionFnc?: any;
+}

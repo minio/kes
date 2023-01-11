@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -59,7 +59,7 @@ const MenuItem = ({
   previewMenuGroup: string;
 }) => {
   const childrenMenuList = page?.children?.filter(
-    (item: any) =>item.forceDisplay && !item.fsHidden
+    (item: any) => item.forceDisplay && !item.fsHidden
   );
 
   let hasChildren = childrenMenuList?.length;

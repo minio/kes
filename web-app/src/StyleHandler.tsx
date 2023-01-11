@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -39,7 +39,6 @@ interface IStyleHandler {
 }
 
 const StyleHandler = ({ children }: IStyleHandler) => {
-
   let thm = theme;
   let globalBody: any = {};
   let rowColor: any = { color: "#393939" };
