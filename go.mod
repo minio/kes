@@ -11,7 +11,6 @@ require (
 	github.com/aws/aws-sdk-go v1.33.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/charmbracelet/lipgloss v0.6.0
-	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/selfupdate v0.4.0
 	github.com/muesli/termenv v0.11.1-0.20220204035834-5ac8409525e0
@@ -45,6 +44,7 @@ require (
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
+	github.com/fatih/color v1.7.0 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

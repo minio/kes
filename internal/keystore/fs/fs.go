@@ -176,11 +176,12 @@ func (c *Conn) create(filename string, value []byte) error {
 // directory. It must be closed to release any
 // filesystem resources.
 type Iter struct {
-	ctx    context.Context
-	dir    fs.ReadDirFile
-	names  []fs.DirEntry
-	err    error
-	closed bool
+	ctx     context.Context
+	dir     fs.ReadDirFile
+	entries []fs.DirEntry
+	current fs.DirEntry
+	err     error
+	closed  bool
 }
 
 var _ kms.Iter = (*Iter)(nil)
@@ -205,8 +206,8 @@ func (i *Iter) Next() bool {
 	if i.closed || i.err != nil {
 		return false
 	}
-	if len(i.names) > 0 {
-		i.names = i.names[1:]
+	if len(i.entries) > 0 {
+		i.current, i.entries = i.entries[0], i.entries[1:]
 		return true
 	}
 
@@ -222,24 +223,28 @@ func (i *Iter) Next() bool {
 	}
 
 	const N = 256
-	i.names, i.err = i.dir.ReadDir(N)
-	if errors.Is(i.err, io.EOF) {
-		i.err = nil
-		if len(i.names) > 0 {
-			return true
-		}
+	switch entries, err := i.dir.ReadDir(N); {
+	case errors.Is(err, io.EOF):
 		i.err = i.Close()
 		return false
+	case err != nil:
+		i.err = err
+		return false
+	case len(entries) == 0:
+		i.err = i.Close()
+		return false
+	default:
+		i.current, i.entries = entries[0], entries[1:]
+		return true
 	}
-	return i.err == nil
 }
 
 // Name returns the current name of the directory entry.
 // It returns the empty string if there are no more
 // entries or once the Iter has encountered an error.
 func (i *Iter) Name() string {
-	if len(i.names) > 0 && !i.closed && i.err == nil {
-		return i.names[0].Name()
+	if i.current != nil && !i.closed && i.err == nil {
+		return i.current.Name()
 	}
 	return ""
 }
