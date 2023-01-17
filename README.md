@@ -146,6 +146,36 @@ For a comprehensive list of REST API endpoints refer to the KES [API overview](h
    
 </details>
 
+## FAQs
+
+<details><summary><b>I have received an <code>insufficient permissions</code> error</b></summary>
+   
+This means that you are using a KES identity that is not allowed to perform a specific operation, like creating or listing keys.
+
+The KES [admin identity](https://github.com/minio/kes/blob/6452cdc079dfae54e4a46102cb4622c80b99776f/server-config.yaml#L8)
+can perform any general purpose API operation. You should never experience a `not authorized: insufficient permissions`
+error when performing general purpose API operations using the admin identity.
+
+In addition to the admin identity, KES supports a [policy-based](https://github.com/minio/kes/blob/6452cdc079dfae54e4a46102cb4622c80b99776f/server-config.yaml#L77) access control model.
+You will receive a `not authorized: insufficient permissions` error in the following two cases:
+1. **You are using a KES identity that is not assigned to any policy. KES rejects requests issued by unknown identities.**
+   
+   This can be fixed by assigning a policy to the identity. Checkout the [examples](https://github.com/minio/kes/blob/6452cdc079dfae54e4a46102cb4622c80b99776f/server-config.yaml#L79-L88).
+2. **You are using a KES identity that is assigned to a policy but the policy either not allows or even denies the API call.**
+   
+   In the second case, you have to explicitly allow the operation you want to perform. For example, if you want to create a key you
+   should allow the API call `/v1/key/create/<key-name>`. Here you have to replace `<key-name>` with the name of the key you want to
+   create - e.g. `my-key-1`.
+
+   Instead of a specific key name, you can also specifiy a pattern that matches multiple keys - like `my-key*`. By granting the
+   `/v1/key/create/my-key*` permission you will be able to create any key name that matches `my-key*`. For example `my-key-1` but
+   also `my-key-2` and `my-key-foobar`.
+   
+   Also note that deny rules take precedence over allow rules. Hence, you have to make sure that any deny pattern does not
+   accidentally matches your API request.
+
+</details>   
+   
 ***
 
 If you want to learn more about KES checkout our [documentation](https://github.com/minio/kes/wiki).
