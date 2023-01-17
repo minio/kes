@@ -16,12 +16,12 @@
 
 import React, { Fragment } from "react";
 
-const Status = () => {
+const Version = () => {
   return (
     <Fragment>
-      <h1>TODO: Implement Status</h1>
+      <h1>TODO: Implement Version</h1>
     </Fragment>
   );
 };
 
-export default Status;
+export default Version;
