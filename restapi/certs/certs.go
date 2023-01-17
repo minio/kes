@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 2021 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
@@ -24,11 +24,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	flag "github.com/spf13/pflag"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	flag "github.com/spf13/pflag"
 
 	xcerts "github.com/minio/pkg/certs"
 	"github.com/minio/pkg/env"

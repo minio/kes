@@ -1,4 +1,4 @@
-// This file is part of MinIO Console Server
+// This file is part of MinIO KES
 // Copyright (c) 3 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify

@@ -16,12 +16,12 @@
 
 import React, { Fragment } from "react";
 
-const Policies = () => {
+const SupportedEndpoints = () => {
   return (
     <Fragment>
-      <h1>TODO: Implement Policies</h1>
+      <h1>TODO: Implement SupportedEndpoints</h1>
     </Fragment>
   );
 };
 
-export default Policies;
+export default SupportedEndpoints;

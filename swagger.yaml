@@ -92,8 +92,364 @@ paths:
             $ref: "#/definitions/error"
       tags:
         - Auth
-
-
+  /encryption/status:
+    get:
+      summary: Encryption status
+      operationId: Status
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionStatusResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/metrics:
+    get:
+      summary: Encryption metrics
+      operationId: Metrics
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionMetricsResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/apis:
+    get:
+      summary: Encryption apis
+      operationId: APIs
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionAPIsResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/version:
+    get:
+      summary: Encryption version
+      operationId: Version
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionVersionResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/keys:
+    post:
+      summary: Encryption create key
+      operationId: CreateKey
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/encryptionCreateKeyRequest"
+      responses:
+        201:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    get:
+      summary: Encryption list keys
+      operationId: ListKeys
+      parameters:
+        - name: pattern
+          description: pattern to retrieve keys
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionListKeysResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/keys/{name}:
+    get:
+      summary: Encryption key status
+      operationId: KeyStatus
+      parameters:
+        - name: name
+          description: Encryption key name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionKeyStatusResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    delete:
+      summary: Encryption delete key
+      operationId: DeleteKey
+      parameters:
+        - name: name
+          description: Encryption key name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/keys/{name}/import:
+    post:
+      summary: Encryption import key
+      operationId: ImportKey
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/encryptionImportKeyRequest"
+        - name: name
+          description: Encryption key name
+          in: path
+          required: true
+          type: string
+      responses:
+        201:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/policies:
+    post:
+      summary: Encryption set policy
+      operationId: SetPolicy
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/encryptionSetPolicyRequest"
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    get:
+      summary: Encryption list policies
+      operationId: ListPolicies
+      parameters:
+        - name: pattern
+          description: pattern to retrieve policies
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionListPoliciesResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/policies/{name}:
+    get:
+      summary: Encryption get policy
+      operationId: GetPolicy
+      parameters:
+        - name: name
+          description: Encryption policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionGetPolicyResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    delete:
+      summary: Encryption delete policy
+      operationId: DeletePolicy
+      parameters:
+        - name: name
+          description: Encryption policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/policies/{name}/assign:
+    post:
+      summary: Encryption assign policy
+      operationId: AssignPolicy
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/encryptionAssignPolicyRequest"
+        - name: name
+          description: Encryption policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/policies/{name}/describe:
+    get:
+      summary: Encryption describe policy
+      operationId: DescribePolicy
+      parameters:
+        - name: name
+          description: Encryption policy name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionDescribePolicyResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/identities/{name}:
+    delete:
+      summary: Encryption delete identity
+      operationId: DeleteIdentity
+      parameters:
+        - name: name
+          description: Encryption identity name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/identities/{name}/describe:
+    get:
+      summary: Encryption describe identity
+      operationId: DescribeIdentity
+      parameters:
+        - name: name
+          description: Encryption identity name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionDescribeIdentityResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/describe-self/identity:
+    get:
+      summary: Encryption describe self identity
+      operationId: DescribeSelfIdentity
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionDescribeSelfIdentityResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/identities:
+    get:
+      summary: Encryption list identities
+      operationId: ListIdentities
+      parameters:
+        - name: pattern
+          description: pattern to retrieve identities
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionListIdentitiesResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
 
 definitions:
   # Structure that holds the `Bearer {TOKEN}` present on authenticated requests
@@ -166,4 +522,248 @@ definitions:
       redirect:
         type: string
       displayName:
+        type: string
+  encryptionStatusResponse:
+    type: object
+    properties:
+      name:
+        type: string
+      defaultKeyID:
+        type: string
+      endpoints:
+        type: array
+        items:
+          $ref: "#/definitions/encryptionEndpoint"
+  encryptionEndpoint:
+    type: object
+    properties:
+      url:
+        type: string
+      status:
+        type: string
+
+  encryptionKeyStatusResponse:
+    type: object
+    properties:
+      keyID:
+        type: string
+      encryptionErr:
+        type: string
+      decryptionErr:
+        type: string
+  encryptionCreateKeyRequest:
+    type: object
+    required:
+      - key
+    properties:
+      key:
+        type: string
+  encryptionImportKeyRequest:
+    type: object
+    required:
+      - bytes
+    properties:
+      bytes:
+        type: string
+  encryptionDeleteKeyRequest:
+    type: object
+  encryptionListKeysResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/encryptionKeyInfo"
+  encryptionKeyInfo:
+    type: object
+    properties:
+      name:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+
+  encryptionGetPolicyResponse:
+    type: object
+    properties:
+      allow:
+        type: array
+        items:
+          type: string
+      deny:
+        type: array
+        items:
+          type: string
+  encryptionSetPolicyRequest:
+    type: object
+    required:
+      - policy
+    properties:
+      policy:
+        type: string
+      allow:
+        type: array
+        items:
+          type: string
+      deny:
+        type: array
+        items:
+          type: string
+  encryptionDescribePolicyResponse:
+    type: object
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      name:
+        type: string
+  encryptionAssignPolicyRequest:
+    type: object
+    properties:
+      identity:
+        type: string
+  encryptionListPoliciesResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/encryptionPolicyInfo"
+  encryptionPolicyInfo:
+    type: object
+    properties:
+      name:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+
+  encryptionDescribeIdentityResponse:
+      type: object
+      properties:
+        policy:
+          type: string
+        identity:
+          type: string
+        admin:
+          type: boolean
+        createdAt:
+          type: string
+        createdBy:
+          type: string
+  encryptionDescribeSelfIdentityResponse:
+      type: object
+      properties:
+        identity:
+          type: string
+        policyName:
+          type: string
+        admin:
+          type: boolean
+        createdAt:
+          type: string
+        createdBy:
+          type: string
+        policy:
+          $ref: "#/definitions/encryptionGetPolicyResponse"
+  encryptionListIdentitiesResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/definitions/encryptionIdentityInfo"
+  encryptionIdentityInfo:
+    type: object
+    properties:
+      identity:
+        type: string
+      policy:
+        type: string
+      error:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+  encryptionMetricsResponse:
+    type: object
+    required:
+      - requestOK
+      - requestErr
+      - requestFail
+      - requestActive
+      - auditEvents
+      - errorEvents
+      - latencyHistogram
+      - uptime
+      - cpus
+      - usableCPUs
+      - threads
+      - heapAlloc
+      - stackAlloc
+    properties:
+      requestOK:
+        type: integer
+      requestErr:
+        type: integer
+      requestFail:
+        type: integer
+      requestActive:
+        type: integer
+      auditEvents:
+        type: integer
+      errorEvents:
+        type: integer
+      latencyHistogram:
+        type: array
+        items:
+          $ref:  "#/definitions/encryptionLatencyHistogram"
+      uptime:
+        type: integer
+      cpus:
+        type: integer
+      usableCPUs:
+        type: integer
+      threads:
+        type: integer
+      heapAlloc:
+        type: integer
+      heapObjects:
+        type: integer
+      stackAlloc:
+        type: integer
+  encryptionLatencyHistogram:
+    type: object
+    properties:
+      duration:
+        type: integer
+      total:
+        type: integer
+
+  encryptionAPIsResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/encryptionAPI"
+  encryptionAPI:
+    type: object
+    properties:
+      method:
+        type: string
+      path:
+        type: string
+      maxBody:
+        type: integer
+      timeout:
+        type: integer
+  encryptionVersionResponse:
+    type: object
+    properties:
+      version:
         type: string

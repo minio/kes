@@ -19,9 +19,10 @@ package restapi
 
 import (
 	"crypto/tls"
+	"net/http"
+
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
-	"net/http"
 
 	"github.com/go-openapi/runtime/middleware"
 
@@ -86,6 +87,8 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 			return middleware.NotImplemented("operation auth.SessionCheck has not yet been implemented")
 		})
 	}
+
+	registerEncryptionHandlers(api)
 
 	api.PreServerShutdown = func() {}
 

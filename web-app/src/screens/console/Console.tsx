@@ -26,11 +26,18 @@ import Menu from "./menu/Menu";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setSnackBarMessage } from "../../systemSlice";
 import { Route, Routes } from "react-router-dom";
-import { ROUTES, validRoutes } from "./valid-routes";
-import Status from "../encryption/Status";
-import Keys from "../encryption/Keys";
-import Policies from "../encryption/Policies";
-import Identities from "../encryption/Identities";
+import { ROUTES } from "./valid-routes";
+import Status from "./encryption/api/Status";
+import Version from "./encryption/api/Version";
+import Metrics from "./encryption/api/Metrics";
+import SupportedEndpoints from "./encryption/api/SupportedEndpoints";
+import Keys from "./encryption/keys/Keys";
+import AddKey from "./encryption/keys/AddKey";
+import ImportKey from "./encryption/keys/ImportKey";
+import Policies from "./encryption/policies/Policies";
+import AddPolicy from "./encryption/policies/AddPolicy";
+import PolicyDetails from "./encryption/policies/PolicyDetails";
+import Identities from "./encryption/identities/Identities";
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -107,12 +114,40 @@ const Console = ({ classes }: IConsoleProps) => {
       path: ROUTES.ENCRYPTION_STATUS,
     },
     {
+      component: Version,
+      path: ROUTES.ENCRYPTION_VERSION,
+    },
+    {
+      component: Metrics,
+      path: ROUTES.ENCRYPTION_METRICS,
+    },
+    {
+      component: SupportedEndpoints,
+      path: ROUTES.ENCRYPTION_SUPPORTED_ENDPOINTS,
+    },
+    {
       component: Keys,
       path: ROUTES.ENCRYPTION_KEYS,
     },
     {
+      component: AddKey,
+      path: ROUTES.ENCRYPTION_KEYS_ADD,
+    },
+    {
+      component: ImportKey,
+      path: ROUTES.ENCRYPTION_KEYS_IMPORT,
+    },
+    {
       component: Policies,
       path: ROUTES.ENCRYPTION_POLICIES,
+    },
+    {
+      component: AddPolicy,
+      path: ROUTES.ENCRYPTION_POLICIES_ADD,
+    },
+    {
+      component: PolicyDetails,
+      path: ROUTES.ENCRYPTION_POLICY_DETAILS,
     },
     {
       component: Identities,

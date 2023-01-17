@@ -52,6 +52,555 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
+    "/encryption/apis": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption apis",
+        "operationId": "APIs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionAPIsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/describe-self/identity": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe self identity",
+        "operationId": "DescribeSelfIdentity",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribeSelfIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list identities",
+        "operationId": "ListIdentities",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve identities",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListIdentitiesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities/{name}": {
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete identity",
+        "operationId": "DeleteIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities/{name}/describe": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe identity",
+        "operationId": "DescribeIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribeIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list keys",
+        "operationId": "ListKeys",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve keys",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListKeysResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption create key",
+        "operationId": "CreateKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionCreateKeyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption key status",
+        "operationId": "KeyStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionKeyStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete key",
+        "operationId": "DeleteKey",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys/{name}/import": {
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption import key",
+        "operationId": "ImportKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionImportKeyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/metrics": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption metrics",
+        "operationId": "Metrics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionMetricsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list policies",
+        "operationId": "ListPolicies",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve policies",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListPoliciesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption set policy",
+        "operationId": "SetPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionSetPolicyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption get policy",
+        "operationId": "GetPolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionGetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete policy",
+        "operationId": "DeletePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}/assign": {
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption assign policy",
+        "operationId": "AssignPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionAssignPolicyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}/describe": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe policy",
+        "operationId": "DescribePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribePolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/status": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption status",
+        "operationId": "Status",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/version": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption version",
+        "operationId": "Version",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionVersionResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/login": {
       "get": {
         "security": [],
@@ -160,6 +709,371 @@ func init() {
     }
   },
   "definitions": {
+    "encryptionAPI": {
+      "type": "object",
+      "properties": {
+        "maxBody": {
+          "type": "integer"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionAPIsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionAPI"
+          }
+        }
+      }
+    },
+    "encryptionAssignPolicyRequest": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionCreateKeyRequest": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDeleteKeyRequest": {
+      "type": "object"
+    },
+    "encryptionDescribeIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDescribePolicyResponse": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDescribeSelfIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/definitions/encryptionGetPolicyResponse"
+        },
+        "policyName": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionEndpoint": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionGetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "encryptionIdentityInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionImportKeyRequest": {
+      "type": "object",
+      "required": [
+        "bytes"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionKeyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionKeyStatusResponse": {
+      "type": "object",
+      "properties": {
+        "decryptionErr": {
+          "type": "string"
+        },
+        "encryptionErr": {
+          "type": "string"
+        },
+        "keyID": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionLatencyHistogram": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionListIdentitiesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionIdentityInfo"
+          }
+        }
+      }
+    },
+    "encryptionListKeysResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionKeyInfo"
+          }
+        }
+      }
+    },
+    "encryptionListPoliciesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionPolicyInfo"
+          }
+        }
+      }
+    },
+    "encryptionMetricsResponse": {
+      "type": "object",
+      "required": [
+        "requestOK",
+        "requestErr",
+        "requestFail",
+        "requestActive",
+        "auditEvents",
+        "errorEvents",
+        "latencyHistogram",
+        "uptime",
+        "cpus",
+        "usableCPUs",
+        "threads",
+        "heapAlloc",
+        "stackAlloc"
+      ],
+      "properties": {
+        "auditEvents": {
+          "type": "integer"
+        },
+        "cpus": {
+          "type": "integer"
+        },
+        "errorEvents": {
+          "type": "integer"
+        },
+        "heapAlloc": {
+          "type": "integer"
+        },
+        "heapObjects": {
+          "type": "integer"
+        },
+        "latencyHistogram": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionLatencyHistogram"
+          }
+        },
+        "requestActive": {
+          "type": "integer"
+        },
+        "requestErr": {
+          "type": "integer"
+        },
+        "requestFail": {
+          "type": "integer"
+        },
+        "requestOK": {
+          "type": "integer"
+        },
+        "stackAlloc": {
+          "type": "integer"
+        },
+        "threads": {
+          "type": "integer"
+        },
+        "uptime": {
+          "type": "integer"
+        },
+        "usableCPUs": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionPolicyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionSetPolicyRequest": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionStatusResponse": {
+      "type": "object",
+      "properties": {
+        "defaultKeyID": {
+          "type": "string"
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionEndpoint"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        }
+      }
+    },
     "error": {
       "type": "object",
       "required": [
@@ -304,6 +1218,555 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
+    "/encryption/apis": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption apis",
+        "operationId": "APIs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionAPIsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/describe-self/identity": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe self identity",
+        "operationId": "DescribeSelfIdentity",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribeSelfIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list identities",
+        "operationId": "ListIdentities",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve identities",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListIdentitiesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities/{name}": {
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete identity",
+        "operationId": "DeleteIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/identities/{name}/describe": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe identity",
+        "operationId": "DescribeIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption identity name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribeIdentityResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list keys",
+        "operationId": "ListKeys",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve keys",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListKeysResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption create key",
+        "operationId": "CreateKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionCreateKeyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption key status",
+        "operationId": "KeyStatus",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionKeyStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete key",
+        "operationId": "DeleteKey",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/keys/{name}/import": {
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption import key",
+        "operationId": "ImportKey",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionImportKeyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "Encryption key name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/metrics": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption metrics",
+        "operationId": "Metrics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionMetricsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list policies",
+        "operationId": "ListPolicies",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve policies",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListPoliciesResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption set policy",
+        "operationId": "SetPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionSetPolicyRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption get policy",
+        "operationId": "GetPolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionGetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete policy",
+        "operationId": "DeletePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}/assign": {
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption assign policy",
+        "operationId": "AssignPolicy",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionAssignPolicyRequest"
+            }
+          },
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/policies/{name}/describe": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe policy",
+        "operationId": "DescribePolicy",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption policy name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionDescribePolicyResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/status": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption status",
+        "operationId": "Status",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionStatusResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/version": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption version",
+        "operationId": "Version",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionVersionResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/login": {
       "get": {
         "security": [],
@@ -412,6 +1875,371 @@ func init() {
     }
   },
   "definitions": {
+    "encryptionAPI": {
+      "type": "object",
+      "properties": {
+        "maxBody": {
+          "type": "integer"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionAPIsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionAPI"
+          }
+        }
+      }
+    },
+    "encryptionAssignPolicyRequest": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionCreateKeyRequest": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDeleteKeyRequest": {
+      "type": "object"
+    },
+    "encryptionDescribeIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDescribePolicyResponse": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionDescribeSelfIdentityResponse": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/definitions/encryptionGetPolicyResponse"
+        },
+        "policyName": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionEndpoint": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionGetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "encryptionIdentityInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionImportKeyRequest": {
+      "type": "object",
+      "required": [
+        "bytes"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionKeyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionKeyStatusResponse": {
+      "type": "object",
+      "properties": {
+        "decryptionErr": {
+          "type": "string"
+        },
+        "encryptionErr": {
+          "type": "string"
+        },
+        "keyID": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionLatencyHistogram": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionListIdentitiesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionIdentityInfo"
+          }
+        }
+      }
+    },
+    "encryptionListKeysResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionKeyInfo"
+          }
+        }
+      }
+    },
+    "encryptionListPoliciesResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionPolicyInfo"
+          }
+        }
+      }
+    },
+    "encryptionMetricsResponse": {
+      "type": "object",
+      "required": [
+        "requestOK",
+        "requestErr",
+        "requestFail",
+        "requestActive",
+        "auditEvents",
+        "errorEvents",
+        "latencyHistogram",
+        "uptime",
+        "cpus",
+        "usableCPUs",
+        "threads",
+        "heapAlloc",
+        "stackAlloc"
+      ],
+      "properties": {
+        "auditEvents": {
+          "type": "integer"
+        },
+        "cpus": {
+          "type": "integer"
+        },
+        "errorEvents": {
+          "type": "integer"
+        },
+        "heapAlloc": {
+          "type": "integer"
+        },
+        "heapObjects": {
+          "type": "integer"
+        },
+        "latencyHistogram": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionLatencyHistogram"
+          }
+        },
+        "requestActive": {
+          "type": "integer"
+        },
+        "requestErr": {
+          "type": "integer"
+        },
+        "requestFail": {
+          "type": "integer"
+        },
+        "requestOK": {
+          "type": "integer"
+        },
+        "stackAlloc": {
+          "type": "integer"
+        },
+        "threads": {
+          "type": "integer"
+        },
+        "uptime": {
+          "type": "integer"
+        },
+        "usableCPUs": {
+          "type": "integer"
+        }
+      }
+    },
+    "encryptionPolicyInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionSetPolicyRequest": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionStatusResponse": {
+      "type": "object",
+      "properties": {
+        "defaultKeyID": {
+          "type": "string"
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionEndpoint"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        }
+      }
+    },
     "error": {
       "type": "object",
       "required": [

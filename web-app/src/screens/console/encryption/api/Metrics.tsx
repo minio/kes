@@ -16,12 +16,12 @@
 
 import React, { Fragment } from "react";
 
-const Identities = () => {
+const Metrics = () => {
   return (
     <Fragment>
-      <h1>TODO: Implement Identities</h1>
+      <h1>TODO: Implement Metrics</h1>
     </Fragment>
   );
 };
 
-export default Identities;
+export default Metrics;
