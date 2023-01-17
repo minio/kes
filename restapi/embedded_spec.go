@@ -52,18 +52,18 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
-    "/kms/apis": {
+    "/encryption/apis": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS apis",
-        "operationId": "KMSAPIs",
+        "summary": "Encryption apis",
+        "operationId": "APIs",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsAPIsResponse"
+              "$ref": "#/definitions/encryptionAPIsResponse"
             }
           },
           "default": {
@@ -75,18 +75,18 @@ func init() {
         }
       }
     },
-    "/kms/describe-self/identity": {
+    "/encryption/describe-self/identity": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe self identity",
-        "operationId": "KMSDescribeSelfIdentity",
+        "summary": "Encryption describe self identity",
+        "operationId": "DescribeSelfIdentity",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribeSelfIdentityResponse"
+              "$ref": "#/definitions/encryptionDescribeSelfIdentityResponse"
             }
           },
           "default": {
@@ -98,13 +98,13 @@ func init() {
         }
       }
     },
-    "/kms/identities": {
+    "/encryption/identities": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list identities",
-        "operationId": "KMSListIdentities",
+        "summary": "Encryption list identities",
+        "operationId": "ListIdentities",
         "parameters": [
           {
             "type": "string",
@@ -117,7 +117,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListIdentitiesResponse"
+              "$ref": "#/definitions/encryptionListIdentitiesResponse"
             }
           },
           "default": {
@@ -129,17 +129,17 @@ func init() {
         }
       }
     },
-    "/kms/identities/{name}": {
+    "/encryption/identities/{name}": {
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete identity",
-        "operationId": "KMSDeleteIdentity",
+        "summary": "Encryption delete identity",
+        "operationId": "DeleteIdentity",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS identity name",
+            "description": "Encryption identity name",
             "name": "name",
             "in": "path",
             "required": true
@@ -158,17 +158,17 @@ func init() {
         }
       }
     },
-    "/kms/identities/{name}/describe": {
+    "/encryption/identities/{name}/describe": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe identity",
-        "operationId": "KMSDescribeIdentity",
+        "summary": "Encryption describe identity",
+        "operationId": "DescribeIdentity",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS identity name",
+            "description": "Encryption identity name",
             "name": "name",
             "in": "path",
             "required": true
@@ -178,7 +178,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribeIdentityResponse"
+              "$ref": "#/definitions/encryptionDescribeIdentityResponse"
             }
           },
           "default": {
@@ -190,13 +190,13 @@ func init() {
         }
       }
     },
-    "/kms/keys": {
+    "/encryption/keys": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list keys",
-        "operationId": "KMSListKeys",
+        "summary": "Encryption list keys",
+        "operationId": "ListKeys",
         "parameters": [
           {
             "type": "string",
@@ -209,7 +209,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListKeysResponse"
+              "$ref": "#/definitions/encryptionListKeysResponse"
             }
           },
           "default": {
@@ -222,17 +222,17 @@ func init() {
       },
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS create key",
-        "operationId": "KMSCreateKey",
+        "summary": "Encryption create key",
+        "operationId": "CreateKey",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsCreateKeyRequest"
+              "$ref": "#/definitions/encryptionCreateKeyRequest"
             }
           }
         ],
@@ -249,17 +249,17 @@ func init() {
         }
       }
     },
-    "/kms/keys/{name}": {
+    "/encryption/keys/{name}": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS key status",
-        "operationId": "KMSKeyStatus",
+        "summary": "Encryption key status",
+        "operationId": "KeyStatus",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -269,7 +269,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsKeyStatusResponse"
+              "$ref": "#/definitions/encryptionKeyStatusResponse"
             }
           },
           "default": {
@@ -282,14 +282,14 @@ func init() {
       },
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete key",
-        "operationId": "KMSDeleteKey",
+        "summary": "Encryption delete key",
+        "operationId": "DeleteKey",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -308,25 +308,25 @@ func init() {
         }
       }
     },
-    "/kms/keys/{name}/import": {
+    "/encryption/keys/{name}/import": {
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS import key",
-        "operationId": "KMSImportKey",
+        "summary": "Encryption import key",
+        "operationId": "ImportKey",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsImportKeyRequest"
+              "$ref": "#/definitions/encryptionImportKeyRequest"
             }
           },
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -345,18 +345,18 @@ func init() {
         }
       }
     },
-    "/kms/metrics": {
+    "/encryption/metrics": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS metrics",
-        "operationId": "KMSMetrics",
+        "summary": "Encryption metrics",
+        "operationId": "Metrics",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsMetricsResponse"
+              "$ref": "#/definitions/encryptionMetricsResponse"
             }
           },
           "default": {
@@ -368,13 +368,13 @@ func init() {
         }
       }
     },
-    "/kms/policies": {
+    "/encryption/policies": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list policies",
-        "operationId": "KMSListPolicies",
+        "summary": "Encryption list policies",
+        "operationId": "ListPolicies",
         "parameters": [
           {
             "type": "string",
@@ -387,7 +387,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListPoliciesResponse"
+              "$ref": "#/definitions/encryptionListPoliciesResponse"
             }
           },
           "default": {
@@ -400,17 +400,17 @@ func init() {
       },
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS set policy",
-        "operationId": "KMSSetPolicy",
+        "summary": "Encryption set policy",
+        "operationId": "SetPolicy",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsSetPolicyRequest"
+              "$ref": "#/definitions/encryptionSetPolicyRequest"
             }
           }
         ],
@@ -427,17 +427,17 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}": {
+    "/encryption/policies/{name}": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS get policy",
-        "operationId": "KMSGetPolicy",
+        "summary": "Encryption get policy",
+        "operationId": "GetPolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -447,7 +447,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsGetPolicyResponse"
+              "$ref": "#/definitions/encryptionGetPolicyResponse"
             }
           },
           "default": {
@@ -460,14 +460,14 @@ func init() {
       },
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete policy",
-        "operationId": "KMSDeletePolicy",
+        "summary": "Encryption delete policy",
+        "operationId": "DeletePolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -486,25 +486,25 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}/assign": {
+    "/encryption/policies/{name}/assign": {
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS assign policy",
-        "operationId": "KMSAssignPolicy",
+        "summary": "Encryption assign policy",
+        "operationId": "AssignPolicy",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsAssignPolicyRequest"
+              "$ref": "#/definitions/encryptionAssignPolicyRequest"
             }
           },
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -523,17 +523,17 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}/describe": {
+    "/encryption/policies/{name}/describe": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe policy",
-        "operationId": "KMSDescribePolicy",
+        "summary": "Encryption describe policy",
+        "operationId": "DescribePolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -543,7 +543,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribePolicyResponse"
+              "$ref": "#/definitions/encryptionDescribePolicyResponse"
             }
           },
           "default": {
@@ -555,18 +555,18 @@ func init() {
         }
       }
     },
-    "/kms/status": {
+    "/encryption/status": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS status",
-        "operationId": "KMSStatus",
+        "summary": "Encryption status",
+        "operationId": "Status",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsStatusResponse"
+              "$ref": "#/definitions/encryptionStatusResponse"
             }
           },
           "default": {
@@ -578,18 +578,18 @@ func init() {
         }
       }
     },
-    "/kms/version": {
+    "/encryption/version": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS version",
-        "operationId": "KMSVersion",
+        "summary": "Encryption version",
+        "operationId": "Version",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsVersionResponse"
+              "$ref": "#/definitions/encryptionVersionResponse"
             }
           },
           "default": {
@@ -709,29 +709,7 @@ func init() {
     }
   },
   "definitions": {
-    "error": {
-      "type": "object",
-      "required": [
-        "message",
-        "detailedMessage"
-      ],
-      "properties": {
-        "code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "detailedMessage": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "kmDeleteKeyRequest": {
-      "type": "object"
-    },
-    "kmsAPI": {
+    "encryptionAPI": {
       "type": "object",
       "properties": {
         "maxBody": {
@@ -748,18 +726,18 @@ func init() {
         }
       }
     },
-    "kmsAPIsResponse": {
+    "encryptionAPIsResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsAPI"
+            "$ref": "#/definitions/encryptionAPI"
           }
         }
       }
     },
-    "kmsAssignPolicyRequest": {
+    "encryptionAssignPolicyRequest": {
       "type": "object",
       "properties": {
         "identity": {
@@ -767,7 +745,7 @@ func init() {
         }
       }
     },
-    "kmsCreateKeyRequest": {
+    "encryptionCreateKeyRequest": {
       "type": "object",
       "required": [
         "key"
@@ -778,7 +756,10 @@ func init() {
         }
       }
     },
-    "kmsDescribeIdentityResponse": {
+    "encryptionDeleteKeyRequest": {
+      "type": "object"
+    },
+    "encryptionDescribeIdentityResponse": {
       "type": "object",
       "properties": {
         "admin": {
@@ -798,7 +779,7 @@ func init() {
         }
       }
     },
-    "kmsDescribePolicyResponse": {
+    "encryptionDescribePolicyResponse": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -812,7 +793,7 @@ func init() {
         }
       }
     },
-    "kmsDescribeSelfIdentityResponse": {
+    "encryptionDescribeSelfIdentityResponse": {
       "type": "object",
       "properties": {
         "admin": {
@@ -828,14 +809,14 @@ func init() {
           "type": "string"
         },
         "policy": {
-          "$ref": "#/definitions/kmsGetPolicyResponse"
+          "$ref": "#/definitions/encryptionGetPolicyResponse"
         },
         "policyName": {
           "type": "string"
         }
       }
     },
-    "kmsEndpoint": {
+    "encryptionEndpoint": {
       "type": "object",
       "properties": {
         "status": {
@@ -846,7 +827,7 @@ func init() {
         }
       }
     },
-    "kmsGetPolicyResponse": {
+    "encryptionGetPolicyResponse": {
       "type": "object",
       "properties": {
         "allow": {
@@ -863,7 +844,7 @@ func init() {
         }
       }
     },
-    "kmsIdentityInfo": {
+    "encryptionIdentityInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -883,7 +864,7 @@ func init() {
         }
       }
     },
-    "kmsImportKeyRequest": {
+    "encryptionImportKeyRequest": {
       "type": "object",
       "required": [
         "bytes"
@@ -894,7 +875,7 @@ func init() {
         }
       }
     },
-    "kmsKeyInfo": {
+    "encryptionKeyInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -908,7 +889,7 @@ func init() {
         }
       }
     },
-    "kmsKeyStatusResponse": {
+    "encryptionKeyStatusResponse": {
       "type": "object",
       "properties": {
         "decryptionErr": {
@@ -922,7 +903,7 @@ func init() {
         }
       }
     },
-    "kmsLatencyHistogram": {
+    "encryptionLatencyHistogram": {
       "type": "object",
       "properties": {
         "duration": {
@@ -933,40 +914,40 @@ func init() {
         }
       }
     },
-    "kmsListIdentitiesResponse": {
+    "encryptionListIdentitiesResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsIdentityInfo"
+            "$ref": "#/definitions/encryptionIdentityInfo"
           }
         }
       }
     },
-    "kmsListKeysResponse": {
+    "encryptionListKeysResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsKeyInfo"
+            "$ref": "#/definitions/encryptionKeyInfo"
           }
         }
       }
     },
-    "kmsListPoliciesResponse": {
+    "encryptionListPoliciesResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsPolicyInfo"
+            "$ref": "#/definitions/encryptionPolicyInfo"
           }
         }
       }
     },
-    "kmsMetricsResponse": {
+    "encryptionMetricsResponse": {
       "type": "object",
       "required": [
         "requestOK",
@@ -1002,7 +983,7 @@ func init() {
         "latencyHistogram": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsLatencyHistogram"
+            "$ref": "#/definitions/encryptionLatencyHistogram"
           }
         },
         "requestActive": {
@@ -1031,7 +1012,7 @@ func init() {
         }
       }
     },
-    "kmsPolicyInfo": {
+    "encryptionPolicyInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -1045,7 +1026,7 @@ func init() {
         }
       }
     },
-    "kmsSetPolicyRequest": {
+    "encryptionSetPolicyRequest": {
       "type": "object",
       "required": [
         "policy"
@@ -1068,7 +1049,7 @@ func init() {
         }
       }
     },
-    "kmsStatusResponse": {
+    "encryptionStatusResponse": {
       "type": "object",
       "properties": {
         "defaultKeyID": {
@@ -1077,7 +1058,7 @@ func init() {
         "endpoints": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsEndpoint"
+            "$ref": "#/definitions/encryptionEndpoint"
           }
         },
         "name": {
@@ -1085,10 +1066,29 @@ func init() {
         }
       }
     },
-    "kmsVersionResponse": {
+    "encryptionVersionResponse": {
       "type": "object",
       "properties": {
         "version": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "message",
+        "detailedMessage"
+      ],
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "detailedMessage": {
+          "type": "string"
+        },
+        "message": {
           "type": "string"
         }
       }
@@ -1218,18 +1218,18 @@ func init() {
   },
   "basePath": "/api/v1",
   "paths": {
-    "/kms/apis": {
+    "/encryption/apis": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS apis",
-        "operationId": "KMSAPIs",
+        "summary": "Encryption apis",
+        "operationId": "APIs",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsAPIsResponse"
+              "$ref": "#/definitions/encryptionAPIsResponse"
             }
           },
           "default": {
@@ -1241,18 +1241,18 @@ func init() {
         }
       }
     },
-    "/kms/describe-self/identity": {
+    "/encryption/describe-self/identity": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe self identity",
-        "operationId": "KMSDescribeSelfIdentity",
+        "summary": "Encryption describe self identity",
+        "operationId": "DescribeSelfIdentity",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribeSelfIdentityResponse"
+              "$ref": "#/definitions/encryptionDescribeSelfIdentityResponse"
             }
           },
           "default": {
@@ -1264,13 +1264,13 @@ func init() {
         }
       }
     },
-    "/kms/identities": {
+    "/encryption/identities": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list identities",
-        "operationId": "KMSListIdentities",
+        "summary": "Encryption list identities",
+        "operationId": "ListIdentities",
         "parameters": [
           {
             "type": "string",
@@ -1283,7 +1283,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListIdentitiesResponse"
+              "$ref": "#/definitions/encryptionListIdentitiesResponse"
             }
           },
           "default": {
@@ -1295,17 +1295,17 @@ func init() {
         }
       }
     },
-    "/kms/identities/{name}": {
+    "/encryption/identities/{name}": {
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete identity",
-        "operationId": "KMSDeleteIdentity",
+        "summary": "Encryption delete identity",
+        "operationId": "DeleteIdentity",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS identity name",
+            "description": "Encryption identity name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1324,17 +1324,17 @@ func init() {
         }
       }
     },
-    "/kms/identities/{name}/describe": {
+    "/encryption/identities/{name}/describe": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe identity",
-        "operationId": "KMSDescribeIdentity",
+        "summary": "Encryption describe identity",
+        "operationId": "DescribeIdentity",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS identity name",
+            "description": "Encryption identity name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1344,7 +1344,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribeIdentityResponse"
+              "$ref": "#/definitions/encryptionDescribeIdentityResponse"
             }
           },
           "default": {
@@ -1356,13 +1356,13 @@ func init() {
         }
       }
     },
-    "/kms/keys": {
+    "/encryption/keys": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list keys",
-        "operationId": "KMSListKeys",
+        "summary": "Encryption list keys",
+        "operationId": "ListKeys",
         "parameters": [
           {
             "type": "string",
@@ -1375,7 +1375,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListKeysResponse"
+              "$ref": "#/definitions/encryptionListKeysResponse"
             }
           },
           "default": {
@@ -1388,17 +1388,17 @@ func init() {
       },
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS create key",
-        "operationId": "KMSCreateKey",
+        "summary": "Encryption create key",
+        "operationId": "CreateKey",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsCreateKeyRequest"
+              "$ref": "#/definitions/encryptionCreateKeyRequest"
             }
           }
         ],
@@ -1415,17 +1415,17 @@ func init() {
         }
       }
     },
-    "/kms/keys/{name}": {
+    "/encryption/keys/{name}": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS key status",
-        "operationId": "KMSKeyStatus",
+        "summary": "Encryption key status",
+        "operationId": "KeyStatus",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1435,7 +1435,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsKeyStatusResponse"
+              "$ref": "#/definitions/encryptionKeyStatusResponse"
             }
           },
           "default": {
@@ -1448,14 +1448,14 @@ func init() {
       },
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete key",
-        "operationId": "KMSDeleteKey",
+        "summary": "Encryption delete key",
+        "operationId": "DeleteKey",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1474,25 +1474,25 @@ func init() {
         }
       }
     },
-    "/kms/keys/{name}/import": {
+    "/encryption/keys/{name}/import": {
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS import key",
-        "operationId": "KMSImportKey",
+        "summary": "Encryption import key",
+        "operationId": "ImportKey",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsImportKeyRequest"
+              "$ref": "#/definitions/encryptionImportKeyRequest"
             }
           },
           {
             "type": "string",
-            "description": "KMS key name",
+            "description": "Encryption key name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1511,18 +1511,18 @@ func init() {
         }
       }
     },
-    "/kms/metrics": {
+    "/encryption/metrics": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS metrics",
-        "operationId": "KMSMetrics",
+        "summary": "Encryption metrics",
+        "operationId": "Metrics",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsMetricsResponse"
+              "$ref": "#/definitions/encryptionMetricsResponse"
             }
           },
           "default": {
@@ -1534,13 +1534,13 @@ func init() {
         }
       }
     },
-    "/kms/policies": {
+    "/encryption/policies": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS list policies",
-        "operationId": "KMSListPolicies",
+        "summary": "Encryption list policies",
+        "operationId": "ListPolicies",
         "parameters": [
           {
             "type": "string",
@@ -1553,7 +1553,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsListPoliciesResponse"
+              "$ref": "#/definitions/encryptionListPoliciesResponse"
             }
           },
           "default": {
@@ -1566,17 +1566,17 @@ func init() {
       },
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS set policy",
-        "operationId": "KMSSetPolicy",
+        "summary": "Encryption set policy",
+        "operationId": "SetPolicy",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsSetPolicyRequest"
+              "$ref": "#/definitions/encryptionSetPolicyRequest"
             }
           }
         ],
@@ -1593,17 +1593,17 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}": {
+    "/encryption/policies/{name}": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS get policy",
-        "operationId": "KMSGetPolicy",
+        "summary": "Encryption get policy",
+        "operationId": "GetPolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1613,7 +1613,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsGetPolicyResponse"
+              "$ref": "#/definitions/encryptionGetPolicyResponse"
             }
           },
           "default": {
@@ -1626,14 +1626,14 @@ func init() {
       },
       "delete": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS delete policy",
-        "operationId": "KMSDeletePolicy",
+        "summary": "Encryption delete policy",
+        "operationId": "DeletePolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1652,25 +1652,25 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}/assign": {
+    "/encryption/policies/{name}/assign": {
       "post": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS assign policy",
-        "operationId": "KMSAssignPolicy",
+        "summary": "Encryption assign policy",
+        "operationId": "AssignPolicy",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/kmsAssignPolicyRequest"
+              "$ref": "#/definitions/encryptionAssignPolicyRequest"
             }
           },
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1689,17 +1689,17 @@ func init() {
         }
       }
     },
-    "/kms/policies/{name}/describe": {
+    "/encryption/policies/{name}/describe": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS describe policy",
-        "operationId": "KMSDescribePolicy",
+        "summary": "Encryption describe policy",
+        "operationId": "DescribePolicy",
         "parameters": [
           {
             "type": "string",
-            "description": "KMS policy name",
+            "description": "Encryption policy name",
             "name": "name",
             "in": "path",
             "required": true
@@ -1709,7 +1709,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsDescribePolicyResponse"
+              "$ref": "#/definitions/encryptionDescribePolicyResponse"
             }
           },
           "default": {
@@ -1721,18 +1721,18 @@ func init() {
         }
       }
     },
-    "/kms/status": {
+    "/encryption/status": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS status",
-        "operationId": "KMSStatus",
+        "summary": "Encryption status",
+        "operationId": "Status",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsStatusResponse"
+              "$ref": "#/definitions/encryptionStatusResponse"
             }
           },
           "default": {
@@ -1744,18 +1744,18 @@ func init() {
         }
       }
     },
-    "/kms/version": {
+    "/encryption/version": {
       "get": {
         "tags": [
-          "KMS"
+          "Encryption"
         ],
-        "summary": "KMS version",
-        "operationId": "KMSVersion",
+        "summary": "Encryption version",
+        "operationId": "Version",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/kmsVersionResponse"
+              "$ref": "#/definitions/encryptionVersionResponse"
             }
           },
           "default": {
@@ -1875,29 +1875,7 @@ func init() {
     }
   },
   "definitions": {
-    "error": {
-      "type": "object",
-      "required": [
-        "message",
-        "detailedMessage"
-      ],
-      "properties": {
-        "code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "detailedMessage": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "kmDeleteKeyRequest": {
-      "type": "object"
-    },
-    "kmsAPI": {
+    "encryptionAPI": {
       "type": "object",
       "properties": {
         "maxBody": {
@@ -1914,18 +1892,18 @@ func init() {
         }
       }
     },
-    "kmsAPIsResponse": {
+    "encryptionAPIsResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsAPI"
+            "$ref": "#/definitions/encryptionAPI"
           }
         }
       }
     },
-    "kmsAssignPolicyRequest": {
+    "encryptionAssignPolicyRequest": {
       "type": "object",
       "properties": {
         "identity": {
@@ -1933,7 +1911,7 @@ func init() {
         }
       }
     },
-    "kmsCreateKeyRequest": {
+    "encryptionCreateKeyRequest": {
       "type": "object",
       "required": [
         "key"
@@ -1944,7 +1922,10 @@ func init() {
         }
       }
     },
-    "kmsDescribeIdentityResponse": {
+    "encryptionDeleteKeyRequest": {
+      "type": "object"
+    },
+    "encryptionDescribeIdentityResponse": {
       "type": "object",
       "properties": {
         "admin": {
@@ -1964,7 +1945,7 @@ func init() {
         }
       }
     },
-    "kmsDescribePolicyResponse": {
+    "encryptionDescribePolicyResponse": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -1978,7 +1959,7 @@ func init() {
         }
       }
     },
-    "kmsDescribeSelfIdentityResponse": {
+    "encryptionDescribeSelfIdentityResponse": {
       "type": "object",
       "properties": {
         "admin": {
@@ -1994,14 +1975,14 @@ func init() {
           "type": "string"
         },
         "policy": {
-          "$ref": "#/definitions/kmsGetPolicyResponse"
+          "$ref": "#/definitions/encryptionGetPolicyResponse"
         },
         "policyName": {
           "type": "string"
         }
       }
     },
-    "kmsEndpoint": {
+    "encryptionEndpoint": {
       "type": "object",
       "properties": {
         "status": {
@@ -2012,7 +1993,7 @@ func init() {
         }
       }
     },
-    "kmsGetPolicyResponse": {
+    "encryptionGetPolicyResponse": {
       "type": "object",
       "properties": {
         "allow": {
@@ -2029,7 +2010,7 @@ func init() {
         }
       }
     },
-    "kmsIdentityInfo": {
+    "encryptionIdentityInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -2049,7 +2030,7 @@ func init() {
         }
       }
     },
-    "kmsImportKeyRequest": {
+    "encryptionImportKeyRequest": {
       "type": "object",
       "required": [
         "bytes"
@@ -2060,7 +2041,7 @@ func init() {
         }
       }
     },
-    "kmsKeyInfo": {
+    "encryptionKeyInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -2074,7 +2055,7 @@ func init() {
         }
       }
     },
-    "kmsKeyStatusResponse": {
+    "encryptionKeyStatusResponse": {
       "type": "object",
       "properties": {
         "decryptionErr": {
@@ -2088,7 +2069,7 @@ func init() {
         }
       }
     },
-    "kmsLatencyHistogram": {
+    "encryptionLatencyHistogram": {
       "type": "object",
       "properties": {
         "duration": {
@@ -2099,40 +2080,40 @@ func init() {
         }
       }
     },
-    "kmsListIdentitiesResponse": {
+    "encryptionListIdentitiesResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsIdentityInfo"
+            "$ref": "#/definitions/encryptionIdentityInfo"
           }
         }
       }
     },
-    "kmsListKeysResponse": {
+    "encryptionListKeysResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsKeyInfo"
+            "$ref": "#/definitions/encryptionKeyInfo"
           }
         }
       }
     },
-    "kmsListPoliciesResponse": {
+    "encryptionListPoliciesResponse": {
       "type": "object",
       "properties": {
         "results": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsPolicyInfo"
+            "$ref": "#/definitions/encryptionPolicyInfo"
           }
         }
       }
     },
-    "kmsMetricsResponse": {
+    "encryptionMetricsResponse": {
       "type": "object",
       "required": [
         "requestOK",
@@ -2168,7 +2149,7 @@ func init() {
         "latencyHistogram": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsLatencyHistogram"
+            "$ref": "#/definitions/encryptionLatencyHistogram"
           }
         },
         "requestActive": {
@@ -2197,7 +2178,7 @@ func init() {
         }
       }
     },
-    "kmsPolicyInfo": {
+    "encryptionPolicyInfo": {
       "type": "object",
       "properties": {
         "createdAt": {
@@ -2211,7 +2192,7 @@ func init() {
         }
       }
     },
-    "kmsSetPolicyRequest": {
+    "encryptionSetPolicyRequest": {
       "type": "object",
       "required": [
         "policy"
@@ -2234,7 +2215,7 @@ func init() {
         }
       }
     },
-    "kmsStatusResponse": {
+    "encryptionStatusResponse": {
       "type": "object",
       "properties": {
         "defaultKeyID": {
@@ -2243,7 +2224,7 @@ func init() {
         "endpoints": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/kmsEndpoint"
+            "$ref": "#/definitions/encryptionEndpoint"
           }
         },
         "name": {
@@ -2251,10 +2232,29 @@ func init() {
         }
       }
     },
-    "kmsVersionResponse": {
+    "encryptionVersionResponse": {
       "type": "object",
       "properties": {
         "version": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "message",
+        "detailedMessage"
+      ],
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "detailedMessage": {
+          "type": "string"
+        },
+        "message": {
           "type": "string"
         }
       }

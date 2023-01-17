@@ -88,7 +88,7 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 		})
 	}
 
-	registerKMSHandlers(api)
+	registerEncryptionHandlers(api)
 
 	api.PreServerShutdown = func() {}
 

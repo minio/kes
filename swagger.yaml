@@ -92,76 +92,76 @@ paths:
             $ref: "#/definitions/error"
       tags:
         - Auth
-  /kms/status:
+  /encryption/status:
     get:
-      summary: KMS status
-      operationId: KMSStatus
+      summary: Encryption status
+      operationId: Status
       responses:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsStatusResponse"
+            $ref: "#/definitions/encryptionStatusResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/metrics:
+        - Encryption
+  /encryption/metrics:
     get:
-      summary: KMS metrics
-      operationId: KMSMetrics
+      summary: Encryption metrics
+      operationId: Metrics
       responses:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsMetricsResponse"
+            $ref: "#/definitions/encryptionMetricsResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/apis:
+        - Encryption
+  /encryption/apis:
     get:
-      summary: KMS apis
-      operationId: KMSAPIs
+      summary: Encryption apis
+      operationId: APIs
       responses:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsAPIsResponse"
+            $ref: "#/definitions/encryptionAPIsResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/version:
+        - Encryption
+  /encryption/version:
     get:
-      summary: KMS version
-      operationId: KMSVersion
+      summary: Encryption version
+      operationId: Version
       responses:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsVersionResponse"
+            $ref: "#/definitions/encryptionVersionResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/keys:
+        - Encryption
+  /encryption/keys:
     post:
-      summary: KMS create key
-      operationId: KMSCreateKey
+      summary: Encryption create key
+      operationId: CreateKey
       parameters:
         - name: body
           in: body
           required: true
           schema:
-            $ref: "#/definitions/kmsCreateKeyRequest"
+            $ref: "#/definitions/encryptionCreateKeyRequest"
       responses:
         201:
           description: A successful response.
@@ -170,10 +170,10 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
+        - Encryption
     get:
-      summary: KMS list keys
-      operationId: KMSListKeys
+      summary: Encryption list keys
+      operationId: ListKeys
       parameters:
         - name: pattern
           description: pattern to retrieve keys
@@ -183,20 +183,20 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsListKeysResponse"
+            $ref: "#/definitions/encryptionListKeysResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/keys/{name}:
+        - Encryption
+  /encryption/keys/{name}:
     get:
-      summary: KMS key status
-      operationId: KMSKeyStatus
+      summary: Encryption key status
+      operationId: KeyStatus
       parameters:
         - name: name
-          description: KMS key name
+          description: Encryption key name
           in: path
           required: true
           type: string
@@ -204,19 +204,19 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsKeyStatusResponse"
+            $ref: "#/definitions/encryptionKeyStatusResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
+        - Encryption
     delete:
-      summary: KMS delete key
-      operationId: KMSDeleteKey
+      summary: Encryption delete key
+      operationId: DeleteKey
       parameters:
         - name: name
-          description: KMS key name
+          description: Encryption key name
           in: path
           required: true
           type: string
@@ -228,19 +228,19 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/keys/{name}/import:
+        - Encryption
+  /encryption/keys/{name}/import:
     post:
-      summary: KMS import key
-      operationId: KMSImportKey
+      summary: Encryption import key
+      operationId: ImportKey
       parameters:
         - name: body
           in: body
           required: true
           schema:
-            $ref: "#/definitions/kmsImportKeyRequest"
+            $ref: "#/definitions/encryptionImportKeyRequest"
         - name: name
-          description: KMS key name
+          description: Encryption key name
           in: path
           required: true
           type: string
@@ -252,17 +252,17 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/policies:
+        - Encryption
+  /encryption/policies:
     post:
-      summary: KMS set policy
-      operationId: KMSSetPolicy
+      summary: Encryption set policy
+      operationId: SetPolicy
       parameters:
         - name: body
           in: body
           required: true
           schema:
-            $ref: "#/definitions/kmsSetPolicyRequest"
+            $ref: "#/definitions/encryptionSetPolicyRequest"
       responses:
         200:
           description: A successful response.
@@ -271,10 +271,10 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
+        - Encryption
     get:
-      summary: KMS list policies
-      operationId: KMSListPolicies
+      summary: Encryption list policies
+      operationId: ListPolicies
       parameters:
         - name: pattern
           description: pattern to retrieve policies
@@ -284,20 +284,20 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsListPoliciesResponse"
+            $ref: "#/definitions/encryptionListPoliciesResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/policies/{name}:
+        - Encryption
+  /encryption/policies/{name}:
     get:
-      summary: KMS get policy
-      operationId: KMSGetPolicy
+      summary: Encryption get policy
+      operationId: GetPolicy
       parameters:
         - name: name
-          description: KMS policy name
+          description: Encryption policy name
           in: path
           required: true
           type: string
@@ -305,19 +305,19 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsGetPolicyResponse"
+            $ref: "#/definitions/encryptionGetPolicyResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
+        - Encryption
     delete:
-      summary: KMS delete policy
-      operationId: KMSDeletePolicy
+      summary: Encryption delete policy
+      operationId: DeletePolicy
       parameters:
         - name: name
-          description: KMS policy name
+          description: Encryption policy name
           in: path
           required: true
           type: string
@@ -329,19 +329,19 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/policies/{name}/assign:
+        - Encryption
+  /encryption/policies/{name}/assign:
     post:
-      summary: KMS assign policy
-      operationId: KMSAssignPolicy
+      summary: Encryption assign policy
+      operationId: AssignPolicy
       parameters:
         - name: body
           in: body
           required: true
           schema:
-            $ref: "#/definitions/kmsAssignPolicyRequest"
+            $ref: "#/definitions/encryptionAssignPolicyRequest"
         - name: name
-          description: KMS policy name
+          description: Encryption policy name
           in: path
           required: true
           type: string
@@ -353,14 +353,14 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/policies/{name}/describe:
+        - Encryption
+  /encryption/policies/{name}/describe:
     get:
-      summary: KMS describe policy
-      operationId: KMSDescribePolicy
+      summary: Encryption describe policy
+      operationId: DescribePolicy
       parameters:
         - name: name
-          description: KMS policy name
+          description: Encryption policy name
           in: path
           required: true
           type: string
@@ -368,20 +368,20 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsDescribePolicyResponse"
+            $ref: "#/definitions/encryptionDescribePolicyResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/identities/{name}:
+        - Encryption
+  /encryption/identities/{name}:
     delete:
-      summary: KMS delete identity
-      operationId: KMSDeleteIdentity
+      summary: Encryption delete identity
+      operationId: DeleteIdentity
       parameters:
         - name: name
-          description: KMS identity name
+          description: Encryption identity name
           in: path
           required: true
           type: string
@@ -393,14 +393,14 @@ paths:
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/identities/{name}/describe:
+        - Encryption
+  /encryption/identities/{name}/describe:
     get:
-      summary: KMS describe identity
-      operationId: KMSDescribeIdentity
+      summary: Encryption describe identity
+      operationId: DescribeIdentity
       parameters:
         - name: name
-          description: KMS identity name
+          description: Encryption identity name
           in: path
           required: true
           type: string
@@ -408,32 +408,32 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsDescribeIdentityResponse"
+            $ref: "#/definitions/encryptionDescribeIdentityResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/describe-self/identity:
+        - Encryption
+  /encryption/describe-self/identity:
     get:
-      summary: KMS describe self identity
-      operationId: KMSDescribeSelfIdentity
+      summary: Encryption describe self identity
+      operationId: DescribeSelfIdentity
       responses:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsDescribeSelfIdentityResponse"
+            $ref: "#/definitions/encryptionDescribeSelfIdentityResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
-  /kms/identities:
+        - Encryption
+  /encryption/identities:
     get:
-      summary: KMS list identities
-      operationId: KMSListIdentities
+      summary: Encryption list identities
+      operationId: ListIdentities
       parameters:
         - name: pattern
           description: pattern to retrieve identities
@@ -443,13 +443,13 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/kmsListIdentitiesResponse"
+            $ref: "#/definitions/encryptionListIdentitiesResponse"
         default:
           description: Generic error response.
           schema:
             $ref: "#/definitions/error"
       tags:
-        - KMS
+        - Encryption
 
 definitions:
   # Structure that holds the `Bearer {TOKEN}` present on authenticated requests
@@ -523,7 +523,7 @@ definitions:
         type: string
       displayName:
         type: string
-  kmsStatusResponse:
+  encryptionStatusResponse:
     type: object
     properties:
       name:
@@ -533,8 +533,8 @@ definitions:
       endpoints:
         type: array
         items:
-          $ref: "#/definitions/kmsEndpoint"
-  kmsEndpoint:
+          $ref: "#/definitions/encryptionEndpoint"
+  encryptionEndpoint:
     type: object
     properties:
       url:
@@ -542,7 +542,7 @@ definitions:
       status:
         type: string
 
-  kmsKeyStatusResponse:
+  encryptionKeyStatusResponse:
     type: object
     properties:
       keyID:
@@ -551,30 +551,30 @@ definitions:
         type: string
       decryptionErr:
         type: string
-  kmsCreateKeyRequest:
+  encryptionCreateKeyRequest:
     type: object
     required:
       - key
     properties:
       key:
         type: string
-  kmsImportKeyRequest:
+  encryptionImportKeyRequest:
     type: object
     required:
       - bytes
     properties:
       bytes:
         type: string
-  kmDeleteKeyRequest:
+  encryptionDeleteKeyRequest:
     type: object
-  kmsListKeysResponse:
+  encryptionListKeysResponse:
     type: object
     properties:
       results:
         type: array
         items:
-          $ref: "#/definitions/kmsKeyInfo"
-  kmsKeyInfo:
+          $ref: "#/definitions/encryptionKeyInfo"
+  encryptionKeyInfo:
     type: object
     properties:
       name:
@@ -584,7 +584,7 @@ definitions:
       createdBy:
         type: string
 
-  kmsGetPolicyResponse:
+  encryptionGetPolicyResponse:
     type: object
     properties:
       allow:
@@ -595,7 +595,7 @@ definitions:
         type: array
         items:
           type: string
-  kmsSetPolicyRequest:
+  encryptionSetPolicyRequest:
     type: object
     required:
       - policy
@@ -610,7 +610,7 @@ definitions:
         type: array
         items:
           type: string
-  kmsDescribePolicyResponse:
+  encryptionDescribePolicyResponse:
     type: object
     properties:
       createdAt:
@@ -619,19 +619,19 @@ definitions:
         type: string
       name:
         type: string
-  kmsAssignPolicyRequest:
+  encryptionAssignPolicyRequest:
     type: object
     properties:
       identity:
         type: string
-  kmsListPoliciesResponse:
+  encryptionListPoliciesResponse:
     type: object
     properties:
       results:
         type: array
         items:
-          $ref: "#/definitions/kmsPolicyInfo"
-  kmsPolicyInfo:
+          $ref: "#/definitions/encryptionPolicyInfo"
+  encryptionPolicyInfo:
     type: object
     properties:
       name:
@@ -641,7 +641,7 @@ definitions:
       createdBy:
         type: string
 
-  kmsDescribeIdentityResponse:
+  encryptionDescribeIdentityResponse:
       type: object
       properties:
         policy:
@@ -654,7 +654,7 @@ definitions:
           type: string
         createdBy:
           type: string
-  kmsDescribeSelfIdentityResponse:
+  encryptionDescribeSelfIdentityResponse:
       type: object
       properties:
         identity:
@@ -668,15 +668,15 @@ definitions:
         createdBy:
           type: string
         policy:
-          $ref: "#/definitions/kmsGetPolicyResponse"
-  kmsListIdentitiesResponse:
+          $ref: "#/definitions/encryptionGetPolicyResponse"
+  encryptionListIdentitiesResponse:
       type: object
       properties:
         results:
           type: array
           items:
-            $ref: "#/definitions/kmsIdentityInfo"
-  kmsIdentityInfo:
+            $ref: "#/definitions/encryptionIdentityInfo"
+  encryptionIdentityInfo:
     type: object
     properties:
       identity:
@@ -689,7 +689,7 @@ definitions:
         type: string
       createdBy:
         type: string
-  kmsMetricsResponse:
+  encryptionMetricsResponse:
     type: object
     required:
       - requestOK
@@ -721,7 +721,7 @@ definitions:
       latencyHistogram:
         type: array
         items:
-          $ref:  "#/definitions/kmsLatencyHistogram"
+          $ref:  "#/definitions/encryptionLatencyHistogram"
       uptime:
         type: integer
       cpus:
@@ -736,7 +736,7 @@ definitions:
         type: integer
       stackAlloc:
         type: integer
-  kmsLatencyHistogram:
+  encryptionLatencyHistogram:
     type: object
     properties:
       duration:
@@ -744,14 +744,14 @@ definitions:
       total:
         type: integer
 
-  kmsAPIsResponse:
+  encryptionAPIsResponse:
     type: object
     properties:
       results:
         type: array
         items:
-          $ref: "#/definitions/kmsAPI"
-  kmsAPI:
+          $ref: "#/definitions/encryptionAPI"
+  encryptionAPI:
     type: object
     properties:
       method:
@@ -762,7 +762,7 @@ definitions:
         type: integer
       timeout:
         type: integer
-  kmsVersionResponse:
+  encryptionVersionResponse:
     type: object
     properties:
       version:

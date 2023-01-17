@@ -38,7 +38,7 @@ import (
 
 	"github.com/minio/kes/models"
 	"github.com/minio/kes/restapi/operations/auth"
-	"github.com/minio/kes/restapi/operations/k_m_s"
+	"github.com/minio/kes/restapi/operations/encryption"
 )
 
 // NewKesAPI creates a new Kes instance
@@ -63,62 +63,50 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 
 		JSONProducer: runtime.JSONProducer(),
 
-		KmsKMSAPIsHandler: k_m_s.KMSAPIsHandlerFunc(func(params k_m_s.KMSAPIsParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSAPIs has not yet been implemented")
+		EncryptionAPIsHandler: encryption.APIsHandlerFunc(func(params encryption.APIsParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.APIs has not yet been implemented")
 		}),
-		KmsKMSAssignPolicyHandler: k_m_s.KMSAssignPolicyHandlerFunc(func(params k_m_s.KMSAssignPolicyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSAssignPolicy has not yet been implemented")
+		EncryptionAssignPolicyHandler: encryption.AssignPolicyHandlerFunc(func(params encryption.AssignPolicyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.AssignPolicy has not yet been implemented")
 		}),
-		KmsKMSCreateKeyHandler: k_m_s.KMSCreateKeyHandlerFunc(func(params k_m_s.KMSCreateKeyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSCreateKey has not yet been implemented")
+		EncryptionCreateKeyHandler: encryption.CreateKeyHandlerFunc(func(params encryption.CreateKeyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.CreateKey has not yet been implemented")
 		}),
-		KmsKMSDeleteIdentityHandler: k_m_s.KMSDeleteIdentityHandlerFunc(func(params k_m_s.KMSDeleteIdentityParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDeleteIdentity has not yet been implemented")
+		EncryptionDeleteIdentityHandler: encryption.DeleteIdentityHandlerFunc(func(params encryption.DeleteIdentityParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DeleteIdentity has not yet been implemented")
 		}),
-		KmsKMSDeleteKeyHandler: k_m_s.KMSDeleteKeyHandlerFunc(func(params k_m_s.KMSDeleteKeyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDeleteKey has not yet been implemented")
+		EncryptionDeleteKeyHandler: encryption.DeleteKeyHandlerFunc(func(params encryption.DeleteKeyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DeleteKey has not yet been implemented")
 		}),
-		KmsKMSDeletePolicyHandler: k_m_s.KMSDeletePolicyHandlerFunc(func(params k_m_s.KMSDeletePolicyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDeletePolicy has not yet been implemented")
+		EncryptionDeletePolicyHandler: encryption.DeletePolicyHandlerFunc(func(params encryption.DeletePolicyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DeletePolicy has not yet been implemented")
 		}),
-		KmsKMSDescribeIdentityHandler: k_m_s.KMSDescribeIdentityHandlerFunc(func(params k_m_s.KMSDescribeIdentityParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDescribeIdentity has not yet been implemented")
+		EncryptionDescribeIdentityHandler: encryption.DescribeIdentityHandlerFunc(func(params encryption.DescribeIdentityParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DescribeIdentity has not yet been implemented")
 		}),
-		KmsKMSDescribePolicyHandler: k_m_s.KMSDescribePolicyHandlerFunc(func(params k_m_s.KMSDescribePolicyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDescribePolicy has not yet been implemented")
+		EncryptionDescribePolicyHandler: encryption.DescribePolicyHandlerFunc(func(params encryption.DescribePolicyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DescribePolicy has not yet been implemented")
 		}),
-		KmsKMSDescribeSelfIdentityHandler: k_m_s.KMSDescribeSelfIdentityHandlerFunc(func(params k_m_s.KMSDescribeSelfIdentityParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSDescribeSelfIdentity has not yet been implemented")
+		EncryptionDescribeSelfIdentityHandler: encryption.DescribeSelfIdentityHandlerFunc(func(params encryption.DescribeSelfIdentityParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DescribeSelfIdentity has not yet been implemented")
 		}),
-		KmsKMSGetPolicyHandler: k_m_s.KMSGetPolicyHandlerFunc(func(params k_m_s.KMSGetPolicyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSGetPolicy has not yet been implemented")
+		EncryptionGetPolicyHandler: encryption.GetPolicyHandlerFunc(func(params encryption.GetPolicyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.GetPolicy has not yet been implemented")
 		}),
-		KmsKMSImportKeyHandler: k_m_s.KMSImportKeyHandlerFunc(func(params k_m_s.KMSImportKeyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSImportKey has not yet been implemented")
+		EncryptionImportKeyHandler: encryption.ImportKeyHandlerFunc(func(params encryption.ImportKeyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.ImportKey has not yet been implemented")
 		}),
-		KmsKMSKeyStatusHandler: k_m_s.KMSKeyStatusHandlerFunc(func(params k_m_s.KMSKeyStatusParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSKeyStatus has not yet been implemented")
+		EncryptionKeyStatusHandler: encryption.KeyStatusHandlerFunc(func(params encryption.KeyStatusParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.KeyStatus has not yet been implemented")
 		}),
-		KmsKMSListIdentitiesHandler: k_m_s.KMSListIdentitiesHandlerFunc(func(params k_m_s.KMSListIdentitiesParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSListIdentities has not yet been implemented")
+		EncryptionListIdentitiesHandler: encryption.ListIdentitiesHandlerFunc(func(params encryption.ListIdentitiesParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.ListIdentities has not yet been implemented")
 		}),
-		KmsKMSListKeysHandler: k_m_s.KMSListKeysHandlerFunc(func(params k_m_s.KMSListKeysParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSListKeys has not yet been implemented")
+		EncryptionListKeysHandler: encryption.ListKeysHandlerFunc(func(params encryption.ListKeysParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.ListKeys has not yet been implemented")
 		}),
-		KmsKMSListPoliciesHandler: k_m_s.KMSListPoliciesHandlerFunc(func(params k_m_s.KMSListPoliciesParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSListPolicies has not yet been implemented")
-		}),
-		KmsKMSMetricsHandler: k_m_s.KMSMetricsHandlerFunc(func(params k_m_s.KMSMetricsParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSMetrics has not yet been implemented")
-		}),
-		KmsKMSSetPolicyHandler: k_m_s.KMSSetPolicyHandlerFunc(func(params k_m_s.KMSSetPolicyParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSSetPolicy has not yet been implemented")
-		}),
-		KmsKMSStatusHandler: k_m_s.KMSStatusHandlerFunc(func(params k_m_s.KMSStatusParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSStatus has not yet been implemented")
-		}),
-		KmsKMSVersionHandler: k_m_s.KMSVersionHandlerFunc(func(params k_m_s.KMSVersionParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation k_m_s.KMSVersion has not yet been implemented")
+		EncryptionListPoliciesHandler: encryption.ListPoliciesHandlerFunc(func(params encryption.ListPoliciesParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.ListPolicies has not yet been implemented")
 		}),
 		AuthLoginHandler: auth.LoginHandlerFunc(func(params auth.LoginParams) middleware.Responder {
 			return middleware.NotImplemented("operation auth.Login has not yet been implemented")
@@ -129,8 +117,20 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 		AuthLogoutHandler: auth.LogoutHandlerFunc(func(params auth.LogoutParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation auth.Logout has not yet been implemented")
 		}),
+		EncryptionMetricsHandler: encryption.MetricsHandlerFunc(func(params encryption.MetricsParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.Metrics has not yet been implemented")
+		}),
 		AuthSessionCheckHandler: auth.SessionCheckHandlerFunc(func(params auth.SessionCheckParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation auth.SessionCheck has not yet been implemented")
+		}),
+		EncryptionSetPolicyHandler: encryption.SetPolicyHandlerFunc(func(params encryption.SetPolicyParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.SetPolicy has not yet been implemented")
+		}),
+		EncryptionStatusHandler: encryption.StatusHandlerFunc(func(params encryption.StatusParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.Status has not yet been implemented")
+		}),
+		EncryptionVersionHandler: encryption.VersionHandlerFunc(func(params encryption.VersionParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.Version has not yet been implemented")
 		}),
 
 		KeyAuth: func(token string, scopes []string) (*models.Principal, error) {
@@ -181,52 +181,52 @@ type KesAPI struct {
 	// APIAuthorizer provides access control (ACL/RBAC/ABAC) by providing access to the request and authenticated principal
 	APIAuthorizer runtime.Authorizer
 
-	// KmsKMSAPIsHandler sets the operation handler for the k m s a p is operation
-	KmsKMSAPIsHandler k_m_s.KMSAPIsHandler
-	// KmsKMSAssignPolicyHandler sets the operation handler for the k m s assign policy operation
-	KmsKMSAssignPolicyHandler k_m_s.KMSAssignPolicyHandler
-	// KmsKMSCreateKeyHandler sets the operation handler for the k m s create key operation
-	KmsKMSCreateKeyHandler k_m_s.KMSCreateKeyHandler
-	// KmsKMSDeleteIdentityHandler sets the operation handler for the k m s delete identity operation
-	KmsKMSDeleteIdentityHandler k_m_s.KMSDeleteIdentityHandler
-	// KmsKMSDeleteKeyHandler sets the operation handler for the k m s delete key operation
-	KmsKMSDeleteKeyHandler k_m_s.KMSDeleteKeyHandler
-	// KmsKMSDeletePolicyHandler sets the operation handler for the k m s delete policy operation
-	KmsKMSDeletePolicyHandler k_m_s.KMSDeletePolicyHandler
-	// KmsKMSDescribeIdentityHandler sets the operation handler for the k m s describe identity operation
-	KmsKMSDescribeIdentityHandler k_m_s.KMSDescribeIdentityHandler
-	// KmsKMSDescribePolicyHandler sets the operation handler for the k m s describe policy operation
-	KmsKMSDescribePolicyHandler k_m_s.KMSDescribePolicyHandler
-	// KmsKMSDescribeSelfIdentityHandler sets the operation handler for the k m s describe self identity operation
-	KmsKMSDescribeSelfIdentityHandler k_m_s.KMSDescribeSelfIdentityHandler
-	// KmsKMSGetPolicyHandler sets the operation handler for the k m s get policy operation
-	KmsKMSGetPolicyHandler k_m_s.KMSGetPolicyHandler
-	// KmsKMSImportKeyHandler sets the operation handler for the k m s import key operation
-	KmsKMSImportKeyHandler k_m_s.KMSImportKeyHandler
-	// KmsKMSKeyStatusHandler sets the operation handler for the k m s key status operation
-	KmsKMSKeyStatusHandler k_m_s.KMSKeyStatusHandler
-	// KmsKMSListIdentitiesHandler sets the operation handler for the k m s list identities operation
-	KmsKMSListIdentitiesHandler k_m_s.KMSListIdentitiesHandler
-	// KmsKMSListKeysHandler sets the operation handler for the k m s list keys operation
-	KmsKMSListKeysHandler k_m_s.KMSListKeysHandler
-	// KmsKMSListPoliciesHandler sets the operation handler for the k m s list policies operation
-	KmsKMSListPoliciesHandler k_m_s.KMSListPoliciesHandler
-	// KmsKMSMetricsHandler sets the operation handler for the k m s metrics operation
-	KmsKMSMetricsHandler k_m_s.KMSMetricsHandler
-	// KmsKMSSetPolicyHandler sets the operation handler for the k m s set policy operation
-	KmsKMSSetPolicyHandler k_m_s.KMSSetPolicyHandler
-	// KmsKMSStatusHandler sets the operation handler for the k m s status operation
-	KmsKMSStatusHandler k_m_s.KMSStatusHandler
-	// KmsKMSVersionHandler sets the operation handler for the k m s version operation
-	KmsKMSVersionHandler k_m_s.KMSVersionHandler
+	// EncryptionAPIsHandler sets the operation handler for the a p is operation
+	EncryptionAPIsHandler encryption.APIsHandler
+	// EncryptionAssignPolicyHandler sets the operation handler for the assign policy operation
+	EncryptionAssignPolicyHandler encryption.AssignPolicyHandler
+	// EncryptionCreateKeyHandler sets the operation handler for the create key operation
+	EncryptionCreateKeyHandler encryption.CreateKeyHandler
+	// EncryptionDeleteIdentityHandler sets the operation handler for the delete identity operation
+	EncryptionDeleteIdentityHandler encryption.DeleteIdentityHandler
+	// EncryptionDeleteKeyHandler sets the operation handler for the delete key operation
+	EncryptionDeleteKeyHandler encryption.DeleteKeyHandler
+	// EncryptionDeletePolicyHandler sets the operation handler for the delete policy operation
+	EncryptionDeletePolicyHandler encryption.DeletePolicyHandler
+	// EncryptionDescribeIdentityHandler sets the operation handler for the describe identity operation
+	EncryptionDescribeIdentityHandler encryption.DescribeIdentityHandler
+	// EncryptionDescribePolicyHandler sets the operation handler for the describe policy operation
+	EncryptionDescribePolicyHandler encryption.DescribePolicyHandler
+	// EncryptionDescribeSelfIdentityHandler sets the operation handler for the describe self identity operation
+	EncryptionDescribeSelfIdentityHandler encryption.DescribeSelfIdentityHandler
+	// EncryptionGetPolicyHandler sets the operation handler for the get policy operation
+	EncryptionGetPolicyHandler encryption.GetPolicyHandler
+	// EncryptionImportKeyHandler sets the operation handler for the import key operation
+	EncryptionImportKeyHandler encryption.ImportKeyHandler
+	// EncryptionKeyStatusHandler sets the operation handler for the key status operation
+	EncryptionKeyStatusHandler encryption.KeyStatusHandler
+	// EncryptionListIdentitiesHandler sets the operation handler for the list identities operation
+	EncryptionListIdentitiesHandler encryption.ListIdentitiesHandler
+	// EncryptionListKeysHandler sets the operation handler for the list keys operation
+	EncryptionListKeysHandler encryption.ListKeysHandler
+	// EncryptionListPoliciesHandler sets the operation handler for the list policies operation
+	EncryptionListPoliciesHandler encryption.ListPoliciesHandler
 	// AuthLoginHandler sets the operation handler for the login operation
 	AuthLoginHandler auth.LoginHandler
 	// AuthLoginDetailHandler sets the operation handler for the login detail operation
 	AuthLoginDetailHandler auth.LoginDetailHandler
 	// AuthLogoutHandler sets the operation handler for the logout operation
 	AuthLogoutHandler auth.LogoutHandler
+	// EncryptionMetricsHandler sets the operation handler for the metrics operation
+	EncryptionMetricsHandler encryption.MetricsHandler
 	// AuthSessionCheckHandler sets the operation handler for the session check operation
 	AuthSessionCheckHandler auth.SessionCheckHandler
+	// EncryptionSetPolicyHandler sets the operation handler for the set policy operation
+	EncryptionSetPolicyHandler encryption.SetPolicyHandler
+	// EncryptionStatusHandler sets the operation handler for the status operation
+	EncryptionStatusHandler encryption.StatusHandler
+	// EncryptionVersionHandler sets the operation handler for the version operation
+	EncryptionVersionHandler encryption.VersionHandler
 
 	// ServeError is called when an error is received, there is a default handler
 	// but you can set your own with this
@@ -308,62 +308,50 @@ func (o *KesAPI) Validate() error {
 		unregistered = append(unregistered, "KeyAuth")
 	}
 
-	if o.KmsKMSAPIsHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSAPIsHandler")
+	if o.EncryptionAPIsHandler == nil {
+		unregistered = append(unregistered, "encryption.APIsHandler")
 	}
-	if o.KmsKMSAssignPolicyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSAssignPolicyHandler")
+	if o.EncryptionAssignPolicyHandler == nil {
+		unregistered = append(unregistered, "encryption.AssignPolicyHandler")
 	}
-	if o.KmsKMSCreateKeyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSCreateKeyHandler")
+	if o.EncryptionCreateKeyHandler == nil {
+		unregistered = append(unregistered, "encryption.CreateKeyHandler")
 	}
-	if o.KmsKMSDeleteIdentityHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDeleteIdentityHandler")
+	if o.EncryptionDeleteIdentityHandler == nil {
+		unregistered = append(unregistered, "encryption.DeleteIdentityHandler")
 	}
-	if o.KmsKMSDeleteKeyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDeleteKeyHandler")
+	if o.EncryptionDeleteKeyHandler == nil {
+		unregistered = append(unregistered, "encryption.DeleteKeyHandler")
 	}
-	if o.KmsKMSDeletePolicyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDeletePolicyHandler")
+	if o.EncryptionDeletePolicyHandler == nil {
+		unregistered = append(unregistered, "encryption.DeletePolicyHandler")
 	}
-	if o.KmsKMSDescribeIdentityHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDescribeIdentityHandler")
+	if o.EncryptionDescribeIdentityHandler == nil {
+		unregistered = append(unregistered, "encryption.DescribeIdentityHandler")
 	}
-	if o.KmsKMSDescribePolicyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDescribePolicyHandler")
+	if o.EncryptionDescribePolicyHandler == nil {
+		unregistered = append(unregistered, "encryption.DescribePolicyHandler")
 	}
-	if o.KmsKMSDescribeSelfIdentityHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSDescribeSelfIdentityHandler")
+	if o.EncryptionDescribeSelfIdentityHandler == nil {
+		unregistered = append(unregistered, "encryption.DescribeSelfIdentityHandler")
 	}
-	if o.KmsKMSGetPolicyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSGetPolicyHandler")
+	if o.EncryptionGetPolicyHandler == nil {
+		unregistered = append(unregistered, "encryption.GetPolicyHandler")
 	}
-	if o.KmsKMSImportKeyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSImportKeyHandler")
+	if o.EncryptionImportKeyHandler == nil {
+		unregistered = append(unregistered, "encryption.ImportKeyHandler")
 	}
-	if o.KmsKMSKeyStatusHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSKeyStatusHandler")
+	if o.EncryptionKeyStatusHandler == nil {
+		unregistered = append(unregistered, "encryption.KeyStatusHandler")
 	}
-	if o.KmsKMSListIdentitiesHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSListIdentitiesHandler")
+	if o.EncryptionListIdentitiesHandler == nil {
+		unregistered = append(unregistered, "encryption.ListIdentitiesHandler")
 	}
-	if o.KmsKMSListKeysHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSListKeysHandler")
+	if o.EncryptionListKeysHandler == nil {
+		unregistered = append(unregistered, "encryption.ListKeysHandler")
 	}
-	if o.KmsKMSListPoliciesHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSListPoliciesHandler")
-	}
-	if o.KmsKMSMetricsHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSMetricsHandler")
-	}
-	if o.KmsKMSSetPolicyHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSSetPolicyHandler")
-	}
-	if o.KmsKMSStatusHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSStatusHandler")
-	}
-	if o.KmsKMSVersionHandler == nil {
-		unregistered = append(unregistered, "k_m_s.KMSVersionHandler")
+	if o.EncryptionListPoliciesHandler == nil {
+		unregistered = append(unregistered, "encryption.ListPoliciesHandler")
 	}
 	if o.AuthLoginHandler == nil {
 		unregistered = append(unregistered, "auth.LoginHandler")
@@ -374,8 +362,20 @@ func (o *KesAPI) Validate() error {
 	if o.AuthLogoutHandler == nil {
 		unregistered = append(unregistered, "auth.LogoutHandler")
 	}
+	if o.EncryptionMetricsHandler == nil {
+		unregistered = append(unregistered, "encryption.MetricsHandler")
+	}
 	if o.AuthSessionCheckHandler == nil {
 		unregistered = append(unregistered, "auth.SessionCheckHandler")
+	}
+	if o.EncryptionSetPolicyHandler == nil {
+		unregistered = append(unregistered, "encryption.SetPolicyHandler")
+	}
+	if o.EncryptionStatusHandler == nil {
+		unregistered = append(unregistered, "encryption.StatusHandler")
+	}
+	if o.EncryptionVersionHandler == nil {
+		unregistered = append(unregistered, "encryption.VersionHandler")
 	}
 
 	if len(unregistered) > 0 {
@@ -478,79 +478,63 @@ func (o *KesAPI) initHandlerCache() {
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/apis"] = k_m_s.NewKMSAPIs(o.context, o.KmsKMSAPIsHandler)
+	o.handlers["GET"]["/encryption/apis"] = encryption.NewAPIs(o.context, o.EncryptionAPIsHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
-	o.handlers["POST"]["/kms/policies/{name}/assign"] = k_m_s.NewKMSAssignPolicy(o.context, o.KmsKMSAssignPolicyHandler)
+	o.handlers["POST"]["/encryption/policies/{name}/assign"] = encryption.NewAssignPolicy(o.context, o.EncryptionAssignPolicyHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
-	o.handlers["POST"]["/kms/keys"] = k_m_s.NewKMSCreateKey(o.context, o.KmsKMSCreateKeyHandler)
+	o.handlers["POST"]["/encryption/keys"] = encryption.NewCreateKey(o.context, o.EncryptionCreateKeyHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
-	o.handlers["DELETE"]["/kms/identities/{name}"] = k_m_s.NewKMSDeleteIdentity(o.context, o.KmsKMSDeleteIdentityHandler)
+	o.handlers["DELETE"]["/encryption/identities/{name}"] = encryption.NewDeleteIdentity(o.context, o.EncryptionDeleteIdentityHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
-	o.handlers["DELETE"]["/kms/keys/{name}"] = k_m_s.NewKMSDeleteKey(o.context, o.KmsKMSDeleteKeyHandler)
+	o.handlers["DELETE"]["/encryption/keys/{name}"] = encryption.NewDeleteKey(o.context, o.EncryptionDeleteKeyHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
-	o.handlers["DELETE"]["/kms/policies/{name}"] = k_m_s.NewKMSDeletePolicy(o.context, o.KmsKMSDeletePolicyHandler)
+	o.handlers["DELETE"]["/encryption/policies/{name}"] = encryption.NewDeletePolicy(o.context, o.EncryptionDeletePolicyHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/identities/{name}/describe"] = k_m_s.NewKMSDescribeIdentity(o.context, o.KmsKMSDescribeIdentityHandler)
+	o.handlers["GET"]["/encryption/identities/{name}/describe"] = encryption.NewDescribeIdentity(o.context, o.EncryptionDescribeIdentityHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/policies/{name}/describe"] = k_m_s.NewKMSDescribePolicy(o.context, o.KmsKMSDescribePolicyHandler)
+	o.handlers["GET"]["/encryption/policies/{name}/describe"] = encryption.NewDescribePolicy(o.context, o.EncryptionDescribePolicyHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/describe-self/identity"] = k_m_s.NewKMSDescribeSelfIdentity(o.context, o.KmsKMSDescribeSelfIdentityHandler)
+	o.handlers["GET"]["/encryption/describe-self/identity"] = encryption.NewDescribeSelfIdentity(o.context, o.EncryptionDescribeSelfIdentityHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/policies/{name}"] = k_m_s.NewKMSGetPolicy(o.context, o.KmsKMSGetPolicyHandler)
+	o.handlers["GET"]["/encryption/policies/{name}"] = encryption.NewGetPolicy(o.context, o.EncryptionGetPolicyHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
-	o.handlers["POST"]["/kms/keys/{name}/import"] = k_m_s.NewKMSImportKey(o.context, o.KmsKMSImportKeyHandler)
+	o.handlers["POST"]["/encryption/keys/{name}/import"] = encryption.NewImportKey(o.context, o.EncryptionImportKeyHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/keys/{name}"] = k_m_s.NewKMSKeyStatus(o.context, o.KmsKMSKeyStatusHandler)
+	o.handlers["GET"]["/encryption/keys/{name}"] = encryption.NewKeyStatus(o.context, o.EncryptionKeyStatusHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/identities"] = k_m_s.NewKMSListIdentities(o.context, o.KmsKMSListIdentitiesHandler)
+	o.handlers["GET"]["/encryption/identities"] = encryption.NewListIdentities(o.context, o.EncryptionListIdentitiesHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/keys"] = k_m_s.NewKMSListKeys(o.context, o.KmsKMSListKeysHandler)
+	o.handlers["GET"]["/encryption/keys"] = encryption.NewListKeys(o.context, o.EncryptionListKeysHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/kms/policies"] = k_m_s.NewKMSListPolicies(o.context, o.KmsKMSListPoliciesHandler)
-	if o.handlers["GET"] == nil {
-		o.handlers["GET"] = make(map[string]http.Handler)
-	}
-	o.handlers["GET"]["/kms/metrics"] = k_m_s.NewKMSMetrics(o.context, o.KmsKMSMetricsHandler)
-	if o.handlers["POST"] == nil {
-		o.handlers["POST"] = make(map[string]http.Handler)
-	}
-	o.handlers["POST"]["/kms/policies"] = k_m_s.NewKMSSetPolicy(o.context, o.KmsKMSSetPolicyHandler)
-	if o.handlers["GET"] == nil {
-		o.handlers["GET"] = make(map[string]http.Handler)
-	}
-	o.handlers["GET"]["/kms/status"] = k_m_s.NewKMSStatus(o.context, o.KmsKMSStatusHandler)
-	if o.handlers["GET"] == nil {
-		o.handlers["GET"] = make(map[string]http.Handler)
-	}
-	o.handlers["GET"]["/kms/version"] = k_m_s.NewKMSVersion(o.context, o.KmsKMSVersionHandler)
+	o.handlers["GET"]["/encryption/policies"] = encryption.NewListPolicies(o.context, o.EncryptionListPoliciesHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
@@ -566,7 +550,23 @@ func (o *KesAPI) initHandlerCache() {
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
+	o.handlers["GET"]["/encryption/metrics"] = encryption.NewMetrics(o.context, o.EncryptionMetricsHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
 	o.handlers["GET"]["/session"] = auth.NewSessionCheck(o.context, o.AuthSessionCheckHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/encryption/policies"] = encryption.NewSetPolicy(o.context, o.EncryptionSetPolicyHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/encryption/status"] = encryption.NewStatus(o.context, o.EncryptionStatusHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/encryption/version"] = encryption.NewVersion(o.context, o.EncryptionVersionHandler)
 }
 
 // Serve creates a http handler to serve the API over HTTP
