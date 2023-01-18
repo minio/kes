@@ -18,7 +18,7 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { Button } from "mds";
+import { AddAccessRuleIcon, Button } from "mds";
 // import PageHeader from "../Common/PageHeader/PageHeader";
 // import PageLayout from "../Common/Layout/PageLayout";
 // import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
@@ -33,8 +33,13 @@ import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
+import PageHeader from "../../common/PageHeader";
+import BackLink from "../../common/BackLink";
+import PageLayout from "../../common/PageLayout";
+import FormLayout from "../../common/FormLayout";
+import HelpBox from "../../common/Helpbox";
+import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
 // import KMSHelpBox from "./KMSHelpbox";
-// import CodeMirrorWrapper from "../Common/FormComponents/CodeMirrorWrapper/CodeMirrorWrapper";
 
 export const emptyContent = '{\n    "bytes": ""\n}';
 
@@ -73,18 +78,18 @@ const ImportKey = () => {
   return (
     <Fragment>
       <Grid item xs={12}>
-        {/* <PageHeader
-          label={<BackLink to={IAM_PAGES.KMS_KEYS} label={"Keys"} />}
-        /> */}
-        {/* <PageLayout>
+        <PageHeader
+          label={<BackLink to={ROUTES.ENCRYPTION_KEYS} label={"Keys"} />}
+        />
+        <PageLayout>
           <FormLayout
             title={"Import Key"}
             icon={<AddAccessRuleIcon />}
             helpbox={
-              <KMSHelpBox
+              <HelpBox
                 helpText={"Encryption Key"}
                 contents={[
-                  "Import a cryptographic key in the Key Management Service server connected to MINIO.",
+                  "Import a cryptographic key in KES.",
                 ]}
               />
             }
@@ -98,7 +103,7 @@ const ImportKey = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  {/* <InputBoxWrapper
                     id="key-name"
                     name="key-name"
                     label="Key Name"
@@ -108,7 +113,7 @@ const ImportKey = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setKeyName(e.target.value);
                     }}
-                  />
+                  /> */}
                 </Grid>
                 <Grid item xs={12}>
                   <CodeMirrorWrapper
@@ -151,7 +156,7 @@ const ImportKey = () => {
               </Grid>
             </form>
           </FormLayout>
-        </PageLayout> */}
+        </PageLayout>
       </Grid>
     </Fragment>
   );

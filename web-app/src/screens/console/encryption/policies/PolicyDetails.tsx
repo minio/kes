@@ -39,8 +39,10 @@ import useApi from "../../../../common/hooks/useApi";
 import { EncryptionPolicy } from "../types";
 import api from "../../../../common/api";
 import { ROUTES } from "../../valid-routes";
+import PageHeader from "../../common/PageHeader";
+import BackLink from "../../common/BackLink";
+import PageLayout from "../../common/PageLayout";
 // import useApi from "../Common/Hooks/useApi";
-// import CodeMirrorWrapper from "../Common/FormComponents/CodeMirrorWrapper/CodeMirrorWrapper";
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -210,17 +212,17 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      {/* <PageHeader
+      <PageHeader
         label={
           <Fragment>
-            <BackLink to={IAM_PAGES.KMS_POLICIES} label={"Policies"} />
+            <BackLink to={ROUTES.ENCRYPTION_POLICIES} label={"Policies"} />
           </Fragment>
         }
-      /> */}
+      />
 
-      {/* <PageLayout className={classes.pageContainer}>
+      <PageLayout className={classes.pageContainer}>
         <Grid item xs={12}>
-          <ScreenTitle
+          {/* <ScreenTitle
             icon={
               <Fragment>
                 <IAMPoliciesIcon width={40} />
@@ -260,10 +262,10 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
                 </TooltipWrapper>
               </Fragment>
             }
-          />
+          /> */}
         </Grid>
 
-        <VerticalTabs>
+        {/* <VerticalTabs>
           {{
             tabConfig: { label: "Summary", disabled: !displayPolicy },
             content: (
@@ -381,8 +383,8 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
               </Fragment>
             ),
           }}
-        </VerticalTabs>
-      </PageLayout> */}
+        </VerticalTabs> */}
+      </PageLayout>
     </Fragment>
   );
 };

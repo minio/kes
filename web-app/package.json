@@ -21,6 +21,7 @@
     "@types/superagent": "^4.1.16",
     "@types/react-virtualized": "^9.21.21",
     "@types/react-grid-layout": "^1.1.1",
+    "@types/react-copy-to-clipboard": "^5.0.2",
     "kbar": "^0.1.0-beta.39",
     "local-storage-fallback": "^4.1.2",
     "mds": "https://github.com/minio/mds.git#v0.1.0",
@@ -33,7 +34,10 @@
     "react-scripts": "5.0.1",
     "superagent": "^8.0.6",
     "typescript": "^4.9.4",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "@uiw/react-textarea-code-editor": "^2.0.6",
+    "react-copy-to-clipboard": "^5.0.2"
+    
   },
   "scripts": {
     "start": "react-scripts start",

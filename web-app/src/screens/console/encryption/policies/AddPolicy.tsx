@@ -31,7 +31,7 @@ import BackLink from "../../common/BackLink";
 import PageLayout from "../../common/PageLayout";
 import FormLayout from "../../common/FormLayout";
 import HelpBox from "../../common/Helpbox";
-// import CodeMirrorWrapper from "../Common/FormComponents/CodeMirrorWrapper/CodeMirrorWrapper";
+import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
 
 export const emptyContent = '{\n    "allow": [],\n    "deny": []\n}';
 
@@ -105,14 +105,14 @@ const AddPolicy = () => {
                   /> */}
                 </Grid>
                 <Grid item xs={12}>
-                  {/* <CodeMirrorWrapper
+                  <CodeMirrorWrapper
                     label={"Write Policy"}
                     value={policyDefinition}
                     onBeforeChange={(editor, data, value) => {
                       setPolicyDefinition(value);
                     }}
                     editorHeight={"350px"}
-                  /> */}
+                  />
                 </Grid>
                 <Grid item xs={12} textAlign={"right"}>
                   <Box
