@@ -15,17 +15,17 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import { Grid, Theme } from "@mui/material";
+import { Grid, Theme, Tooltip } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { Button } from "mds";
+import { Button, RefreshIcon } from "mds";
 import React, { useEffect, useState } from "react";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-// import { containerForHeader } from "../Common/FormComponents/common/styleLibrary";
-// import PageLayout from "../Common/Layout/PageLayout";
-// import PageHeader from "../Common/PageHeader/PageHeader";
+import PageHeader from "../../common/PageHeader";
+import PageLayout from "../../common/PageLayout";
+import SearchBox from "../../common/SearchBox";
 // import SearchBox from "../Common/SearchBox";
 // import TableWrapper from "../Common/TableWrapper/TableWrapper";
 // import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
@@ -34,7 +34,6 @@ const DeleteModal = React.lazy(() => import("../DeleteModal"))
 
 const styles = (theme: Theme) =>
   createStyles({
-    // ...containerForHeader(theme.spacing(4)),
   });
 
 interface IIdentitiesProps {
@@ -118,8 +117,8 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      {/* <PageHeader label="Key Management Service Identities" /> */}
-      {/* <PageLayout className={classes.pageContainer}>
+      <PageHeader label="Key Management Service Identities" />
+      <PageLayout>
         <Grid container spacing={1}>
           <Grid
             item
@@ -133,40 +132,40 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
               },
             }}
           >
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
+            > */}
               <SearchBox
                 onChange={setFilter}
                 placeholder="Search Identities with pattern"
-                overrideClass={classes.searchField}
                 value={filter}
               />
-            </SecureComponent>
-            <SecureComponent
+            {/* </SecureComponent> */}
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Refresh"}>
+            > */}
+              <Tooltip title={"Refresh"}>
                 <Button
                   id={"refresh-identities"}
                   variant="regular"
                   icon={<RefreshIcon />}
                   onClick={() => setLoading(true)}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
+              </Tooltip>
+            {/* </SecureComponent> */}
           </Grid>
-          <Grid item xs={12} className={classes.tableBlock}>
-            <SecureComponent
+          <Grid item xs={12}>
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TableWrapper
+            > */}
+            <h1>TODO: Implement table</h1>
+              {/* <TableWrapper
                 itemActions={tableActions}
                 columns={[
                   { label: "Identity", elementKey: "identity" },
@@ -178,11 +177,11 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
                 records={records}
                 entityName="Identities"
                 idField="identity"
-              />
-            </SecureComponent>
+              /> */}
+            {/* </SecureComponent> */}
           </Grid>
         </Grid>
-      </PageLayout> */}
+      </PageLayout>
     </React.Fragment>
   );
 };

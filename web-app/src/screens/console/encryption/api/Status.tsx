@@ -23,16 +23,16 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-// import PageHeader from "../Common/PageHeader/PageHeader";
-// import PageLayout from "../Common/Layout/PageLayout";
-// import { DisabledIcon, EnabledIcon } from "../../../icons";
+import PageHeader from "../../common/PageHeader";
+import PageLayout from "../../common/PageLayout";
 
-// import Tabs from "@mui/material/Tabs";
-// import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import { TabPanel } from "../../common/TabPanel";
+import SectionTitle from "../../common/SectionTitle";
 // import { TabPanel } from "../../shared/tabs";
 
 // import LabelValuePair from "../Common/UsageBarWrapper/LabelValuePair";
-// import SectionTitle from "../Common/SectionTitle";
 // import LabelWithIcon from "../Buckets/BucketDetails/SummaryItems/LabelWithIcon";
 // import {
 //   Bar,
@@ -174,7 +174,7 @@ const Status = () => {
 
   const statusPanel = (
     <Fragment>
-      {/* <SectionTitle>Status</SectionTitle> */}
+      <SectionTitle>Status</SectionTitle>
       <br />
       {status && (
         <Grid container spacing={1}>
@@ -233,7 +233,7 @@ const Status = () => {
 
   const apisPanel = (
     <Fragment>
-      {/* <SectionTitle>Supported API endpoints</SectionTitle> */}
+      <SectionTitle>Supported API endpoints</SectionTitle>
       <br />
       {apis && (
         <Grid container spacing={1}>
@@ -343,9 +343,9 @@ const Status = () => {
 
   return (
     <Fragment>
-      {/* <PageHeader label="Key Management Service" actions={<React.Fragment />} /> */}
+      <PageHeader label="Key Management Service"/>
 
-      {/* <PageLayout>
+      <PageLayout>
         <Tabs
           value={curTab}
           onChange={(e: React.ChangeEvent<{}>, newValue: number) => {
@@ -414,7 +414,7 @@ const Status = () => {
             {metricsPanel}
           </Box>
         </TabPanel>
-      </PageLayout> */}
+      </PageLayout>
     </Fragment>
   );
 };

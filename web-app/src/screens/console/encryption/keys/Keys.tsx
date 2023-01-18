@@ -14,32 +14,28 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme } from "@mui/material";
+import { Grid, Theme, Tooltip } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { Button } from "mds";
+import { AddIcon, Button, RefreshIcon, UploadIcon } from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
+import PageHeader from "../../common/PageHeader";
+import PageLayout from "../../common/PageLayout";
+import SearchBox from "../../common/SearchBox";
+import { ROUTES } from "../../valid-routes";
 // import withSuspense from "../Common/Components/withSuspense";
-// import {
-//   containerForHeader,
-//   searchField,
-// } from "../Common/FormComponents/common/styleLibrary";
 // import PageLayout from "../Common/Layout/PageLayout";
-// import PageHeader from "../Common/PageHeader/PageHeader";
 // import SearchBox from "../Common/SearchBox";
 // import TableWrapper from "../Common/TableWrapper/TableWrapper";
-// import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
 
-const DeleteKMSModal = React.lazy(() => import("../DeleteModal"));
+const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
 const styles = (theme: Theme) =>
   createStyles({
-    // ...searchField,
-    // ...containerForHeader(theme.spacing(4)),
   });
 
 interface IKeysProps {
@@ -117,7 +113,7 @@ const ListKeys = ({ classes }: IKeysProps) => {
   return (
     <React.Fragment>
       {deleteOpen && (
-        <DeleteKMSModal
+        <DeleteModal
           deleteOpen={deleteOpen}
           selectedItem={selectedKey}
           endpoint={"/api/v1/encryption/keys/"}
@@ -125,8 +121,8 @@ const ListKeys = ({ classes }: IKeysProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      {/* <PageHeader label="Key Management Service Keys" /> */}
-      {/* <PageLayout className={classes.pageContainer}>
+      <PageHeader label="Key Management Service Keys" />
+      <PageLayout>
         <Grid container spacing={1}>
           <Grid
             item
@@ -140,71 +136,72 @@ const ListKeys = ({ classes }: IKeysProps) => {
               },
             }}
           >
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
+            > */}
               <SearchBox
                 onChange={setFilter}
                 placeholder="Search Keys with pattern"
                 value={filter}
               />
-            </SecureComponent>
+            {/* </SecureComponent> */}
 
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Refresh"}>
+            > */}
+              <Tooltip title={"Refresh"}>
                 <Button
                   id={"refresh-keys"}
                   variant="regular"
                   icon={<RefreshIcon />}
                   onClick={() => setLoading(true)}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
-            <SecureComponent
+              </Tooltip>
+            {/* </SecureComponent> */}
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_IMPORT_KEY]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Import Key"}>
+            > */}
+              <Tooltip title={"Import Key"}>
                 <Button
                   id={"import-key"}
                   variant={"regular"}
                   icon={<UploadIcon />}
                   onClick={() => {
-                    navigate(IAM_PAGES.KMS_KEYS_IMPORT);
+                    navigate(ROUTES.ENCRYPTION_KEYS_IMPORT);
                   }}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
-            <SecureComponent
+              </Tooltip>
+            {/* </SecureComponent> */}
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_CREATE_KEY]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Create Key"}>
+            > */}
+              <Tooltip title={"Create Key"}>
                 <Button
                   id={"create-key"}
                   label={"Create Key"}
                   variant={"callAction"}
                   icon={<AddIcon />}
-                  onClick={() => navigate(IAM_PAGES.KMS_KEYS_ADD)}
+                  onClick={() => navigate(ROUTES.ENCRYPTION_KEYS_ADD)}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
+              </Tooltip>
+            {/* </SecureComponent> */}
           </Grid>
-          <Grid item xs={12} className={classes.tableBlock}>
-            <SecureComponent
+          <Grid item xs={12}>
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TableWrapper
+            > */}
+            <h1>TODO: Implement table</h1>
+              {/* <TableWrapper
                 itemActions={tableActions}
                 columns={[
                   { label: "Name", elementKey: "name" },
@@ -215,11 +212,11 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 records={records}
                 entityName="Keys"
                 idField="name"
-              />
-            </SecureComponent>
+              /> */}
+            {/* </SecureComponent> */}
           </Grid>
         </Grid>
-      </PageLayout> */}
+      </PageLayout>
     </React.Fragment>
   );
 };
