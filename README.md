@@ -163,13 +163,9 @@ You will receive a `not authorized: insufficient permissions` error in the follo
    This can be fixed by assigning a policy to the identity. Checkout the [examples](https://github.com/minio/kes/blob/6452cdc079dfae54e4a46102cb4622c80b99776f/server-config.yaml#L79-L88).
 2. **You are using a KES identity that is assigned to a policy but the policy either not allows or even denies the API call.**
    
-   In the second case, you have to explicitly allow the operation you want to perform. For example, if you want to create a key you
-   should allow the API call `/v1/key/create/<key-name>`. Here you have to replace `<key-name>` with the name of the key you want to
-   create - e.g. `my-key-1`.
-
-   Instead of a specific key name, you can also specifiy a pattern that matches multiple keys - like `my-key*`. By granting the
-   `/v1/key/create/my-key*` permission you will be able to create any key name that matches `my-key*`. For example `my-key-1` but
-   also `my-key-2` and `my-key-foobar`.
+   In this case, you have to grant the API permission in the policy assigned to the identity. Checkout the [list of APIs](https://github.com/minio/kes/wiki/Server-API#api-overview).
+   For example, when you want to create a key you should allow the `/v1/key/create/<key-name>`. The `<key-name>` can either be a
+   specific key name, like `my-key-1` or a pattern allowing arbitrary key names, like `my-key*`.
    
    Also note that deny rules take precedence over allow rules. Hence, you have to make sure that any deny pattern does not
    accidentally matches your API request.
