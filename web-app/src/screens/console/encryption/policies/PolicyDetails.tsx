@@ -34,7 +34,6 @@ import useApi from "../../../../common/hooks/useApi";
 
 // import { decodeURLString } from "../../../common/utils";
 // import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
-// import SectionTitle from "../Common/SectionTitle";
 // import PolicyDetailsPanel from "./PolicyDetailsPanel";
 // import SearchBox from "../Common/SearchBox";
 import { EncryptionPolicy } from "../types";

@@ -18,21 +18,19 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { Button } from "mds";
-// import PageHeader from "../Common/PageHeader/PageHeader";
-// import PageLayout from "../Common/Layout/PageLayout";
+import { AddAccessRuleIcon, Button } from "mds";
 // import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
-// import BackLink from "../../../common/BackLink";
-// import { AddAccessRuleIcon } from "../../../icons";
-// import { IAM_PAGES } from "../../../common/SecureComponent/permissions";
-// import FormLayout from "../Common/FormLayout";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-// import KMSHelpBox from "./KMSHelpbox";
+import PageHeader from "../../common/PageHeader";
+import BackLink from "../../common/BackLink";
+import PageLayout from "../../common/PageLayout";
+import FormLayout from "../../common/FormLayout";
+import HelpBox from "../../common/Helpbox";
 // import CodeMirrorWrapper from "../Common/FormComponents/CodeMirrorWrapper/CodeMirrorWrapper";
 
 export const emptyContent = '{\n    "allow": [],\n    "deny": []\n}';
@@ -69,18 +67,18 @@ const AddPolicy = () => {
   return (
     <Fragment>
       <Grid item xs={12}>
-        {/* <PageHeader
-          label={<BackLink to={IAM_PAGES.KMS_POLICIES} label={"Policies"} />}
-        /> */}
-        {/* <PageLayout>
+        <PageHeader
+          label={<BackLink to={ROUTES.ENCRYPTION_POLICIES} label={"Policies"} />}
+        />
+        <PageLayout>
           <FormLayout
             title={"Create Policy"}
             icon={<AddAccessRuleIcon />}
             helpbox={
-              <KMSHelpBox
+              <HelpBox
                 helpText={"Encryption Policy"}
                 contents={[
-                  "Create a new policy key in the Key Management Service server connected to MINIO.",
+                  "Create a new policy in KES.",
                 ]}
               />
             }
@@ -94,7 +92,7 @@ const AddPolicy = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  {/* <InputBoxWrapper
                     id="policy"
                     name="policy"
                     label="Policy Name"
@@ -104,17 +102,17 @@ const AddPolicy = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setPolicy(e.target.value);
                     }}
-                  />
+                  /> */}
                 </Grid>
                 <Grid item xs={12}>
-                  <CodeMirrorWrapper
+                  {/* <CodeMirrorWrapper
                     label={"Write Policy"}
                     value={policyDefinition}
                     onBeforeChange={(editor, data, value) => {
                       setPolicyDefinition(value);
                     }}
                     editorHeight={"350px"}
-                  />
+                  /> */}
                 </Grid>
                 <Grid item xs={12} textAlign={"right"}>
                   <Box
@@ -150,7 +148,7 @@ const AddPolicy = () => {
               </Grid>
             </form>
           </FormLayout>
-        </PageLayout> */}
+        </PageLayout>
       </Grid>
     </Fragment>
   );

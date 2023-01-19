@@ -14,28 +14,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme } from "@mui/material";
+import { Grid, Theme, Tooltip } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { Button } from "mds";
+import { AddIcon, Button, RefreshIcon } from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
+import PageHeader from "../../common/PageHeader";
+import PageLayout from "../../common/PageLayout";
+import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
-// import { containerForHeader } from "../Common/FormComponents/common/styleLibrary";
-// import PageLayout from "../Common/Layout/PageLayout";
-// import PageHeader from "../Common/PageHeader/PageHeader";
-// import SearchBox from "../Common/SearchBox";
 // import TableWrapper from "../Common/TableWrapper/TableWrapper";
-// import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
 
 const DeleteKMSModal = React.lazy(() => import("../DeleteModal"))
 
 const styles = (theme: Theme) =>
   createStyles({
-    // ...containerForHeader(theme.spacing(4)),
   });
 
 interface IPoliciesProps {
@@ -127,8 +124,8 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      {/* <PageHeader label="Key Management Service Policies" /> */}
-      {/* <PageLayout className={classes.pageContainer}>
+      <PageHeader label="Key Management Service Policies" />
+      <PageLayout>
         <Grid container spacing={1}>
           <Grid
             item
@@ -142,56 +139,57 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               },
             }}
           >
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
+            > */}
               <SearchBox
                 onChange={setFilter}
                 placeholder="Search Policies with pattern"
                 value={filter}
               />
-            </SecureComponent>
+            {/* </SecureComponent> */}
 
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Refresh"}>
+            > */}
+              <Tooltip title={"Refresh"}>
                 <Button
                   id={"refresh-policies"}
                   variant="regular"
                   icon={<RefreshIcon />}
                   onClick={() => setLoading(true)}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
+              </Tooltip>
+            {/* </SecureComponent> */}
 
-            <SecureComponent
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_SET_POLICY]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TooltipWrapper tooltip={"Create Policy"}>
+            > */}
+              <Tooltip title={"Create Policy"}>
                 <Button
                   id={"create-policy"}
                   label={"Create policy"}
                   variant={"callAction"}
                   icon={<AddIcon />}
-                  onClick={() => navigate(IAM_PAGES.KMS_POLICIES_ADD)}
+                  onClick={() => navigate(ROUTES.ENCRYPTION_POLICIES_ADD)}
                 />
-              </TooltipWrapper>
-            </SecureComponent>
+              </Tooltip>
+            {/* </SecureComponent> */}
           </Grid>
-          <Grid item xs={12} className={classes.tableBlock}>
-            <SecureComponent
+          <Grid item xs={12}>
+            {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
-            >
-              <TableWrapper
+            > */}
+            <h1>TODO: Implement table</h1>
+              {/* <TableWrapper
                 itemActions={tableActions}
                 columns={[
                   { label: "Name", elementKey: "name" },
@@ -202,11 +200,11 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
                 records={records}
                 entityName="Policies"
                 idField="name"
-              />
-            </SecureComponent>
+              /> */}
+            {/* </SecureComponent> */}
           </Grid>
         </Grid>
-      </PageLayout> */}
+      </PageLayout>
     </React.Fragment>
   );
 };
