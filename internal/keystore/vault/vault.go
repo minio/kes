@@ -115,6 +115,13 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 	case c.AppRole.ID != "" || c.AppRole.Secret != "":
 		authenticate, retry = client.AuthenticateWithAppRole(c.AppRole), c.AppRole.Retry
 	case c.K8S.Role != "" || c.K8S.JWT != "":
+		jwt, err := os.ReadFile(c.K8S.JWT) // The JWT may be a file path containing the actaul token
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		if err == nil {
+			c.K8S.JWT = string(jwt)
+		}
 		authenticate, retry = client.AuthenticateWithK8S(c.K8S), c.K8S.Retry
 	}
 
