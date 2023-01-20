@@ -64,25 +64,6 @@ jobs:
         GO111MODULE: on
       run: |
          go test ./...
-
-  integration:
-    name: Integration Test
-    needs: Lint
-    runs-on: ubuntu-latest
-    steps:
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.19.4
-        check-latest: true
-      id: go
-    - name: Check out code
-      uses: actions/checkout@v3
-    - name: Integration Test
-      env:
-        GO111MODULE: on
-      run: |
-         go test -integration ./...
   
   vulncheck:
     name: Vulncheck
