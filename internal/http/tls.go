@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	xlog "github.com/minio/kes/internal/log"
 )
@@ -135,27 +134,26 @@ func (c *Certificate) GetCertificate(clientHello *tls.ClientHelloInfo) (*tls.Cer
 	return &c.certificate, nil
 }
 
-// ReloadAfter reloads the X.509 TLS certificate from its
+// ReloadCertificate reloads the X.509 TLS certificate from its
 // certificate resp. private key file periodically in an
-// infinite loop.
+// infinite loop when there is a new event on the events channel.
 //
-// Once the ctx.Done() channel returns ReloadAfter exits.
-func (c *Certificate) ReloadAfter(ctx context.Context, interval time.Duration) {
+// Once the ctx.Done() channel returns or the events channel is closed
+// ReloadCertificate exits.
+func ReloadCertificate[T any](ctx context.Context, c *Certificate, events <-chan T) {
 	if c.certFile == "" || c.keyFile == "" {
 		return
 	}
 
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-
 	var lastReloadErr error
 	for {
-		timer.Reset(interval) // Set reload interval.
-
 		select {
 		case <-ctx.Done():
 			return
-		case <-timer.C:
+		case _, ok := <-events:
+			if !ok { // events channel got closed
+				return
+			}
 		}
 
 		certBytes, err := readCertificate(c.certFile)

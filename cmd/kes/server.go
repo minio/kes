@@ -250,7 +250,20 @@ func startServer(path string, sConfig serverConfig) {
 			cli.Fatalf("abnormal server shutdown: %v", err)
 		}
 	}()
-	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
+
+	// By default, reload the certificate every 5m.
+	reloadCertInterval := time.NewTicker(5 * time.Minute)
+	defer reloadCertInterval.Stop()
+	go xhttp.ReloadCertificate(ctx, certificate, reloadCertInterval.C)
+
+	// Also reload the certificate when receiving a SIGHUP signal.
+	// SIGHUP is only available on unix systems. Therefore excluding windows.
+	if runtime.GOOS != "windows" {
+		sighup := make(chan os.Signal, 10)
+		signal.Notify(sighup, syscall.SIGHUP)
+		defer signal.Reset(syscall.SIGHUP)
+		go xhttp.ReloadCertificate(ctx, certificate, sighup)
+	}
 
 	ip, port := serverAddr(init.Address.Value())
 	ifaceIPs := listeningOnV4(ip)
