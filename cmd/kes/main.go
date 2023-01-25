@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/minio/kes"
@@ -32,6 +33,7 @@ Commands:
 
     enclave                  Manage KES enclaves.
     key                      Manage cryptographic keys.
+    secret                   Manage KES secrets.
     policy                   Manage KES policies.
     identity                 Manage KES identities.
 
@@ -44,10 +46,15 @@ Commands:
 
 Options:
     -v, --version            Print version information.
+        --auto-completion    Install auto-completion for this shell.
     -h, --help               Print command line options.
 `
 
 func main() {
+	if complete(filepath.Base(os.Args[0])) {
+		return
+	}
+
 	cmd := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 
@@ -58,6 +65,7 @@ func main() {
 
 		"enclave":  enclaveCmd,
 		"key":      keyCmd,
+		"secret":   secretCmd,
 		"policy":   policyCmd,
 		"identity": identityCmd,
 
@@ -78,8 +86,12 @@ func main() {
 		return
 	}
 
-	var showVersion bool
+	var (
+		showVersion    bool
+		autoCompletion bool
+	)
 	cmd.BoolVarP(&showVersion, "version", "v", false, "Print version information.")
+	cmd.BoolVar(&autoCompletion, "auto-completion", false, "Install auto-completion for this shell")
 	if err := cmd.Parse(os.Args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -92,7 +104,11 @@ func main() {
 	}
 	if showVersion {
 		buildInfo := sys.BinaryInfo()
-		fmt.Printf("kes %s (commit=%s)\n", buildInfo.Version, buildInfo.CommitID)
+		cli.Printf("kes %s (commit=%s)\n", buildInfo.Version, buildInfo.CommitID)
+		return
+	}
+	if autoCompletion {
+		installAutoCompletion()
 		return
 	}
 	cmd.Usage()

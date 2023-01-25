@@ -147,9 +147,9 @@ func WriteInitConfig(filename string, config *InitConfig) error {
 // It returns an initialized Vault and a set of UnsealKeys to
 // unseal the Vault in the future.
 func Init(path string, init *InitConfig, seal *SealConfig) (*sys.Vault, []sys.UnsealKey, error) {
-	algorithm := key.AES256_GCM_SHA256
+	algorithm := kes.AES256_GCM_SHA256
 	if !fips.Enabled && !cpu.HasAESGCM() {
-		algorithm = key.XCHACHA20_POLY1305
+		algorithm = kes.XCHACHA20_POLY1305
 	}
 	rootKey, err := key.Random(algorithm, seal.SysAdmin)
 	if err != nil {

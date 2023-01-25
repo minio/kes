@@ -88,11 +88,15 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 		return EnclaveInfo{}, err
 	}
 
-	algorithm := key.AES256_GCM_SHA256
+	algorithm := kes.AES256_GCM_SHA256
 	if !fips.Enabled && !cpu.HasAESGCM() {
-		algorithm = key.XCHACHA20_POLY1305
+		algorithm = kes.XCHACHA20_POLY1305
 	}
 	keyStoreKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
+	if err != nil {
+		return EnclaveInfo{}, err
+	}
+	secretKey, err := key.Random(algorithm, v.rootKey.CreatedBy())
 	if err != nil {
 		return EnclaveInfo{}, err
 	}
@@ -111,6 +115,9 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 	if err = os.Mkdir(filepath.Join(enclavePath, "key"), 0o755); err != nil {
 		return EnclaveInfo{}, err
 	}
+	if err = os.Mkdir(filepath.Join(enclavePath, "secret"), 0o755); err != nil {
+		return EnclaveInfo{}, err
+	}
 	if err = os.Mkdir(filepath.Join(enclavePath, "policy"), 0o755); err != nil {
 		return EnclaveInfo{}, err
 	}
@@ -126,6 +133,7 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 	info := EnclaveInfo{
 		Name:        name,
 		KeyStoreKey: keyStoreKey,
+		SecretKey:   secretKey,
 		PolicyKey:   policyKey,
 		IdentityKey: identityKey,
 		CreatedAt:   time.Now().UTC(),
@@ -175,9 +183,10 @@ func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error)
 	}
 
 	keyFS := NewKeyFS(filepath.Join(enclavePath, "key"), info.KeyStoreKey)
+	secretFS := NewSecretFS(filepath.Join(enclavePath, "secret"), info.SecretKey)
 	policyFS := NewPolicyFS(filepath.Join(enclavePath, "policy"), info.PolicyKey)
 	identityFS := NewIdentityFS(filepath.Join(enclavePath, "identity"), info.IdentityKey)
-	return NewEnclave(keyFS, policyFS, identityFS), nil
+	return NewEnclave(keyFS, secretFS, policyFS, identityFS), nil
 }
 
 func (v *vaultFS) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo, error) {

@@ -499,6 +499,69 @@ func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, er
 	return enclave.ListKeys(ctx, pattern)
 }
 
+// CreateSecret creates a new secret with the given name.
+//
+// It returns ErrSecretExists if a secret with the same name
+// already exists.
+func (c *Client) CreateSecret(ctx context.Context, name string, value []byte, options *SecretOptions) error {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.CreateSecret(ctx, name, value, options)
+}
+
+// DescribeSecret returns the SecretInfo for the given secret.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (c *Client) DescribeSecret(ctx context.Context, name string) (*SecretInfo, error) {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.DescribeSecret(ctx, name)
+}
+
+// ReadSecret returns the secret with the given name.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (c *Client) ReadSecret(ctx context.Context, name string) ([]byte, *SecretInfo, error) {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.ReadSecret(ctx, name)
+}
+
+// DeleteSecret deletes the secret with the given name.
+//
+// It returns ErrSecretNotFound if no such secret exists.
+func (c *Client) DeleteSecret(ctx context.Context, name string) error {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.DeleteSecret(ctx, name)
+}
+
+// ListSecrets returns a SecretIter that iterates over all secrets
+// matching the pattern.
+//
+// The '*' pattern matches any secret. If pattern is empty the
+// SecretIter iterates over all secrets names.
+func (c *Client) ListSecrets(ctx context.Context, pattern string) (*SecretIter, error) {
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
+	}
+	return enclave.ListSecrets(ctx, pattern)
+}
+
 // SetPolicy creates the given policy. If a policy with the same
 // name already exists, SetPolicy overwrites the existing policy
 // with the given one. Any existing identites will be assigned to

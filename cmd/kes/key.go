@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )
@@ -225,7 +226,7 @@ func describeKeyCmd(args []string) {
 	case cmd.NArg() == 0:
 		cli.Fatal("no key name specified. See 'kes key info --help'")
 	case cmd.NArg() > 1:
-		cli.Fatal("too many arguments. See 'kes key ls --help'")
+		cli.Fatal("too many arguments. See 'kes key info --help'")
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -264,6 +265,12 @@ func describeKeyCmd(args []string) {
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "ID")),
 			info.ID,
+		)
+	}
+	if info.Algorithm != kes.KeyAlgorithmUndefined {
+		fmt.Println(
+			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
+			info.Algorithm,
 		)
 	}
 	fmt.Println(

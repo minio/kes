@@ -25,8 +25,8 @@ import (
 	"github.com/minio/kes/internal/auth"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/log"
-	"github.com/minio/kes/internal/mem"
 	"github.com/minio/kes/internal/metric"
 )
 
