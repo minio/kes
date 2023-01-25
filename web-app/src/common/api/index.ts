@@ -18,16 +18,12 @@ import request from "superagent";
 import { clearSession } from "../utils";
 import { ErrorResponseHandler } from "./types";
 
-const baseLocation = new URL(document.baseURI);
-export const baseUrl = baseLocation.pathname;
+// const baseLocation = new URL(document.baseURI);
+// export const baseUrl = baseLocation.pathname;
 
 export class API {
   invoke(method: string, url: string, data?: object) {
-    let targetURL = url;
-    if (targetURL[0] === "/") {
-      targetURL = targetURL.slice(1);
-    }
-    return request(method, targetURL)
+    return request(method, url)
       .send(data)
       .then((res) => res.body)
       .catch((err) => {
@@ -35,7 +31,7 @@ export class API {
         if (
           err.status === 401 &&
           localStorage.getItem("userLoggedIn") &&
-          !targetURL.includes("api/v1/login")
+          !url.includes("api/v1/login")
         ) {
           if (window.location.pathname !== "/") {
             localStorage.setItem("redirect-path", window.location.pathname);
@@ -43,7 +39,7 @@ export class API {
           clearSession();
           // Refresh the whole page to ensure cache is clear
           // and we dont end on an infinite loop
-          window.location.href = `${baseUrl}login`;
+          window.location.href = `/login`;
           return;
         }
 
@@ -78,7 +74,7 @@ export class API {
       return Promise.reject(throwMessage);
     } else {
       clearSession();
-      window.location.href = `${baseUrl}login`;
+      window.location.href = `/login`;
     }
   }
 }

@@ -859,6 +859,9 @@ func init() {
         "identity": {
           "type": "string"
         },
+        "isAdmin": {
+          "type": "boolean"
+        },
         "policy": {
           "type": "string"
         }
@@ -2024,6 +2027,9 @@ func init() {
         },
         "identity": {
           "type": "string"
+        },
+        "isAdmin": {
+          "type": "boolean"
         },
         "policy": {
           "type": "string"

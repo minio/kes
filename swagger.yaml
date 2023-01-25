@@ -689,6 +689,8 @@ definitions:
         type: string
       createdBy:
         type: string
+      isAdmin:
+        type: boolean
   encryptionMetricsResponse:
     type: object
     required:

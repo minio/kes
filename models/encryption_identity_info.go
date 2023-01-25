@@ -46,6 +46,9 @@ type EncryptionIdentityInfo struct {
 	// identity
 	Identity string `json:"identity,omitempty"`
 
+	// is admin
+	IsAdmin bool `json:"isAdmin,omitempty"`
+
 	// policy
 	Policy string `json:"policy,omitempty"`
 }

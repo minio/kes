@@ -18,7 +18,10 @@
 package restapi
 
 import (
+	"context"
+
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/minio/kes"
 	"github.com/minio/kes/models"
 	"github.com/minio/kes/restapi/operations"
 	"github.com/minio/kes/restapi/operations/encryption"
@@ -278,38 +281,45 @@ func GetKMSImportKeyResponse(session *models.Principal, params encryption.Import
 // }
 
 func GetKMSListKeysResponse(session *models.Principal, params encryption.ListKeysParams) (*models.EncryptionListKeysResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// pattern := ""
-	// if params.Pattern != nil {
-	// 	pattern = *params.Pattern
-	// }
-	// return listKeys(ctx, pattern, AdminClient{Client: mAdmin})
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	pattern := ""
+	if params.Pattern != nil {
+		pattern = *params.Pattern
+	}
+	return listKeys(ctx, pattern, KESClient{Client: kesClient})
 }
 
-// func listKeys(ctx context.Context, pattern string, minioClient MinioAdmin) (*models.ListKeysResponse, *models.Error) {
-// 	results, err := minioClient.listKeys(ctx, pattern)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.ListKeysResponse{Results: parseKeys(results)}, nil
-// }
+func listKeys(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListKeysResponse, *models.Error) {
+	iterator, err := kesClient.listKeys(ctx, pattern)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
 
-// func parseKeys(results []madmin.KeyInfo) (data []*models.KeyInfo) {
-// 	for _, key := range results {
-// 		data = append(data, &models.KeyInfo{
-// 			CreatedAt: key.CreatedAt,
-// 			CreatedBy: key.CreatedBy,
-// 			Name:      key.Name,
-// 		})
-// 	}
-// 	return data
-// }
+	keys, err := iterator.Values(0)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	if err = iterator.Close(); err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionListKeysResponse{Results: parseKeys(keys)}, nil
+}
+
+func parseKeys(results []kes.KeyInfo) (data []*models.EncryptionKeyInfo) {
+	for _, key := range results {
+		data = append(data, &models.EncryptionKeyInfo{
+			CreatedAt: key.CreatedAt.String(),
+			CreatedBy: key.CreatedBy.String(),
+			Name:      key.Name,
+		})
+	}
+	return data
+}
 
 func GetKMSKeyStatusResponse(session *models.Principal, params encryption.KeyStatusParams) (*models.EncryptionKeyStatusResponse, *models.Error) {
 	return nil, nil
@@ -492,38 +502,45 @@ func GetKMSGetPolicyResponse(session *models.Principal, params encryption.GetPol
 // }
 
 func GetKMSListPoliciesResponse(session *models.Principal, params encryption.ListPoliciesParams) (*models.EncryptionListPoliciesResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// pattern := ""
-	// if params.Pattern != nil {
-	// 	pattern = *params.Pattern
-	// }
-	// return listKMSPolicies(ctx, pattern, AdminClient{Client: mAdmin})
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	pattern := ""
+	if params.Pattern != nil {
+		pattern = *params.Pattern
+	}
+	return listKMSPolicies(ctx, pattern, KESClient{Client: kesClient})
 }
 
-// func listKMSPolicies(ctx context.Context, pattern string, minioClient MinioAdmin) (*models.ListPoliciesResponse, *models.Error) {
-// 	results, err := minioClient.listKMSPolicies(ctx, pattern)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.ListPoliciesResponse{Results: parsePolicies(results)}, nil
-// }
+func listKMSPolicies(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListPoliciesResponse, *models.Error) {
+	iterator, err := kesClient.listPolicies(ctx, pattern)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
 
-// func parsePolicies(results []madmin.PolicyInfo) (data []*models.PolicyInfo) {
-// 	for _, policy := range results {
-// 		data = append(data, &models.PolicyInfo{
-// 			CreatedAt: policy.CreatedAt,
-// 			CreatedBy: policy.CreatedBy,
-// 			Name:      policy.Name,
-// 		})
-// 	}
-// 	return data
-// }
+	policies, err := iterator.Values(0)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	if err = iterator.Close(); err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionListPoliciesResponse{Results: parsePolicies(policies)}, nil
+}
+
+func parsePolicies(results []kes.PolicyInfo) (data []*models.EncryptionPolicyInfo) {
+	for _, policy := range results {
+		data = append(data, &models.EncryptionPolicyInfo{
+			CreatedAt: policy.CreatedAt.String(),
+			CreatedBy: policy.CreatedBy.String(),
+			Name:      policy.Name,
+		})
+	}
+	return data
+}
 
 func GetKMSDeletePolicyResponse(session *models.Principal, params encryption.DeletePolicyParams) *models.Error {
 	return nil
@@ -630,40 +647,47 @@ func GetKMSDescribeSelfIdentityResponse(session *models.Principal, params encryp
 // }
 
 func GetKMSListIdentitiesResponse(session *models.Principal, params encryption.ListIdentitiesParams) (*models.EncryptionListIdentitiesResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// pattern := ""
-	// if params.Pattern != nil {
-	// 	pattern = *params.Pattern
-	// }
-	// return listIdentities(ctx, pattern, AdminClient{Client: mAdmin})
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	pattern := ""
+	if params.Pattern != nil {
+		pattern = *params.Pattern
+	}
+	return listIdentities(ctx, pattern, KESClient{Client: kesClient})
 }
 
-// func listIdentities(ctx context.Context, pattern string, minioClient MinioAdmin) (*models.ListIdentitiesResponse, *models.Error) {
-// 	results, err := minioClient.listIdentities(ctx, pattern)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.ListIdentitiesResponse{Results: parseIdentities(results)}, nil
-// }
+func listIdentities(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListIdentitiesResponse, *models.Error) {
+	iterator, err := kesClient.listIdentities(ctx, pattern)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
 
-// func parseIdentities(results []madmin.IdentityInfo) (data []*models.IdentityInfo) {
-// 	for _, policy := range results {
-// 		data = append(data, &models.IdentityInfo{
-// 			CreatedAt: policy.CreatedAt,
-// 			CreatedBy: policy.CreatedBy,
-// 			Identity:  policy.Identity,
-// 			Error:     policy.Error,
-// 			Policy:    policy.Policy,
-// 		})
-// 	}
-// 	return data
-// }
+	identities, err := iterator.Values(0)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	if err = iterator.Close(); err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionListIdentitiesResponse{Results: parseIdentities(identities)}, nil
+}
+
+func parseIdentities(results []kes.IdentityInfo) (data []*models.EncryptionIdentityInfo) {
+	for _, identity := range results {
+		data = append(data, &models.EncryptionIdentityInfo{
+			CreatedAt: identity.CreatedAt.String(),
+			CreatedBy: identity.CreatedBy.String(),
+			Identity:  identity.Identity.String(),
+			Policy:    identity.Policy,
+			IsAdmin:   identity.IsAdmin,
+		})
+	}
+	return data
+}
 
 func GetKMSDeleteIdentityResponse(session *models.Principal, params encryption.DeleteIdentityParams) *models.Error {
 	return nil
