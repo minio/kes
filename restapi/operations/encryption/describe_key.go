@@ -30,40 +30,40 @@ import (
 	"github.com/minio/kes/models"
 )
 
-// KeyStatusHandlerFunc turns a function with the right signature into a key status handler
-type KeyStatusHandlerFunc func(KeyStatusParams, *models.Principal) middleware.Responder
+// DescribeKeyHandlerFunc turns a function with the right signature into a describe key handler
+type DescribeKeyHandlerFunc func(DescribeKeyParams, *models.Principal) middleware.Responder
 
 // Handle executing the request and returning a response
-func (fn KeyStatusHandlerFunc) Handle(params KeyStatusParams, principal *models.Principal) middleware.Responder {
+func (fn DescribeKeyHandlerFunc) Handle(params DescribeKeyParams, principal *models.Principal) middleware.Responder {
 	return fn(params, principal)
 }
 
-// KeyStatusHandler interface for that can handle valid key status params
-type KeyStatusHandler interface {
-	Handle(KeyStatusParams, *models.Principal) middleware.Responder
+// DescribeKeyHandler interface for that can handle valid describe key params
+type DescribeKeyHandler interface {
+	Handle(DescribeKeyParams, *models.Principal) middleware.Responder
 }
 
-// NewKeyStatus creates a new http.Handler for the key status operation
-func NewKeyStatus(ctx *middleware.Context, handler KeyStatusHandler) *KeyStatus {
-	return &KeyStatus{Context: ctx, Handler: handler}
+// NewDescribeKey creates a new http.Handler for the describe key operation
+func NewDescribeKey(ctx *middleware.Context, handler DescribeKeyHandler) *DescribeKey {
+	return &DescribeKey{Context: ctx, Handler: handler}
 }
 
 /*
-	KeyStatus swagger:route GET /encryption/keys/{name} Encryption keyStatus
+	DescribeKey swagger:route GET /encryption/keys/{name} Encryption describeKey
 
-Encryption key status
+Encryption describe key
 */
-type KeyStatus struct {
+type DescribeKey struct {
 	Context *middleware.Context
-	Handler KeyStatusHandler
+	Handler DescribeKeyHandler
 }
 
-func (o *KeyStatus) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (o *DescribeKey) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	route, rCtx, _ := o.Context.RouteInfo(r)
 	if rCtx != nil {
 		*r = *rCtx
 	}
-	var Params = NewKeyStatusParams()
+	var Params = NewDescribeKeyParams()
 	uprinc, aCtx, err := o.Context.Authorize(r, route)
 	if err != nil {
 		o.Context.Respond(rw, r, route.Produces, route, err)

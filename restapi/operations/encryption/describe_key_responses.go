@@ -30,41 +30,41 @@ import (
 	"github.com/minio/kes/models"
 )
 
-// KeyStatusOKCode is the HTTP code returned for type KeyStatusOK
-const KeyStatusOKCode int = 200
+// DescribeKeyOKCode is the HTTP code returned for type DescribeKeyOK
+const DescribeKeyOKCode int = 200
 
 /*
-KeyStatusOK A successful response.
+DescribeKeyOK A successful response.
 
-swagger:response keyStatusOK
+swagger:response describeKeyOK
 */
-type KeyStatusOK struct {
+type DescribeKeyOK struct {
 
 	/*
 	  In: Body
 	*/
-	Payload *models.EncryptionKeyStatusResponse `json:"body,omitempty"`
+	Payload *models.EncryptionDescribeKeyResponse `json:"body,omitempty"`
 }
 
-// NewKeyStatusOK creates KeyStatusOK with default headers values
-func NewKeyStatusOK() *KeyStatusOK {
+// NewDescribeKeyOK creates DescribeKeyOK with default headers values
+func NewDescribeKeyOK() *DescribeKeyOK {
 
-	return &KeyStatusOK{}
+	return &DescribeKeyOK{}
 }
 
-// WithPayload adds the payload to the key status o k response
-func (o *KeyStatusOK) WithPayload(payload *models.EncryptionKeyStatusResponse) *KeyStatusOK {
+// WithPayload adds the payload to the describe key o k response
+func (o *DescribeKeyOK) WithPayload(payload *models.EncryptionDescribeKeyResponse) *DescribeKeyOK {
 	o.Payload = payload
 	return o
 }
 
-// SetPayload sets the payload to the key status o k response
-func (o *KeyStatusOK) SetPayload(payload *models.EncryptionKeyStatusResponse) {
+// SetPayload sets the payload to the describe key o k response
+func (o *DescribeKeyOK) SetPayload(payload *models.EncryptionDescribeKeyResponse) {
 	o.Payload = payload
 }
 
 // WriteResponse to the client
-func (o *KeyStatusOK) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
+func (o *DescribeKeyOK) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
 
 	rw.WriteHeader(200)
 	if o.Payload != nil {
@@ -76,11 +76,11 @@ func (o *KeyStatusOK) WriteResponse(rw http.ResponseWriter, producer runtime.Pro
 }
 
 /*
-KeyStatusDefault Generic error response.
+DescribeKeyDefault Generic error response.
 
-swagger:response keyStatusDefault
+swagger:response describeKeyDefault
 */
-type KeyStatusDefault struct {
+type DescribeKeyDefault struct {
 	_statusCode int
 
 	/*
@@ -89,41 +89,41 @@ type KeyStatusDefault struct {
 	Payload *models.Error `json:"body,omitempty"`
 }
 
-// NewKeyStatusDefault creates KeyStatusDefault with default headers values
-func NewKeyStatusDefault(code int) *KeyStatusDefault {
+// NewDescribeKeyDefault creates DescribeKeyDefault with default headers values
+func NewDescribeKeyDefault(code int) *DescribeKeyDefault {
 	if code <= 0 {
 		code = 500
 	}
 
-	return &KeyStatusDefault{
+	return &DescribeKeyDefault{
 		_statusCode: code,
 	}
 }
 
-// WithStatusCode adds the status to the key status default response
-func (o *KeyStatusDefault) WithStatusCode(code int) *KeyStatusDefault {
+// WithStatusCode adds the status to the describe key default response
+func (o *DescribeKeyDefault) WithStatusCode(code int) *DescribeKeyDefault {
 	o._statusCode = code
 	return o
 }
 
-// SetStatusCode sets the status to the key status default response
-func (o *KeyStatusDefault) SetStatusCode(code int) {
+// SetStatusCode sets the status to the describe key default response
+func (o *DescribeKeyDefault) SetStatusCode(code int) {
 	o._statusCode = code
 }
 
-// WithPayload adds the payload to the key status default response
-func (o *KeyStatusDefault) WithPayload(payload *models.Error) *KeyStatusDefault {
+// WithPayload adds the payload to the describe key default response
+func (o *DescribeKeyDefault) WithPayload(payload *models.Error) *DescribeKeyDefault {
 	o.Payload = payload
 	return o
 }
 
-// SetPayload sets the payload to the key status default response
-func (o *KeyStatusDefault) SetPayload(payload *models.Error) {
+// SetPayload sets the payload to the describe key default response
+func (o *DescribeKeyDefault) SetPayload(payload *models.Error) {
 	o.Payload = payload
 }
 
 // WriteResponse to the client
-func (o *KeyStatusDefault) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
+func (o *DescribeKeyDefault) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
 
 	rw.WriteHeader(o._statusCode)
 	if o.Payload != nil {

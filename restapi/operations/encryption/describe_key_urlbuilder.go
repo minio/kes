@@ -29,8 +29,8 @@ import (
 	"strings"
 )
 
-// KeyStatusURL generates an URL for the key status operation
-type KeyStatusURL struct {
+// DescribeKeyURL generates an URL for the describe key operation
+type DescribeKeyURL struct {
 	Name string
 
 	_basePath string
@@ -41,7 +41,7 @@ type KeyStatusURL struct {
 // WithBasePath sets the base path for this url builder, only required when it's different from the
 // base path specified in the swagger spec.
 // When the value of the base path is an empty string
-func (o *KeyStatusURL) WithBasePath(bp string) *KeyStatusURL {
+func (o *DescribeKeyURL) WithBasePath(bp string) *DescribeKeyURL {
 	o.SetBasePath(bp)
 	return o
 }
@@ -49,12 +49,12 @@ func (o *KeyStatusURL) WithBasePath(bp string) *KeyStatusURL {
 // SetBasePath sets the base path for this url builder, only required when it's different from the
 // base path specified in the swagger spec.
 // When the value of the base path is an empty string
-func (o *KeyStatusURL) SetBasePath(bp string) {
+func (o *DescribeKeyURL) SetBasePath(bp string) {
 	o._basePath = bp
 }
 
 // Build a url path and query string
-func (o *KeyStatusURL) Build() (*url.URL, error) {
+func (o *DescribeKeyURL) Build() (*url.URL, error) {
 	var _result url.URL
 
 	var _path = "/encryption/keys/{name}"
@@ -63,7 +63,7 @@ func (o *KeyStatusURL) Build() (*url.URL, error) {
 	if name != "" {
 		_path = strings.Replace(_path, "{name}", name, -1)
 	} else {
-		return nil, errors.New("name is required on KeyStatusURL")
+		return nil, errors.New("name is required on DescribeKeyURL")
 	}
 
 	_basePath := o._basePath
@@ -76,7 +76,7 @@ func (o *KeyStatusURL) Build() (*url.URL, error) {
 }
 
 // Must is a helper function to panic when the url builder returns an error
-func (o *KeyStatusURL) Must(u *url.URL, err error) *url.URL {
+func (o *DescribeKeyURL) Must(u *url.URL, err error) *url.URL {
 	if err != nil {
 		panic(err)
 	}
@@ -87,17 +87,17 @@ func (o *KeyStatusURL) Must(u *url.URL, err error) *url.URL {
 }
 
 // String returns the string representation of the path with query string
-func (o *KeyStatusURL) String() string {
+func (o *DescribeKeyURL) String() string {
 	return o.Must(o.Build()).String()
 }
 
 // BuildFull builds a full url with scheme, host, path and query string
-func (o *KeyStatusURL) BuildFull(scheme, host string) (*url.URL, error) {
+func (o *DescribeKeyURL) BuildFull(scheme, host string) (*url.URL, error) {
 	if scheme == "" {
-		return nil, errors.New("scheme is required for a full url on KeyStatusURL")
+		return nil, errors.New("scheme is required for a full url on DescribeKeyURL")
 	}
 	if host == "" {
-		return nil, errors.New("host is required for a full url on KeyStatusURL")
+		return nil, errors.New("host is required for a full url on DescribeKeyURL")
 	}
 
 	base, err := o.Build()
@@ -111,6 +111,6 @@ func (o *KeyStatusURL) BuildFull(scheme, host string) (*url.URL, error) {
 }
 
 // StringFull returns the string representation of a complete url
-func (o *KeyStatusURL) StringFull(scheme, host string) string {
+func (o *DescribeKeyURL) StringFull(scheme, host string) string {
 	return o.Must(o.BuildFull(scheme, host)).String()
 }

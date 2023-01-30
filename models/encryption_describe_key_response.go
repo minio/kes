@@ -29,33 +29,39 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// EncryptionKeyStatusResponse encryption key status response
+// EncryptionDescribeKeyResponse encryption describe key response
 //
-// swagger:model encryptionKeyStatusResponse
-type EncryptionKeyStatusResponse struct {
+// swagger:model encryptionDescribeKeyResponse
+type EncryptionDescribeKeyResponse struct {
 
-	// decryption err
-	DecryptionErr string `json:"decryptionErr,omitempty"`
+	// ID
+	ID string `json:"ID,omitempty"`
 
-	// encryption err
-	EncryptionErr string `json:"encryptionErr,omitempty"`
+	// algorithm
+	Algorithm string `json:"algorithm,omitempty"`
 
-	// key ID
-	KeyID string `json:"keyID,omitempty"`
+	// created at
+	CreatedAt string `json:"createdAt,omitempty"`
+
+	// created by
+	CreatedBy string `json:"createdBy,omitempty"`
+
+	// name
+	Name string `json:"name,omitempty"`
 }
 
-// Validate validates this encryption key status response
-func (m *EncryptionKeyStatusResponse) Validate(formats strfmt.Registry) error {
+// Validate validates this encryption describe key response
+func (m *EncryptionDescribeKeyResponse) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
-// ContextValidate validates this encryption key status response based on context it is used
-func (m *EncryptionKeyStatusResponse) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+// ContextValidate validates this encryption describe key response based on context it is used
+func (m *EncryptionDescribeKeyResponse) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
 	return nil
 }
 
 // MarshalBinary interface implementation
-func (m *EncryptionKeyStatusResponse) MarshalBinary() ([]byte, error) {
+func (m *EncryptionDescribeKeyResponse) MarshalBinary() ([]byte, error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -63,8 +69,8 @@ func (m *EncryptionKeyStatusResponse) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary interface implementation
-func (m *EncryptionKeyStatusResponse) UnmarshalBinary(b []byte) error {
-	var res EncryptionKeyStatusResponse
+func (m *EncryptionDescribeKeyResponse) UnmarshalBinary(b []byte) error {
+	var res EncryptionDescribeKeyResponse
 	if err := swag.ReadJSON(b, &res); err != nil {
 		return err
 	}

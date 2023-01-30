@@ -1,5 +1,5 @@
 // This file is part of MinIO KES
-// Copyright (c) 2022 MinIO, Inc.
+// Copyright (c) 2023 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -19,6 +19,9 @@ package restapi
 
 import (
 	"context"
+	"encoding/json"
+	"sort"
+	"time"
 
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/minio/kes"
@@ -36,7 +39,7 @@ func registerEncryptionHandlers(api *operations.KesAPI) {
 
 func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	api.EncryptionStatusHandler = encryption.StatusHandlerFunc(func(params encryption.StatusParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSStatusResponse(session, params)
+		resp, err := GetStatusResponse(session, params)
 		if err != nil {
 			return encryption.NewStatusDefault(int(err.Code)).WithPayload(err)
 		}
@@ -44,7 +47,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionMetricsHandler = encryption.MetricsHandlerFunc(func(params encryption.MetricsParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSMetricsResponse(session, params)
+		resp, err := GetMetricsResponse(session, params)
 		if err != nil {
 			return encryption.NewMetricsDefault(int(err.Code)).WithPayload(err)
 		}
@@ -52,7 +55,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionAPIsHandler = encryption.APIsHandlerFunc(func(params encryption.APIsParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSAPIsResponse(session, params)
+		resp, err := GetAPIsResponse(session, params)
 		if err != nil {
 			return encryption.NewAPIsDefault(int(err.Code)).WithPayload(err)
 		}
@@ -60,7 +63,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionVersionHandler = encryption.VersionHandlerFunc(func(params encryption.VersionParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSVersionResponse(session, params)
+		resp, err := GetVersionResponse(session, params)
 		if err != nil {
 			return encryption.NewVersionDefault(int(err.Code)).WithPayload(err)
 		}
@@ -68,28 +71,28 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetKMSStatusResponse(session *models.Principal, params encryption.StatusParams) (*models.EncryptionStatusResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return kmsStatus(ctx, AdminClient{Client: mAdmin})
+func GetStatusResponse(session *models.Principal, params encryption.StatusParams) (*models.EncryptionStatusResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return encryptionStatus(ctx, KESClient{Client: kesClient})
 }
 
-// func kmsStatus(ctx context.Context, minioClient MinioAdmin) (*models.StatusResponse, *models.Error) {
-// 	st, err := minioClient.Status(ctx)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.StatusResponse{
-// 		DefaultKeyID: st.DefaultKeyID,
-// 		Name:         st.Name,
-// 		Endpoints:    parseStatusEndpoints(st.Endpoints),
-// 	}, nil
-// }
+func encryptionStatus(ctx context.Context, kesClient KESClientI) (*models.EncryptionStatusResponse, *models.Error) {
+	return nil, nil
+	// st, err := kesClient.Status(ctx)
+	// if err != nil {
+	// 	return nil, newDefaultAPIError(err)
+	// }
+	// return &models.EncryptionStatusResponse{
+	// 	DefaultKeyID: st.DefaultKeyID,
+	// 	Name:         st.Name,
+	// 	Endpoints:    parseStatusEndpoints(st.Endpoints),
+	// }, nil
+}
 
 // func parseStatusEndpoints(endpoints map[string]madmin.ItemState) (kmsEndpoints []*models.Endpoint) {
 // 	for key, value := range endpoints {
@@ -98,108 +101,118 @@ func GetKMSStatusResponse(session *models.Principal, params encryption.StatusPar
 // 	return kmsEndpoints
 // }
 
-func GetKMSMetricsResponse(session *models.Principal, params encryption.MetricsParams) (*models.EncryptionMetricsResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return kmsMetrics(ctx, AdminClient{Client: mAdmin})
+func GetMetricsResponse(session *models.Principal, params encryption.MetricsParams) (*models.EncryptionMetricsResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return getMetrics(ctx, KESClient{Client: kesClient})
 }
 
-// func kmsMetrics(ctx context.Context, minioClient MinioAdmin) (*models.MetricsResponse, *models.Error) {
-// 	metrics, err := minioClient.Metrics(ctx)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.MetricsResponse{
-// 		RequestOK:        &metrics.RequestOK,
-// 		RequestErr:       &metrics.RequestErr,
-// 		RequestFail:      &metrics.RequestFail,
-// 		RequestActive:    &metrics.RequestActive,
-// 		AuditEvents:      &metrics.AuditEvents,
-// 		ErrorEvents:      &metrics.ErrorEvents,
-// 		LatencyHistogram: parseHistogram(metrics.LatencyHistogram),
-// 		Uptime:           &metrics.UpTime,
-// 		Cpus:             &metrics.CPUs,
-// 		UsableCPUs:       &metrics.UsableCPUs,
-// 		Threads:          &metrics.Threads,
-// 		HeapAlloc:        &metrics.HeapAlloc,
-// 		HeapObjects:      metrics.HeapObjects,
-// 		StackAlloc:       &metrics.StackAlloc,
-// 	}, nil
-// }
-
-// func parseHistogram(histogram map[int64]int64) (records []*models.LatencyHistogram) {
-// 	for duration, total := range histogram {
-// 		records = append(records, &models.LatencyHistogram{Duration: duration, Total: total})
-// 	}
-// 	cp := func(i, j int) bool {
-// 		return records[i].Duration < records[j].Duration
-// 	}
-// 	sort.Slice(records, cp)
-// 	return records
-// }
-
-func GetKMSAPIsResponse(session *models.Principal, params encryption.APIsParams) (*models.EncryptionAPIsResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return kmsAPIs(ctx, AdminClient{Client: mAdmin})
+func getMetrics(ctx context.Context, kesClient KESClientI) (*models.EncryptionMetricsResponse, *models.Error) {
+	metrics, err := kesClient.metrics(ctx)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	rok := int64(metrics.RequestOK)
+	rerr := int64(metrics.RequestErr)
+	rf := int64(metrics.RequestFail)
+	ra := int64(metrics.RequestActive)
+	ae := int64(metrics.AuditEvents)
+	ee := int64(metrics.ErrorEvents)
+	up := int64(metrics.UpTime)
+	cpus := int64(metrics.CPUs)
+	ucpus := int64(metrics.UsableCPUs)
+	t := int64(metrics.Threads)
+	ha := int64(metrics.HeapAlloc)
+	ho := int64(metrics.HeapObjects)
+	sa := int64(metrics.StackAlloc)
+	return &models.EncryptionMetricsResponse{
+		RequestOK:        &rok,
+		RequestErr:       &rerr,
+		RequestFail:      &rf,
+		RequestActive:    &ra,
+		AuditEvents:      &ae,
+		ErrorEvents:      &ee,
+		LatencyHistogram: parseHistogram(metrics.LatencyHistogram),
+		Uptime:           &up,
+		Cpus:             &cpus,
+		UsableCPUs:       &ucpus,
+		Threads:          &t,
+		HeapAlloc:        &ha,
+		HeapObjects:      ho,
+		StackAlloc:       &sa,
+	}, nil
 }
 
-// func kmsAPIs(ctx context.Context, minioClient MinioAdmin) (*models.APIsResponse, *models.Error) {
-// 	apis, err := minioClient.APIs(ctx)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.APIsResponse{
-// 		Results: parseApis(apis),
-// 	}, nil
-// }
-
-// func parseApis(apis []madmin.API) (data []*models.API) {
-// 	for _, api := range apis {
-// 		data = append(data, &models.API{
-// 			Method:  api.Method,
-// 			Path:    api.Path,
-// 			MaxBody: api.MaxBody,
-// 			Timeout: api.Timeout,
-// 		})
-// 	}
-// 	return data
-// }
-
-func GetKMSVersionResponse(session *models.Principal, params encryption.VersionParams) (*models.EncryptionVersionResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return kmsVersion(ctx, AdminClient{Client: mAdmin})
+func parseHistogram(histogram map[time.Duration]uint64) (records []*models.EncryptionLatencyHistogram) {
+	for duration, total := range histogram {
+		records = append(records, &models.EncryptionLatencyHistogram{Duration: int64(duration), Total: int64(total)})
+	}
+	cp := func(i, j int) bool {
+		return records[i].Duration < records[j].Duration
+	}
+	sort.Slice(records, cp)
+	return records
 }
 
-// func kmsVersion(ctx context.Context, minioClient MinioAdmin) (*models.VersionResponse, *models.Error) {
-// 	version, err := minioClient.Version(ctx)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.VersionResponse{
-// 		Version: version.Version,
-// 	}, nil
-// }
+func GetAPIsResponse(session *models.Principal, params encryption.APIsParams) (*models.EncryptionAPIsResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return getAPIs(ctx, KESClient{Client: kesClient})
+}
+
+func getAPIs(ctx context.Context, kesClient KESClientI) (*models.EncryptionAPIsResponse, *models.Error) {
+	apis, err := kesClient.apis(ctx)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionAPIsResponse{
+		Results: parseApis(apis),
+	}, nil
+}
+
+func parseApis(apis []kes.API) (data []*models.EncryptionAPI) {
+	for _, api := range apis {
+		data = append(data, &models.EncryptionAPI{
+			Method:  api.Method,
+			Path:    api.Path,
+			MaxBody: api.MaxBody,
+			Timeout: int64(api.Timeout),
+		})
+	}
+	return data
+}
+
+func GetVersionResponse(session *models.Principal, params encryption.VersionParams) (*models.EncryptionVersionResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return getVersion(ctx, KESClient{Client: kesClient})
+}
+
+func getVersion(ctx context.Context, kesClient KESClientI) (*models.EncryptionVersionResponse, *models.Error) {
+	version, err := kesClient.version(ctx)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionVersionResponse{
+		Version: version,
+	}, nil
+}
 
 func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	api.EncryptionCreateKeyHandler = encryption.CreateKeyHandlerFunc(func(params encryption.CreateKeyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSCreateKeyResponse(session, params)
+		err := GetCreateKeyResponse(nil, params)
 		if err != nil {
 			return encryption.NewCreateKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -207,7 +220,7 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionImportKeyHandler = encryption.ImportKeyHandlerFunc(func(params encryption.ImportKeyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSImportKeyResponse(session, params)
+		err := GetImportKeyResponse(nil, params)
 		if err != nil {
 			return encryption.NewImportKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -215,23 +228,23 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListKeysHandler = encryption.ListKeysHandlerFunc(func(params encryption.ListKeysParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSListKeysResponse(session, params)
+		resp, err := GetListKeysResponse(session, params)
 		if err != nil {
 			return encryption.NewListKeysDefault(int(err.Code)).WithPayload(err)
 		}
 		return encryption.NewListKeysOK().WithPayload(resp)
 	})
 
-	api.EncryptionKeyStatusHandler = encryption.KeyStatusHandlerFunc(func(params encryption.KeyStatusParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSKeyStatusResponse(session, params)
+	api.EncryptionDescribeKeyHandler = encryption.DescribeKeyHandlerFunc(func(params encryption.DescribeKeyParams, session *models.Principal) middleware.Responder {
+		resp, err := GetDescribeKeyResponse(session, params)
 		if err != nil {
-			return encryption.NewKeyStatusDefault(int(err.Code)).WithPayload(err)
+			return encryption.NewDescribeKeyDefault(int(err.Code)).WithPayload(err)
 		}
-		return encryption.NewKeyStatusOK().WithPayload(resp)
+		return encryption.NewDescribeKeyOK().WithPayload(resp)
 	})
 
 	api.EncryptionDeleteKeyHandler = encryption.DeleteKeyHandlerFunc(func(params encryption.DeleteKeyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSDeleteKeyResponse(session, params)
+		err := GetDeleteKeyResponse(session, params)
 		if err != nil {
 			return encryption.NewDeleteKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -239,48 +252,46 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetKMSCreateKeyResponse(session *models.Principal, params encryption.CreateKeyParams) *models.Error {
-	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return createKey(ctx, *params.Body.Key, AdminClient{Client: mAdmin})
+func GetCreateKeyResponse(session *models.Principal, params encryption.CreateKeyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return createKey(ctx, *params.Body.Key, KESClient{Client: kesClient})
 }
 
-// func createKey(ctx context.Context, key string, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.createKey(ctx, key); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
-
-func GetKMSImportKeyResponse(session *models.Principal, params encryption.ImportKeyParams) *models.Error {
+func createKey(ctx context.Context, key string, kesClient KESClientI) *models.Error {
+	if err := kesClient.createKey(ctx, key); err != nil {
+		return newDefaultAPIError(err)
+	}
 	return nil
-	//	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	//	defer cancel()
-	//	mAdmin, err := NewMinioAdminClient(session)
-	//	if err != nil {
-	//		return ErrorWithContext(ctx, err)
-	//	}
-	//	bytes, err := json.Marshal(params.Body)
-	//	if err != nil {
-	//		return ErrorWithContext(ctx, err)
-	//	}
-	//
-	// return importKey(ctx, params.Name, bytes, AdminClient{Client: mAdmin})
 }
 
-// func importKey(ctx context.Context, key string, bytes []byte, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.importKey(ctx, key, bytes); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
+func GetImportKeyResponse(session *models.Principal, params encryption.ImportKeyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	bytes, err := json.Marshal(params.Body)
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
 
-func GetKMSListKeysResponse(session *models.Principal, params encryption.ListKeysParams) (*models.EncryptionListKeysResponse, *models.Error) {
+	return importKey(ctx, params.Name, bytes, KESClient{Client: kesClient})
+}
+
+func importKey(ctx context.Context, key string, bytes []byte, kesClient KESClientI) *models.Error {
+	if err := kesClient.importKey(ctx, key, bytes); err != nil {
+		return newDefaultAPIError(err)
+	}
+	return nil
+}
+
+func GetListKeysResponse(session *models.Principal, params encryption.ListKeysParams) (*models.EncryptionListKeysResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
 	kesClient, err := NewKESClient()
@@ -321,50 +332,50 @@ func parseKeys(results []kes.KeyInfo) (data []*models.EncryptionKeyInfo) {
 	return data
 }
 
-func GetKMSKeyStatusResponse(session *models.Principal, params encryption.KeyStatusParams) (*models.EncryptionKeyStatusResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return keyStatus(ctx, params.Name, AdminClient{Client: mAdmin})
+func GetDescribeKeyResponse(session *models.Principal, params encryption.DescribeKeyParams) (*models.EncryptionDescribeKeyResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return describeKey(ctx, params.Name, KESClient{Client: kesClient})
 }
 
-// func keyStatus(ctx context.Context, key string, minioClient MinioAdmin) (*models.KeyStatusResponse, *models.Error) {
-// 	ks, err := minioClient.keyStatus(ctx, key)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.KeyStatusResponse{
-// 		KeyID:         ks.KeyID,
-// 		EncryptionErr: ks.EncryptionErr,
-// 		DecryptionErr: ks.DecryptionErr,
-// 	}, nil
-// }
+func describeKey(ctx context.Context, key string, kesClient KESClientI) (*models.EncryptionDescribeKeyResponse, *models.Error) {
+	k, err := kesClient.describeKey(ctx, key)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionDescribeKeyResponse{
+		Name:      k.Name,
+		ID:        k.ID,
+		Algorithm: k.Algorithm.String(),
+		CreatedAt: k.CreatedAt.String(),
+		CreatedBy: k.CreatedBy.String(),
+	}, nil
+}
 
-func GetKMSDeleteKeyResponse(session *models.Principal, params encryption.DeleteKeyParams) *models.Error {
+func GetDeleteKeyResponse(session *models.Principal, params encryption.DeleteKeyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return deleteKey(ctx, params.Name, KESClient{Client: kesClient})
+}
+
+func deleteKey(ctx context.Context, key string, kesClient KESClientI) *models.Error {
+	if err := kesClient.deleteKey(ctx, key); err != nil {
+		return newDefaultAPIError(err)
+	}
 	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return deleteKey(ctx, params.Name, AdminClient{Client: mAdmin})
 }
-
-// func deleteKey(ctx context.Context, key string, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.deleteKey(ctx, key); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
 
 func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	api.EncryptionSetPolicyHandler = encryption.SetPolicyHandlerFunc(func(params encryption.SetPolicyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSSetPolicyResponse(session, params)
+		err := GetSetPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewSetPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -372,7 +383,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionAssignPolicyHandler = encryption.AssignPolicyHandlerFunc(func(params encryption.AssignPolicyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSAssignPolicyResponse(session, params)
+		err := GetAssignPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewAssignPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -380,7 +391,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDescribePolicyHandler = encryption.DescribePolicyHandlerFunc(func(params encryption.DescribePolicyParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSDescribePolicyResponse(session, params)
+		resp, err := GetDescribePolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribePolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -388,7 +399,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionGetPolicyHandler = encryption.GetPolicyHandlerFunc(func(params encryption.GetPolicyParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSGetPolicyResponse(session, params)
+		resp, err := GetGetPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewGetPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -396,7 +407,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListPoliciesHandler = encryption.ListPoliciesHandlerFunc(func(params encryption.ListPoliciesParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSListPoliciesResponse(session, params)
+		resp, err := GetListPoliciesResponse(session, params)
 		if err != nil {
 			return encryption.NewListPoliciesDefault(int(err.Code)).WithPayload(err)
 		}
@@ -404,7 +415,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDeletePolicyHandler = encryption.DeletePolicyHandlerFunc(func(params encryption.DeletePolicyParams, session *models.Principal) middleware.Responder {
-		err := GetKMSDeletePolicyResponse(session, params)
+		err := GetDeletePolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewDeletePolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -412,96 +423,92 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetKMSSetPolicyResponse(session *models.Principal, params encryption.SetPolicyParams) *models.Error {
+func GetSetPolicyResponse(session *models.Principal, params encryption.SetPolicyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	bytes, err := json.Marshal(params.Body)
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return setPolicy(ctx, *params.Body.Policy, bytes, KESClient{Client: kesClient})
+}
+
+func setPolicy(ctx context.Context, name string, content []byte, kesClient KESClientI) *models.Error {
+	var policy kes.Policy
+	if err := json.Unmarshal(content, &policy); err != nil {
+		newDefaultAPIError(err)
+	}
+	if err := kesClient.setPolicy(ctx, name, &policy); err != nil {
+		return newDefaultAPIError(err)
+	}
 	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// bytes, err := json.Marshal(params.Body)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return setPolicy(ctx, *params.Body.Policy, bytes, AdminClient{Client: mAdmin})
 }
 
-// func setPolicy(ctx context.Context, policy string, content []byte, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.setKMSPolicy(ctx, policy, content); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
+func GetAssignPolicyResponse(session *models.Principal, params encryption.AssignPolicyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return assignPolicy(ctx, params.Name, params.Body.Identity, KESClient{Client: kesClient})
+}
 
-func GetKMSAssignPolicyResponse(session *models.Principal, params encryption.AssignPolicyParams) *models.Error {
+func assignPolicy(ctx context.Context, policy, identity string, kesClient KESClientI) *models.Error {
+	if err := kesClient.assignPolicy(ctx, policy, identity); err != nil {
+		return newDefaultAPIError(err)
+	}
 	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// bytes, err := json.Marshal(params.Body)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return assignPolicy(ctx, params.Name, bytes, AdminClient{Client: mAdmin})
 }
 
-// func assignPolicy(ctx context.Context, policy string, content []byte, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.assignPolicy(ctx, policy, content); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
-
-func GetKMSDescribePolicyResponse(session *models.Principal, params encryption.DescribePolicyParams) (*models.EncryptionDescribePolicyResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return describePolicy(ctx, params.Name, AdminClient{Client: mAdmin})
+func GetDescribePolicyResponse(session *models.Principal, params encryption.DescribePolicyParams) (*models.EncryptionDescribePolicyResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return describePolicy(ctx, params.Name, KESClient{Client: kesClient})
 }
 
-// func describePolicy(ctx context.Context, policy string, minioClient MinioAdmin) (*models.DescribePolicyResponse, *models.Error) {
-// 	dp, err := minioClient.describePolicy(ctx, policy)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.DescribePolicyResponse{
-// 		Name:      dp.Name,
-// 		CreatedAt: dp.CreatedAt,
-// 		CreatedBy: dp.CreatedBy,
-// 	}, nil
-// }
-
-func GetKMSGetPolicyResponse(session *models.Principal, params encryption.GetPolicyParams) (*models.EncryptionGetPolicyResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return getPolicy(ctx, params.Name, AdminClient{Client: mAdmin})
+func describePolicy(ctx context.Context, policy string, kesClient KESClientI) (*models.EncryptionDescribePolicyResponse, *models.Error) {
+	dp, err := kesClient.describePolicy(ctx, policy)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionDescribePolicyResponse{
+		Name:      dp.Name,
+		CreatedAt: dp.CreatedAt.String(),
+		CreatedBy: dp.CreatedBy.String(),
+	}, nil
 }
 
-// func getPolicy(ctx context.Context, policy string, minioClient MinioAdmin) (*models.GetPolicyResponse, *models.Error) {
-// 	p, err := minioClient.getKMSPolicy(ctx, policy)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.GetPolicyResponse{
-// 		Allow: p.Allow,
-// 		Deny:  p.Deny,
-// 	}, nil
-// }
+func GetGetPolicyResponse(session *models.Principal, params encryption.GetPolicyParams) (*models.EncryptionGetPolicyResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return getPolicy(ctx, params.Name, KESClient{Client: kesClient})
+}
 
-func GetKMSListPoliciesResponse(session *models.Principal, params encryption.ListPoliciesParams) (*models.EncryptionListPoliciesResponse, *models.Error) {
+func getPolicy(ctx context.Context, policy string, kesClient KESClientI) (*models.EncryptionGetPolicyResponse, *models.Error) {
+	p, err := kesClient.getPolicy(ctx, policy)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionGetPolicyResponse{
+		Allow: p.Allow,
+		Deny:  p.Deny,
+	}, nil
+}
+
+func GetListPoliciesResponse(session *models.Principal, params encryption.ListPoliciesParams) (*models.EncryptionListPoliciesResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
 	kesClient, err := NewKESClient()
@@ -512,10 +519,10 @@ func GetKMSListPoliciesResponse(session *models.Principal, params encryption.Lis
 	if params.Pattern != nil {
 		pattern = *params.Pattern
 	}
-	return listKMSPolicies(ctx, pattern, KESClient{Client: kesClient})
+	return listPolicies(ctx, pattern, KESClient{Client: kesClient})
 }
 
-func listKMSPolicies(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListPoliciesResponse, *models.Error) {
+func listPolicies(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListPoliciesResponse, *models.Error) {
 	iterator, err := kesClient.listPolicies(ctx, pattern)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
@@ -542,27 +549,26 @@ func parsePolicies(results []kes.PolicyInfo) (data []*models.EncryptionPolicyInf
 	return data
 }
 
-func GetKMSDeletePolicyResponse(session *models.Principal, params encryption.DeletePolicyParams) *models.Error {
-	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return deletePolicy(ctx, params.Name, AdminClient{Client: mAdmin})
+func GetDeletePolicyResponse(session *models.Principal, params encryption.DeletePolicyParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return deletePolicy(ctx, params.Name, KESClient{Client: kesClient})
 }
 
-// func deletePolicy(ctx context.Context, policy string, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.deletePolicy(ctx, policy); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
+func deletePolicy(ctx context.Context, policy string, kesClient KESClientI) *models.Error {
+	if err := kesClient.deletePolicy(ctx, policy); err != nil {
+		return newDefaultAPIError(err)
+	}
+	return nil
+}
 
 func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	api.EncryptionDescribeIdentityHandler = encryption.DescribeIdentityHandlerFunc(func(params encryption.DescribeIdentityParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSDescribeIdentityResponse(session, params)
+		resp, err := GetDescribeIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribeIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -570,7 +576,7 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDescribeSelfIdentityHandler = encryption.DescribeSelfIdentityHandlerFunc(func(params encryption.DescribeSelfIdentityParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSDescribeSelfIdentityResponse(session, params)
+		resp, err := GetDescribeSelfIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribeSelfIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -578,14 +584,14 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListIdentitiesHandler = encryption.ListIdentitiesHandlerFunc(func(params encryption.ListIdentitiesParams, session *models.Principal) middleware.Responder {
-		resp, err := GetKMSListIdentitiesResponse(session, params)
+		resp, err := GetListIdentitiesResponse(session, params)
 		if err != nil {
 			return encryption.NewListIdentitiesDefault(int(err.Code)).WithPayload(err)
 		}
 		return encryption.NewListIdentitiesOK().WithPayload(resp)
 	})
 	api.EncryptionDeleteIdentityHandler = encryption.DeleteIdentityHandlerFunc(func(params encryption.DeleteIdentityParams, session *models.Principal) middleware.Responder {
-		err := GetKMSDeleteIdentityResponse(session, params)
+		err := GetDeleteIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDeleteIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -593,60 +599,58 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetKMSDescribeIdentityResponse(session *models.Principal, params encryption.DescribeIdentityParams) (*models.EncryptionDescribeIdentityResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return describeIdentity(ctx, params.Name, AdminClient{Client: mAdmin})
+func GetDescribeIdentityResponse(session *models.Principal, params encryption.DescribeIdentityParams) (*models.EncryptionDescribeIdentityResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return describeIdentity(ctx, params.Name, KESClient{Client: kesClient})
 }
 
-// func describeIdentity(ctx context.Context, identity string, minioClient MinioAdmin) (*models.DescribeIdentityResponse, *models.Error) {
-// 	i, err := minioClient.describeIdentity(ctx, identity)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.DescribeIdentityResponse{
-// 		Policy:    i.Policy,
-// 		Admin:     i.IsAdmin,
-// 		Identity:  i.Identity,
-// 		CreatedAt: i.CreatedAt,
-// 		CreatedBy: i.CreatedBy,
-// 	}, nil
-// }
-
-func GetKMSDescribeSelfIdentityResponse(session *models.Principal, params encryption.DescribeSelfIdentityParams) (*models.EncryptionDescribeSelfIdentityResponse, *models.Error) {
-	return nil, nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return nil, ErrorWithContext(ctx, err)
-	// }
-	// return describeSelfIdentity(ctx, AdminClient{Client: mAdmin})
+func describeIdentity(ctx context.Context, identity string, kesClient KESClientI) (*models.EncryptionDescribeIdentityResponse, *models.Error) {
+	i, err := kesClient.describeIdentity(ctx, identity)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionDescribeIdentityResponse{
+		Policy:    i.Policy,
+		Admin:     i.IsAdmin,
+		Identity:  i.Identity.String(),
+		CreatedAt: i.CreatedAt.String(),
+		CreatedBy: i.CreatedBy.String(),
+	}, nil
 }
 
-// func describeSelfIdentity(ctx context.Context, minioClient MinioAdmin) (*models.DescribeSelfIdentityResponse, *models.Error) {
-// 	i, err := minioClient.describeSelfIdentity(ctx)
-// 	if err != nil {
-// 		return nil, ErrorWithContext(ctx, err)
-// 	}
-// 	return &models.DescribeSelfIdentityResponse{
-// 		Policy: &models.GetPolicyResponse{
-// 			Allow: i.Policy.Allow,
-// 			Deny:  i.Policy.Deny,
-// 		},
-// 		Identity:  i.Identity,
-// 		Admin:     i.IsAdmin,
-// 		CreatedAt: i.CreatedAt,
-// 		CreatedBy: i.CreatedBy,
-// 	}, nil
-// }
+func GetDescribeSelfIdentityResponse(session *models.Principal, params encryption.DescribeSelfIdentityParams) (*models.EncryptionDescribeSelfIdentityResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return describeSelfIdentity(ctx, KESClient{Client: kesClient})
+}
 
-func GetKMSListIdentitiesResponse(session *models.Principal, params encryption.ListIdentitiesParams) (*models.EncryptionListIdentitiesResponse, *models.Error) {
+func describeSelfIdentity(ctx context.Context, kesClient KESClientI) (*models.EncryptionDescribeSelfIdentityResponse, *models.Error) {
+	i, p, err := kesClient.describeSelfIdentity(ctx)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionDescribeSelfIdentityResponse{
+		Policy: &models.EncryptionGetPolicyResponse{
+			Allow: p.Allow,
+			Deny:  p.Deny,
+		},
+		Identity:  i.Identity.String(),
+		Admin:     i.IsAdmin,
+		CreatedAt: i.CreatedAt.String(),
+		CreatedBy: i.CreatedBy.String(),
+	}, nil
+}
+
+func GetListIdentitiesResponse(session *models.Principal, params encryption.ListIdentitiesParams) (*models.EncryptionListIdentitiesResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
 	kesClient, err := NewKESClient()
@@ -689,20 +693,19 @@ func parseIdentities(results []kes.IdentityInfo) (data []*models.EncryptionIdent
 	return data
 }
 
-func GetKMSDeleteIdentityResponse(session *models.Principal, params encryption.DeleteIdentityParams) *models.Error {
-	return nil
-	// ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
-	// defer cancel()
-	// mAdmin, err := NewMinioAdminClient(session)
-	// if err != nil {
-	// 	return ErrorWithContext(ctx, err)
-	// }
-	// return deleteIdentity(ctx, params.Name, AdminClient{Client: mAdmin})
+func GetDeleteIdentityResponse(session *models.Principal, params encryption.DeleteIdentityParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := NewKESClient()
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return deleteIdentity(ctx, params.Name, KESClient{Client: kesClient})
 }
 
-// func deleteIdentity(ctx context.Context, identity string, minioClient MinioAdmin) *models.Error {
-// 	if err := minioClient.deleteIdentity(ctx, identity); err != nil {
-// 		return ErrorWithContext(ctx, err)
-// 	}
-// 	return nil
-// }
+func deleteIdentity(ctx context.Context, identity string, kesClient KESClientI) *models.Error {
+	if err := kesClient.deleteIdentity(ctx, identity); err != nil {
+		return newDefaultAPIError(err)
+	}
+	return nil
+}

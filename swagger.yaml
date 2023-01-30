@@ -192,8 +192,8 @@ paths:
         - Encryption
   /encryption/keys/{name}:
     get:
-      summary: Encryption key status
-      operationId: KeyStatus
+      summary: Encryption describe key
+      operationId: DescribeKey
       parameters:
         - name: name
           description: Encryption key name
@@ -204,7 +204,7 @@ paths:
         200:
           description: A successful response.
           schema:
-            $ref: "#/definitions/encryptionKeyStatusResponse"
+            $ref: "#/definitions/encryptionDescribeKeyResponse"
         default:
           description: Generic error response.
           schema:
@@ -542,14 +542,18 @@ definitions:
       status:
         type: string
 
-  encryptionKeyStatusResponse:
+  encryptionDescribeKeyResponse:
     type: object
     properties:
-      keyID:
+      name:
         type: string
-      encryptionErr:
+      ID:
         type: string
-      decryptionErr:
+      algorithm:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
         type: string
   encryptionCreateKeyRequest:
     type: object

@@ -254,8 +254,8 @@ func init() {
         "tags": [
           "Encryption"
         ],
-        "summary": "Encryption key status",
-        "operationId": "KeyStatus",
+        "summary": "Encryption describe key",
+        "operationId": "DescribeKey",
         "parameters": [
           {
             "type": "string",
@@ -269,7 +269,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/encryptionKeyStatusResponse"
+              "$ref": "#/definitions/encryptionDescribeKeyResponse"
             }
           },
           "default": {
@@ -779,6 +779,26 @@ func init() {
         }
       }
     },
+    "encryptionDescribeKeyResponse": {
+      "type": "object",
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "algorithm": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "encryptionDescribePolicyResponse": {
       "type": "object",
       "properties": {
@@ -888,20 +908,6 @@ func init() {
           "type": "string"
         },
         "name": {
-          "type": "string"
-        }
-      }
-    },
-    "encryptionKeyStatusResponse": {
-      "type": "object",
-      "properties": {
-        "decryptionErr": {
-          "type": "string"
-        },
-        "encryptionErr": {
-          "type": "string"
-        },
-        "keyID": {
           "type": "string"
         }
       }
@@ -1423,8 +1429,8 @@ func init() {
         "tags": [
           "Encryption"
         ],
-        "summary": "Encryption key status",
-        "operationId": "KeyStatus",
+        "summary": "Encryption describe key",
+        "operationId": "DescribeKey",
         "parameters": [
           {
             "type": "string",
@@ -1438,7 +1444,7 @@ func init() {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/encryptionKeyStatusResponse"
+              "$ref": "#/definitions/encryptionDescribeKeyResponse"
             }
           },
           "default": {
@@ -1948,6 +1954,26 @@ func init() {
         }
       }
     },
+    "encryptionDescribeKeyResponse": {
+      "type": "object",
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "algorithm": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "encryptionDescribePolicyResponse": {
       "type": "object",
       "properties": {
@@ -2057,20 +2083,6 @@ func init() {
           "type": "string"
         },
         "name": {
-          "type": "string"
-        }
-      }
-    },
-    "encryptionKeyStatusResponse": {
-      "type": "object",
-      "properties": {
-        "decryptionErr": {
-          "type": "string"
-        },
-        "encryptionErr": {
-          "type": "string"
-        },
-        "keyID": {
           "type": "string"
         }
       }
