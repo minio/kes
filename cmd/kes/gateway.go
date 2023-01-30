@@ -153,46 +153,55 @@ func startGateway(cliConfig gatewayConfig) {
 			}
 		}
 	}(ctx)
+
 	if err := server.Start(ctx); err != nil && err != http.ErrServerClosed {
 		cli.Fatal(err)
 	}
 }
 
-func description(config *keserv.ServerConfig) (kind, endpoint string, err error) {
+func description(config *keserv.ServerConfig) (kind string, endpoint []string, err error) {
 	if config.KMS == nil {
-		return "", "", errors.New("no KMS backend specified")
+		return "", nil, errors.New("no KMS backend specified")
 	}
 
 	switch kms := config.KMS.(type) {
 	case *keserv.FSConfig:
 		kind = "Filesystem"
-		if endpoint, err = filepath.Abs(kms.Dir.Value); err != nil {
-			endpoint = kms.Dir.Value
+		if abs, err := filepath.Abs(kms.Dir.Value); err == nil {
+			endpoint = []string{abs}
+		} else {
+			endpoint = []string{kms.Dir.Value}
+		}
+	case *keserv.KESConfig:
+		kind = "KES"
+		endpoint = make([]string, 0, len(kms.Endpoints))
+		for _, e := range kms.Endpoints {
+			endpoint = append(endpoint, e.Value)
 		}
 	case *keserv.KMSPluginConfig:
 		kind = "Plugin"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	case *keserv.VaultConfig:
 		kind = "Hashicorp Vault"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	case *keserv.FortanixConfig:
 		kind = "Fortanix SDKMS"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	case *keserv.SecretsManagerConfig:
 		kind = "AWS SecretsManager"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	case *keserv.KeySecureConfig:
 		kind = "Gemalto KeySecure"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	case *keserv.SecretManagerConfig:
 		kind = "GCP SecretManager"
-		endpoint = "Project: " + kms.ProjectID.Value
+		endpoint = []string{"Project: " + kms.ProjectID.Value}
 	case *keserv.KeyVaultConfig:
 		kind = "Azure KeyVault"
-		endpoint = kms.Endpoint.Value
+		endpoint = []string{kms.Endpoint.Value}
 	default:
 		kind = "In-Memory"
-		endpoint = "non-persistent"
+		endpoint = []string{"non-persistent"}
 	}
 	return kind, endpoint, nil
 }
@@ -584,7 +593,7 @@ func gatewayMessage(config *keserv.ServerConfig, tlsConfig *tls.Config, mlock bo
 	if len(ifaceIPs) == 0 {
 		return nil, errors.New("failed to listen on network interfaces")
 	}
-	kmsKind, kmsEndpoint, err := description(config)
+	kmsKind, kmsEndpoints, err := description(config)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +612,10 @@ func gatewayMessage(config *keserv.ServerConfig, tlsConfig *tls.Config, mlock bo
 	buffer.Stylef(item, "%-12s", "License").Sprintf("%-22s", "GNU AGPLv3").Styleln(faint, "https://www.gnu.org/licenses/agpl-3.0.html")
 	buffer.Stylef(item, "%-12s", "Version").Sprintf("%-22s", sys.BinaryInfo().Version).Stylef(faint, "%s/%s\n", runtime.GOOS, runtime.GOARCH)
 	buffer.Sprintln()
-	buffer.Stylef(item, "%-12s", "KMS").Sprintf("%s: %s\n", kmsKind, kmsEndpoint)
+	buffer.Stylef(item, "%-12s", "KMS").Sprintf("%s: %s\n", kmsKind, kmsEndpoints[0])
+	for _, endpoint := range kmsEndpoints[1:] {
+		buffer.Sprintf("%-12s", " ").Sprint(strings.Repeat(" ", len(kmsKind))).Sprintf("  %s\n", endpoint)
+	}
 	buffer.Stylef(item, "%-12s", "Endpoints").Sprintf("https://%s:%s\n", ifaceIPs[0], port)
 	for _, ifaceIP := range ifaceIPs[1:] {
 		buffer.Sprintf("%-12s", " ").Sprintf("https://%s:%s\n", ifaceIP, port)

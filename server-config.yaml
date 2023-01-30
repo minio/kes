@@ -184,6 +184,16 @@ keystore:
   fs:
     path: "" # Path to directory. Keys will be stored as files.
 
+  # Configuration for storing keys on a KES server.
+  kes:
+    endpoint: 
+    - ""           # The endpoint (or list of endpoints) to the KES server(s)
+    enclave: ""    # An optional enclave name. If empty, the default enclave will be used
+    tls:           # The KES mTLS authentication credentials - i.e. client certificate.
+      cert: ""     # Path to the TLS client certificate for mTLS authentication
+      key: ""      # Path to the TLS client private key for mTLS authentication
+      ca: ""       # Path to one or multiple PEM root CA certificates
+    
   # Configuration for storing keys via a KES KeyStore plugin or at
   # a KeyStore that exposes an API compatible to the KES KeyStore
   # plugin specification: https://github.com/minio/kes/blob/master/internal/generic/spec-v1.md
