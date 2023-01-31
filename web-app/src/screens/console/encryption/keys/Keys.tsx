@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme, Tooltip } from "@mui/material";
+import { Grid, Theme } from "@mui/material";
+import { DataTable, Grid as GridMDS, Tooltip } from "mds";
+
 import { createStyles, withStyles } from "@mui/styles";
 import { AddIcon, Button, RefreshIcon, UploadIcon } from "mds";
 import React, { useEffect, useState } from "react";
@@ -34,9 +36,7 @@ import { ROUTES } from "../../valid-routes";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) =>
-  createStyles({
-  });
+const styles = (theme: Theme) => createStyles({});
 
 interface IKeysProps {
   classes: any;
@@ -89,6 +89,7 @@ const ListKeys = ({ classes }: IKeysProps) => {
   };
 
   const confirmDeleteKey = (key: string) => {
+    console.log("TODO: Delete Key");
     setDeleteOpen(true);
     setSelectedKey(key);
   };
@@ -141,11 +142,11 @@ const ListKeys = ({ classes }: IKeysProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <SearchBox
-                onChange={setFilter}
-                placeholder="Search Keys with pattern"
-                value={filter}
-              />
+            <SearchBox
+              onChange={setFilter}
+              placeholder="Search Keys with pattern"
+              value={filter}
+            />
             {/* </SecureComponent> */}
 
             {/* <SecureComponent
@@ -153,45 +154,45 @@ const ListKeys = ({ classes }: IKeysProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Refresh"}>
-                <Button
-                  id={"refresh-keys"}
-                  variant="regular"
-                  icon={<RefreshIcon />}
-                  onClick={() => setLoading(true)}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Refresh"}>
+              <Button
+                id={"refresh-keys"}
+                variant="regular"
+                icon={<RefreshIcon />}
+                onClick={() => setLoading(true)}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
             {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_IMPORT_KEY]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Import Key"}>
-                <Button
-                  id={"import-key"}
-                  variant={"regular"}
-                  icon={<UploadIcon />}
-                  onClick={() => {
-                    navigate(ROUTES.ENCRYPTION_KEYS_IMPORT);
-                  }}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Import Key"}>
+              <Button
+                id={"import-key"}
+                variant={"regular"}
+                icon={<UploadIcon />}
+                onClick={() => {
+                  navigate(ROUTES.ENCRYPTION_KEYS_IMPORT);
+                }}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
             {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_CREATE_KEY]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Create Key"}>
-                <Button
-                  id={"create-key"}
-                  label={"Create Key"}
-                  variant={"callAction"}
-                  icon={<AddIcon />}
-                  onClick={() => navigate(ROUTES.ENCRYPTION_KEYS_ADD)}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Create Key"}>
+              <Button
+                id={"create-key"}
+                label={"Create Key"}
+                variant={"callAction"}
+                icon={<AddIcon />}
+                onClick={() => navigate(ROUTES.ENCRYPTION_KEYS_ADD)}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
@@ -200,19 +201,27 @@ const ListKeys = ({ classes }: IKeysProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-            <h1>TODO: Implement table</h1>
-              {/* <TableWrapper
+            <GridMDS item xs={12}>
+              <DataTable
                 itemActions={tableActions}
                 columns={[
-                  { label: "Name", elementKey: "name" },
-                  { label: "Created By", elementKey: "createdBy" },
-                  { label: "Created At", elementKey: "createdAt" },
+                  {
+                    label: "Name",
+                    elementKey: "name",
+                  },
+                  {
+                    label: "Created by",
+                    elementKey: "createdBy",
+                  },
+                  {
+                    label: "Created at",
+                    elementKey: "createdAt",
+                  },
                 ]}
-                isLoading={loading}
+                entityName="keys"
                 records={records}
-                entityName="Keys"
-                idField="name"
-              /> */}
+              />
+            </GridMDS>
             {/* </SecureComponent> */}
           </Grid>
         </Grid>

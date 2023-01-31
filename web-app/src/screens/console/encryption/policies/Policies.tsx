@@ -14,9 +14,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme, Tooltip } from "@mui/material";
+import { Grid, Theme } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { AddIcon, Button, RefreshIcon } from "mds";
+import {
+  AddIcon,
+  Button,
+  RefreshIcon,
+  Tooltip,
+  Grid as GridMDS,
+  DataTable,
+} from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
@@ -29,11 +36,9 @@ import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
 // import TableWrapper from "../Common/TableWrapper/TableWrapper";
 
-const DeleteKMSModal = React.lazy(() => import("../DeleteModal"))
+const DeleteKMSModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) =>
-  createStyles({
-  });
+const styles = (theme: Theme) => createStyles({});
 
 interface IPoliciesProps {
   classes: any;
@@ -86,6 +91,7 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
   };
 
   const confirmDeletePolicy = (policy: string) => {
+    console.log("TODO: Delete Policy");
     setDeleteOpen(true);
     setSelectedPolicy(policy);
   };
@@ -144,11 +150,11 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <SearchBox
-                onChange={setFilter}
-                placeholder="Search Policies with pattern"
-                value={filter}
-              />
+            <SearchBox
+              onChange={setFilter}
+              placeholder="Search Policies with pattern"
+              value={filter}
+            />
             {/* </SecureComponent> */}
 
             {/* <SecureComponent
@@ -156,14 +162,14 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Refresh"}>
-                <Button
-                  id={"refresh-policies"}
-                  variant="regular"
-                  icon={<RefreshIcon />}
-                  onClick={() => setLoading(true)}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Refresh"}>
+              <Button
+                id={"refresh-policies"}
+                variant="regular"
+                icon={<RefreshIcon />}
+                onClick={() => setLoading(true)}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
 
             {/* <SecureComponent
@@ -171,15 +177,15 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Create Policy"}>
-                <Button
-                  id={"create-policy"}
-                  label={"Create policy"}
-                  variant={"callAction"}
-                  icon={<AddIcon />}
-                  onClick={() => navigate(ROUTES.ENCRYPTION_POLICIES_ADD)}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Create Policy"}>
+              <Button
+                id={"create-policy"}
+                label={"Create policy"}
+                variant={"callAction"}
+                icon={<AddIcon />}
+                onClick={() => navigate(ROUTES.ENCRYPTION_POLICIES_ADD)}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
@@ -188,19 +194,27 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-            <h1>TODO: Implement table</h1>
-              {/* <TableWrapper
+            <GridMDS item xs={12}>
+              <DataTable
                 itemActions={tableActions}
                 columns={[
-                  { label: "Name", elementKey: "name" },
-                  { label: "Created By", elementKey: "createdBy" },
-                  { label: "Created At", elementKey: "createdAt" },
+                  {
+                    label: "Name",
+                    elementKey: "name",
+                  },
+                  {
+                    label: "Created by",
+                    elementKey: "createdBy",
+                  },
+                  {
+                    label: "Created at",
+                    elementKey: "createdAt",
+                  },
                 ]}
-                isLoading={loading}
+                entityName="policies"
                 records={records}
-                entityName="Policies"
-                idField="name"
-              /> */}
+              />
+            </GridMDS>
             {/* </SecureComponent> */}
           </Grid>
         </Grid>

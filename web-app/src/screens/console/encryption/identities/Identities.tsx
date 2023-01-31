@@ -14,10 +14,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-import { Grid, Theme, Tooltip } from "@mui/material";
+import { Grid, Theme } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { Button, RefreshIcon } from "mds";
+import { Button, RefreshIcon, DataTable, Tooltip, Grid as GridMDS } from "mds";
 import React, { useEffect, useState } from "react";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
@@ -30,11 +29,9 @@ import SearchBox from "../../common/SearchBox";
 // import TableWrapper from "../Common/TableWrapper/TableWrapper";
 // import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
 
-const DeleteModal = React.lazy(() => import("../DeleteModal"))
+const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) =>
-  createStyles({
-  });
+const styles = (theme: Theme) => createStyles({});
 
 interface IIdentitiesProps {
   classes: any;
@@ -85,6 +82,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
   };
 
   const confirmDeleteIdentity = (identity: string) => {
+    console.log("TODO: Delete Identity");
     setDeleteOpen(true);
     setSelectedIdentity(identity);
   };
@@ -137,25 +135,25 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <SearchBox
-                onChange={setFilter}
-                placeholder="Search Identities with pattern"
-                value={filter}
-              />
+            <SearchBox
+              onChange={setFilter}
+              placeholder="Search Identities with pattern"
+              value={filter}
+            />
             {/* </SecureComponent> */}
             {/* <SecureComponent
               scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-              <Tooltip title={"Refresh"}>
-                <Button
-                  id={"refresh-identities"}
-                  variant="regular"
-                  icon={<RefreshIcon />}
-                  onClick={() => setLoading(true)}
-                />
-              </Tooltip>
+            <Tooltip placement="bottom" tooltip={"Refresh"}>
+              <Button
+                id={"refresh-identities"}
+                variant="regular"
+                icon={<RefreshIcon />}
+                onClick={() => setLoading(true)}
+              />
+            </Tooltip>
             {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
@@ -164,20 +162,27 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
               resource={CONSOLE_UI_RESOURCE}
               errorProps={{ disabled: true }}
             > */}
-            <h1>TODO: Implement table</h1>
-              {/* <TableWrapper
+            <GridMDS item xs={12}>
+              <DataTable
                 itemActions={tableActions}
                 columns={[
-                  { label: "Identity", elementKey: "identity" },
-                  { label: "Policy", elementKey: "policy" },
-                  { label: "Created By", elementKey: "createdBy" },
-                  { label: "Created At", elementKey: "createdAt" },
+                  {
+                    label: "Name",
+                    elementKey: "name",
+                  },
+                  {
+                    label: "Created by",
+                    elementKey: "createdBy",
+                  },
+                  {
+                    label: "Created at",
+                    elementKey: "createdAt",
+                  },
                 ]}
-                isLoading={loading}
+                entityName="identities"
                 records={records}
-                entityName="Identities"
-                idField="identity"
-              /> */}
+              />
+            </GridMDS>
             {/* </SecureComponent> */}
           </Grid>
         </Grid>
