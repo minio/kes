@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import { Grid, Theme } from "@mui/material";
-import { DataTable, Grid as GridMDS, Tooltip } from "mds";
+import { DataTable, Grid as GridMDS, PageHeader, Tooltip } from "mds";
 
 import { createStyles, withStyles } from "@mui/styles";
 import { AddIcon, Button, RefreshIcon, UploadIcon } from "mds";
@@ -25,7 +25,6 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-import PageHeader from "../../common/PageHeader";
 import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";

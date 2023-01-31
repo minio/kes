@@ -23,6 +23,7 @@ import {
   Tooltip,
   Grid as GridMDS,
   DataTable,
+  PageHeader,
 } from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -30,7 +31,6 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-import PageHeader from "../../common/PageHeader";
 import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
