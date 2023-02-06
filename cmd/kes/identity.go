@@ -32,7 +32,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
-	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -277,7 +277,7 @@ func ofIdentityCmd(args []string) {
 		if err != nil {
 			return "", err
 		}
-		pemBlock, err = xhttp.FilterPEM(pemBlock, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+		pemBlock, err = https.FilterPEM(pemBlock, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 		if err != nil {
 			return "", fmt.Errorf("failed to parse certificate in %q: %v", filename, err)
 		}

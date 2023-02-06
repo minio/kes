@@ -29,8 +29,7 @@ func serverCreateSecret(mux *http.ServeMux, config *ServerConfig) API {
 		Bytes []byte         `json:"bytes"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
-
+		w = audit(w, r, config.AuditLog)
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
 			Error(w, errMethodNotAllowed)
@@ -98,7 +97,7 @@ func serverDescribeSecret(mux *http.ServeMux, config *ServerConfig) API {
 		CreatedBy kes.Identity   `json:"created_by"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -165,7 +164,7 @@ func serverReadSecret(mux *http.ServeMux, config *ServerConfig) API {
 		CreatedBy kes.Identity   `json:"created_by"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -226,7 +225,7 @@ func serverDeleteSecret(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -289,7 +288,7 @@ func serverListSecrets(mux *http.ServeMux, config *ServerConfig) API {
 		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)

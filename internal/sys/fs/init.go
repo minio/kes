@@ -7,7 +7,6 @@ package fs
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/yml"
 	"gopkg.in/yaml.v3"

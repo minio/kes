@@ -6,7 +6,6 @@ package http
 
 import (
 	"errors"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/sys"
 )
 

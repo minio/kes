@@ -6,13 +6,13 @@ package http
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/minio/kes"
+	"github.com/minio/kes/internal/log"
 )
 
 // AuditResponseWriter is an http.ResponseWriter that

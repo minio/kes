@@ -10,20 +10,18 @@ import (
 
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
-	xlog "github.com/minio/kes/internal/log"
+	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 )
 
 // A GatewayConfig structure is used to configure a
 // KES gateway.
 type GatewayConfig struct {
-	Certificate *Certificate
-
 	Proxy *auth.TLSProxy
 
-	AuditLog *xlog.Target
+	AuditLog *log.Logger
 
-	ErrorLog *xlog.Target
+	ErrorLog *log.Logger
 
 	Metrics *metric.Metrics
 

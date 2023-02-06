@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/minio/kes/internal/auth"
-	xlog "github.com/minio/kes/internal/log"
+	"github.com/minio/kes/internal/log"
 )
 
 func gatewayErrorLog(mux *http.ServeMux, config *GatewayConfig) API {
@@ -40,7 +40,7 @@ func gatewayErrorLog(mux *http.ServeMux, config *GatewayConfig) API {
 		w.Header().Set("Content-Type", ContentType)
 		w.WriteHeader(http.StatusOK)
 
-		out := xlog.NewErrEncoder(NewFlushWriter(w))
+		out := log.NewErrEncoder(NewFlushWriter(w))
 		config.ErrorLog.Add(out)
 		defer config.ErrorLog.Remove(out)
 

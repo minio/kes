@@ -96,11 +96,11 @@ func migrateCmd(args []string) {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 
-	src, err := connect(ctx, sourceConfig, nil)
+	src, err := sourceConfig.KMS.Connect(ctx)
 	if err != nil {
 		cli.Fatal(err)
 	}
-	dst, err := connect(ctx, targetConfig, nil)
+	dst, err := targetConfig.KMS.Connect(ctx)
 	if err != nil {
 		cli.Fatal(err)
 	}
