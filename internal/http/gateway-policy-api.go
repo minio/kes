@@ -28,7 +28,7 @@ func gatewayDescribePolicy(mux *http.ServeMux, config *GatewayConfig) API {
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -85,7 +85,7 @@ func gatewayReadPolicy(mux *http.ServeMux, config *GatewayConfig) API {
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -145,7 +145,7 @@ func gatewayListPolicy(mux *http.ServeMux, config *GatewayConfig) API {
 		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)

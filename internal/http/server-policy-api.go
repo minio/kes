@@ -29,7 +29,7 @@ func serverDescribePolicy(mux *http.ServeMux, config *ServerConfig) API {
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -89,7 +89,7 @@ func serverAssignPolicy(mux *http.ServeMux, config *ServerConfig) API {
 		Identity kes.Identity `json:"identity"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -169,7 +169,7 @@ func serverReadPolicy(mux *http.ServeMux, config *ServerConfig) API {
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -232,7 +232,7 @@ func serverWritePolicy(mux *http.ServeMux, config *ServerConfig) API {
 		Deny  []string `json:"deny,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -294,7 +294,7 @@ func serverDeletePolicy(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -354,7 +354,7 @@ func serverListPolicy(mux *http.ServeMux, config *ServerConfig) API {
 		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)

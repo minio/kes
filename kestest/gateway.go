@@ -94,8 +94,8 @@ func (g *Gateway) CAs() *x509.CertPool {
 func (g *Gateway) start() {
 	var (
 		rootCAs   = g.CAs()
-		auditLog  = log.NewTarget(io.Discard)
-		errorLog  = log.NewTarget(io.Discard)
+		auditLog  = log.New(io.Discard, "", 0)
+		errorLog  = log.New(io.Discard, "Error", log.Ldate|log.Ltime)
 		metrics   = metric.New()
 		adminCert = g.IssueClientCertificate("kestest: admin")
 	)
@@ -105,8 +105,8 @@ func (g *Gateway) start() {
 		identities: make(map[kes.Identity]auth.IdentityInfo),
 	}
 
-	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
+	errorLog.Add(metrics.ErrorEventCounter())
 	store := key.NewCache(key.Store{Conn: &mem.Store{}}, &key.CacheConfig{
 		Expiry:       30 * time.Second,
 		ExpiryUnused: 5 * time.Second,

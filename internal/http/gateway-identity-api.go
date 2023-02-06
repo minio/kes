@@ -30,7 +30,7 @@ func gatewayDescribeIdentity(mux *http.ServeMux, config *GatewayConfig) API {
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -97,7 +97,7 @@ func gatewaySelfDescribeIdentity(mux *http.ServeMux, config *GatewayConfig) API 
 		Policy InlinePolicy `json:"policy"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -166,7 +166,7 @@ func gatewayListIdentities(mux *http.ServeMux, config *GatewayConfig) API {
 		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)

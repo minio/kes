@@ -7,101 +7,116 @@ package log
 import (
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"log"
+	"os"
 	"strings"
-	"sync"
 )
 
-// Print either writes the values to out, if non-nil,
-// or to the standard logger otherwise.
-func Print(out *log.Logger, values ...any) {
-	if out == nil {
-		log.Print(values...)
-	} else {
-		out.Print(values...)
-	}
-}
-
-// Printf formats the values using the format string
-// and either writes to out, if non-nil, or to the
-// standard logger otherwise.
-func Printf(out *log.Logger, format string, values ...any) {
-	if out == nil {
-		log.Printf(format, values...)
-	} else {
-		out.Printf(format, values...)
-	}
-}
-
-// Target groups a set of logging targets.
+// These flags define how a Logger generates text for each log entry.
+// Flags are or'ed together to control what gets printed. With the
+// exception of the Lmsgprefix flag, there is no control over they
+// appear or the format they present.
+// The prefix is followed by a colon only when Llongfile or Lshortfile
+// is specified.
+// For example, flags Ldata | Ltime prodcue:
 //
-// A message that gets written to the Target.Log
-// will be sent to all logging targets.
-type Target struct {
-	lock    sync.Mutex // protects the log.Logger and its targets
-	logger  *log.Logger
-	targets []io.Writer
-}
-
-// NewTarget creates a new group of logging targets from the
-// given targets. Dublicate or nil targets will be filtered out.
+//	2023/01/01 01:23:45 message
 //
-// If no targets are provided the returned Target will discard
-// any log messages.
-func NewTarget(targets ...io.Writer) *Target {
-	t := &Target{
-		targets: make([]io.Writer, 0, len(targets)),
-		logger:  log.New(ioutil.Discard, "", log.LstdFlags),
-	}
-	for i := range targets {
-		t.Add(targets[i])
-	}
-	return t
-}
-
-// Add adds the given target to the set of logging targets.
+// while flags Ldate | Ltime | Lmicroseconds | Llongfile produce,
 //
-// It does not add the given target if it is already in the
-// set of logging targets nor if it is nil.
-func (t *Target) Add(target io.Writer) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+//	2023/01/01 01:23:45.123456 /a/b/c/d.go:23: message
+const (
+	Ldate         = log.Ldate         // the date in the local time zone: 2023/01/01
+	Ltime         = log.Ltime         // the time in the local time zone: 01:23:45
+	Lmicroseconds = log.Lmicroseconds // microsecond resolution: 01:23:45.123456.  assumes Ltime.
+	Llongfile     = log.Llongfile     // full file name and line number: /a/b/c/d.go:23
+	Lshortfile    = log.Lshortfile    // final file name element and line number: d.go:23. overrides Llongfile
+	LUTC          = log.LUTC          // if Ldate or Ltime is set, use UTC rather than the local Ltime zone
+	Lmsgprefix    = log.Lmsgprefix    // move the "prefix" from the beginning of the line to before the message
+)
 
-	if target == nil {
-		return // Do not add nil as a target
-	}
-	for i := range t.targets {
-		if target == t.targets[i] {
-			return // The target already exists
-		}
-	}
-	t.targets = append(t.targets, target)
-	t.logger.SetOutput(multiWriter(t.targets))
-}
+var std = New(os.Stderr, "Error: ", Ldate|Ltime|Lmsgprefix)
 
-// Remove removes the given target from the set of logging
-// targets.
-func (t *Target) Remove(target io.Writer) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	x := make([]io.Writer, 0, len(t.targets))
-	for i := range t.targets {
-		if target != t.targets[i] {
-			x = append(x, t.targets[i])
-		}
-	}
-	t.targets = x
-	t.logger.SetOutput(multiWriter(t.targets))
-}
-
-// Log returns the log.Logger that writes to all logging targets.
+// Default returns the package-level logger.
 //
-// The output of the returned *log.Logger must not be modified
-// directly via its SetOutput method. Instead, use the Add
-// and Remove methods of Target.
-func (t *Target) Log() *log.Logger { return t.logger }
+// By default, the logger writes to os.Stderr
+// with an "Error" prefix and the flags:
+//
+//	Ldate | Ltime | Lmsgprefx
+func Default() *Logger { return std }
+
+// Print writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Print.
+func Print(v ...any) { std.Print(v...) }
+
+// Printf writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Printf.
+func Printf(format string, v ...any) { std.Printf(format, v...) }
+
+// Println writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Println.
+func Println(v ...any) { std.Println(v...) }
+
+// New creates a new Logger. The out is the destination to which
+// log data will be written. The prefix appears at the beginning
+// of each generated log line, or after the log header if the
+// Lmsgprefix flag is provided. The flag argument defines the
+// logging properties.
+func New(out io.Writer, prefix string, flags int) *Logger {
+	mv := new(multiWriter)
+	mv.Add(out)
+
+	return &Logger{
+		log: log.New(mv, prefix, flags),
+		out: mv,
+	}
+}
+
+// A Logger represents an active logging object that generates lines of
+// output to one or multiple io.Writer. Each logging operation makes a
+// single call to the Writer's Write method. A Logger can be used
+// simultaneously from multiple goroutines; it guarantees to serialize
+// access to the Writer.
+type Logger struct {
+	log *log.Logger
+	out *multiWriter
+}
+
+// Print writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Print.
+func (l *Logger) Print(v ...any) { l.log.Print(v...) }
+
+// Printf writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Printf.
+func (l *Logger) Printf(format string, v ...any) { l.log.Printf(format, v...) }
+
+// Println writes to the standard logger.
+// Arguments are handled in the manner
+// of fmt.Println.
+func (l *Logger) Println(v ...any) { l.log.Println(v...) }
+
+// Add adds one or multiple io.Writer as output to
+// the logger.
+func (l *Logger) Add(out ...io.Writer) { l.out.Add(out...) }
+
+// Remove removes one or multiple io.Writer from the
+// logging output.
+func (l *Logger) Remove(out ...io.Writer) { l.out.Remove(out...) }
+
+// Log returns a new standard library log.Logger with
+// logger's output, prefix and flags.
+func (l *Logger) Log() *log.Logger { return log.New(l.log.Writer(), l.log.Prefix(), l.log.Flags()) }
+
+// Writer returns the output destination for the logger.
+func (l *Logger) Writer() io.Writer { return l.out }
+
+// SetPrefix sets the output prefix for the logger.
+func (l *Logger) SetPrefix(prefix string) { l.log.SetPrefix(prefix) }
 
 // ErrEncoder is an io.Writer that converts all
 // log messages into a stream of kes.ErrorEvents.
@@ -149,63 +164,4 @@ func (w *ErrEncoder) WriteString(s string) (int, error) {
 		return 0, err
 	}
 	return len(s), nil
-}
-
-// multiWriter is an io.Writer that writes the same data
-// to multiple io.Writer sequentually.
-//
-// multiWriter differs from the io.MultiWriter impementation
-// (in the standard library) by not aborting when one io.Writer
-// returns an error.
-// Instead, it proceeds until it has written the same data
-// to all io.Writer and then reports the first error encounterred,
-// if any.
-//
-// For example, if multiple HTTP clients are registered as logging
-// targets while the connection to one clients breaks then all
-// other clients should still receive log messages. However, the
-// io.MultiWriter would stop and not try to write the log messages
-// to all clients.
-type multiWriter []io.Writer
-
-func (mw multiWriter) Write(p []byte) (int, error) {
-	var err error
-	for _, w := range mw {
-		n, werr := w.Write(p)
-		if werr != nil && err == nil {
-			err = werr
-		}
-		if n != len(p) && err == nil {
-			err = io.ErrShortWrite
-		}
-	}
-	return len(p), err
-}
-
-func (mw multiWriter) WriteString(s string) (int, error) {
-	var (
-		err error
-		p   []byte // lazily initialized if needed
-	)
-	for _, w := range mw {
-		var (
-			n    int
-			werr error
-		)
-		if sw, ok := w.(io.StringWriter); ok {
-			n, werr = sw.WriteString(s)
-		} else {
-			if p == nil {
-				p = []byte(s)
-			}
-			n, werr = w.Write(p)
-		}
-		if werr != nil && err == nil {
-			err = werr
-		}
-		if n != len(p) && err == nil {
-			err = io.ErrShortWrite
-		}
-	}
-	return len(s), err
 }

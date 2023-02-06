@@ -15,7 +15,7 @@ import (
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/sys/fs"
 	flag "github.com/spf13/pflag"
@@ -111,7 +111,7 @@ func initCmd(args []string) {
 		}
 	}
 
-	if _, err = http.LoadCertificate(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value()); err != nil {
+	if _, err = https.CertificateFromFile(config.TLS.Certificate.Value(), config.TLS.PrivateKey.Value(), config.TLS.Password.Value()); err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}
 

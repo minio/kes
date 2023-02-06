@@ -27,7 +27,7 @@ func gatewayVersion(mux *http.ServeMux, config *GatewayConfig) API {
 		Commit  string `json:"commit"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
 			Error(w, errMethodNotAllowed)

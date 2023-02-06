@@ -16,7 +16,7 @@ import (
 
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/cli"
-	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/sys"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -137,7 +137,7 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 	if err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}
-	certPem, err = xhttp.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+	certPem, err = https.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 	if err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}

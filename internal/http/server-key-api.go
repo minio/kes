@@ -28,7 +28,7 @@ func serverCreateKey(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -97,7 +97,7 @@ func serverImportKey(mux *http.ServeMux, config *ServerConfig) API {
 		Algorithm kes.KeyAlgorithm `json:"algorithm"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -171,7 +171,7 @@ func serverDescribeKey(mux *http.ServeMux, config *ServerConfig) API {
 		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -231,7 +231,7 @@ func serverDeleteKey(mux *http.ServeMux, config *ServerConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -291,7 +291,7 @@ func serverGenerateKey(mux *http.ServeMux, config *ServerConfig) API {
 		Ciphertext []byte `json:"ciphertext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -373,7 +373,7 @@ func serverEncryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		Ciphertext []byte `json:"ciphertext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -445,7 +445,7 @@ func serverDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		Plaintext []byte `json:"plaintext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -522,7 +522,7 @@ func serverBulkDecryptKey(mux *http.ServeMux, config *ServerConfig) API {
 		Plaintext []byte `json:"plaintext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -612,7 +612,7 @@ func serverListKey(mux *http.ServeMux, config *ServerConfig) API {
 		Err string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)

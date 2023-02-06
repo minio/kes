@@ -26,6 +26,8 @@ import (
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
 	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
+	"github.com/minio/kes/internal/log"
 	xlog "github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
@@ -160,30 +162,21 @@ func startServer(path string, sConfig serverConfig) {
 		cli.Fatal("no TLS certificate specified")
 	}
 
-	var (
-		errorLog *xlog.Target
-		auditLog = xlog.NewTarget(ioutil.Discard)
-	)
-	if isTerm(os.Stderr) { // If STDERR is a tty - write plain logs, not JSON.
-		errorLog = xlog.NewTarget(os.Stderr)
-	} else {
-		errorLog = xlog.NewTarget(xlog.NewErrEncoder(os.Stderr))
+	auditLog := xlog.New(ioutil.Discard, "", 0)
+	if isTerm(os.Stderr) {
+		style := tui.NewStyle().Foreground(tui.Color("#ac0000")) // red
+		log.Default().SetPrefix(style.Render("Error: "))
 	}
-	auditLog.Log().SetFlags(0)
 
-	certificate, err := xhttp.LoadCertificate(init.Certificate.Value(), init.PrivateKey.Value(), init.Password.Value())
+	certificate, err := https.CertificateFromFile(init.Certificate.Value(), init.PrivateKey.Value(), init.Password.Value())
 	if err != nil {
 		cli.Fatalf("failed to load TLS certificate: %v", err)
 	}
-	certificate.ErrorLog = errorLog
-
-	if c, _ := certificate.GetCertificate(nil); c != nil && c.Leaf != nil {
-		if len(c.Leaf.DNSNames) == 0 && len(c.Leaf.IPAddresses) == 0 {
-			// Support for TLS certificates with a subject CN but without any SAN
-			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
-			// Therefore, we require at least one SAN for the server certificate.
-			cli.Fatal("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
-		}
+	if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
+		// Support for TLS certificates with a subject CN but without any SAN
+		// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
+		// Therefore, we require at least one SAN for the server certificate.
+		cli.Fatal("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
 	}
 
 	clientAuth := tls.RequireAnyClientCert
@@ -206,51 +199,63 @@ func startServer(path string, sConfig serverConfig) {
 		}
 	}
 
-	vault, err := fs.Open(path, errorLog.Log())
+	vault, err := fs.Open(path, log.Default())
 	if err != nil {
 		cli.Fatalf("failed to initialize vault: %v", err)
 	}
 
 	metrics := metric.New()
-	errorLog.Add(metrics.ErrorEventCounter())
+	log.Default().Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
 
-	server := http.Server{
+	server := https.NewServer(&https.Config{
 		Addr: init.Address.Value(),
 		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
 			Vault:    vault,
 			Proxy:    proxy,
 			AuditLog: auditLog,
-			ErrorLog: errorLog,
+			ErrorLog: log.Default(),
 			Metrics:  metrics,
 		}),
 		TLSConfig: &tls.Config{
 			MinVersion:       tls.VersionTLS12,
-			GetCertificate:   certificate.GetCertificate,
+			Certificates:     []tls.Certificate{certificate},
 			CipherSuites:     fips.TLSCiphers(),
 			CurvePreferences: fips.TLSCurveIDs(),
 			ClientAuth:       clientAuth,
 		},
-		ErrorLog: errorLog.Log(),
+	})
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
 
-		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - see timeout handler.
-		IdleTimeout:       90 * time.Second,
-	}
-
-	go func() {
-		<-ctx.Done()
-
-		shutdownContext, cancelShutdown := context.WithDeadline(context.Background(), time.Now().Add(800*time.Millisecond))
-		err := server.Shutdown(shutdownContext)
-		if cancelShutdown(); err == context.DeadlineExceeded {
-			err = server.Close()
+		for {
+			select {
+			case <-ctx.Done():
+			case <-ticker.C:
+				certificate, err := https.CertificateFromFile(init.Certificate.Value(), init.PrivateKey.Value(), init.Password.Value())
+				if err != nil {
+					xlog.Printf("failed to load TLS certificate: %v", err)
+				}
+				if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
+					// Support for TLS certificates with a subject CN but without any SAN
+					// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
+					// Therefore, we require at least one SAN for the server certificate.
+					xlog.Print("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
+				}
+				c := &tls.Config{
+					MinVersion:       tls.VersionTLS12,
+					Certificates:     []tls.Certificate{certificate},
+					CipherSuites:     fips.TLSCiphers(),
+					CurvePreferences: fips.TLSCurveIDs(),
+					ClientAuth:       clientAuth,
+				}
+				if err = server.UpdateTLS(c); err != nil {
+					log.Printf("failed to update TLS configuration: %v", err)
+				}
+			}
 		}
-		if err != nil {
-			cli.Fatalf("abnormal server shutdown: %v", err)
-		}
-	}()
-	go certificate.ReloadAfter(ctx, 5*time.Minute) // 5min is a quite reasonable reload interval
+	}(ctx)
 
 	ip, port := serverAddr(init.Address.Value())
 	ifaceIPs := listeningOnV4(ip)
@@ -266,72 +271,31 @@ func startServer(path string, sConfig serverConfig) {
 		red = red.Foreground(tui.Color("#a70000"))
 		yellow = yellow.Foreground(tui.Color("#fede00"))
 	}
-	cli.Println(
-		item.Render(fmt.Sprintf("%-10s", "Copyright")),
-		fmt.Sprintf("%-12s", "MinIO, Inc."),
-		faint.Render("https://min.io"),
-	)
-	cli.Println(
-		item.Render(fmt.Sprintf("%-10s", "License")),
-		fmt.Sprintf("%-12s", "GNU AGPLv3"),
-		faint.Render("https://www.gnu.org/licenses/agpl-3.0.html"),
-	)
-	cli.Println(
-		item.Render(fmt.Sprintf("%-10s", "Version")),
-		fmt.Sprintf("%-12s", sys.BinaryInfo().Version),
-		faint.Render(fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)),
-	)
 
-	cli.Println()
-	cli.Println(
-		item.Render(fmt.Sprintf("%-10s", "Endpoints")),
-		fmt.Sprintf("https://%s:%s", ifaceIPs[0], port),
-	)
+	var buffer cli.Buffer
+	buffer.Stylef(item, "%-12s", "Copyright").Sprintf("%-22s", "MinIO, Inc.").Styleln(faint, "https://min.io")
+	buffer.Stylef(item, "%-12s", "License").Sprintf("%-22s", "GNU AGPLv3").Styleln(faint, "https://www.gnu.org/licenses/agpl-3.0.html")
+	buffer.Stylef(item, "%-12s", "Version").Sprintf("%-22s", sys.BinaryInfo().Version).Stylef(faint, "%s/%s\n", runtime.GOOS, runtime.GOARCH)
+	buffer.Sprintln()
+	buffer.Stylef(item, "%-12s", "Endpoints").Sprintf("https://%s:%s\n", ifaceIPs[0], port)
 	for _, ifaceIP := range ifaceIPs[1:] {
-		cli.Println(
-			fmt.Sprintf("%-10s", " "),
-			fmt.Sprintf("https://%s:%s", ifaceIP, port),
-		)
+		buffer.Sprintf("%-12s", " ").Sprintf("https://%s:%s\n", ifaceIP, port)
 	}
-
-	cli.Println()
-	if auth := server.TLSConfig.ClientAuth; auth == tls.VerifyClientCertIfGiven || auth == tls.RequireAndVerifyClientCert {
-		cli.Println(
-			item.Render(fmt.Sprintf("%-10s", "mTLS")),
-			green.Render(fmt.Sprintf("%-12s", "verify")),
-			faint.Render("Only clients with trusted certificates can connect"),
-		)
-	} else {
-		cli.Println(
-			item.Render(fmt.Sprintf("%-10s", "mTLS")),
-			yellow.Render(fmt.Sprintf("%-12s", "skip verify")),
-			faint.Render("Client certificates are not verified"),
-		)
+	buffer.Sprintln()
+	if clientAuth == tls.RequireAndVerifyClientCert {
+		buffer.Stylef(item, "%-12s", "Mutual TLS").Sprint("on").Styleln(faint, "Verify client certificates")
 	}
-
-	if runtime.GOOS == "linux" {
-		if mlock {
-			cli.Println(
-				item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
-				green.Render(fmt.Sprintf("%-12s", "on")),
-				faint.Render("RAM pages will not be swapped to disk"),
-			)
-		} else {
-			cli.Println(
-				item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
-				red.Render(fmt.Sprintf("%-12s", "off")),
-				faint.Render("Failed to lock RAM pages. Consider granting CAP_IPC_LOCK"),
-			)
-		}
-	} else {
-		cli.Println(
-			item.Render(fmt.Sprintf("%-10s", "Mem Lock")),
-			red.Render(fmt.Sprintf("%-12s", "off")),
-			faint.Render(fmt.Sprintf("Not supported on %s/%s", runtime.GOOS, runtime.GOARCH)),
-		)
+	switch {
+	case runtime.GOOS == "linux" && mlock:
+		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(green, "%-22s", "on").Styleln(faint, "RAM pages will not be swapped to disk")
+	case runtime.GOOS == "linux":
+		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(red, "%-22s", "off").Styleln(faint, "Failed to lock RAM pages. Consider granting CAP_IPC_LOCK")
+	default:
+		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(red, "%-22s", "off").Stylef(faint, "Not supported on %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
+	cli.Println(buffer.String())
 
-	if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+	if err := server.Start(ctx); err != http.ErrServerClosed {
 		cli.Fatalf("failed to start server: %v", err)
 	}
 }

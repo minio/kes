@@ -17,9 +17,6 @@ import (
 // A ServerConfig structure is used to configure a
 // KES server.
 type ServerConfig struct {
-	// Certificate is TLS server certificate.
-	Certificate *Certificate
-
 	Vault *sys.Vault
 
 	// Proxy is an optional TLS proxy that sits
@@ -34,11 +31,11 @@ type ServerConfig struct {
 
 	// AuditLog is a log target that receives
 	// audit log events.
-	AuditLog *xlog.Target
+	AuditLog *xlog.Logger
 
 	// ErrorLog is a log target that receives
 	// error log events.
-	ErrorLog *xlog.Target
+	ErrorLog *xlog.Logger
 
 	// Metrics gathers various informations about
 	// the server.

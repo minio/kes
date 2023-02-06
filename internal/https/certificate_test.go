@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package http
+package https
 
 import (
 	"testing"
@@ -65,7 +65,7 @@ var loadCertPoolTests = []struct {
 
 func TestLoadCertPool(t *testing.T) {
 	for i, test := range loadCertPoolTests {
-		_, err := LoadCertPool(test.CAPath)
+		_, err := CertPoolFromFile(test.CAPath)
 		if err != nil && !test.ShouldFail {
 			t.Fatalf("Test %d: failed to load certificate pool %s: %v", i, test.CAPath, err)
 		}

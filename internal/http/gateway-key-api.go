@@ -28,7 +28,7 @@ func gatewayCreateKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -90,7 +90,7 @@ func gatewayImportKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Algorithm kes.KeyAlgorithm `json:"algorithm"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -158,7 +158,7 @@ func gatewayDescribeKey(mux *http.ServeMux, config *GatewayConfig) API {
 		CreatedBy kes.Identity     `json:"created_by,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -213,7 +213,7 @@ func gatewayDeleteKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Timeout = 15 * time.Second
 	)
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -266,7 +266,7 @@ func gatewayGenerateKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Ciphertext []byte `json:"ciphertext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -340,7 +340,7 @@ func gatewayEncryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Ciphertext []byte `json:"ciphertext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -408,7 +408,7 @@ func gatewayDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Plaintext []byte `json:"plaintext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -477,7 +477,7 @@ func gatewayBulkDecryptKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Plaintext []byte `json:"plaintext"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
@@ -554,7 +554,7 @@ func gatewayListKey(mux *http.ServeMux, config *GatewayConfig) API {
 		Err  string `json:"error,omitempty"`
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog.Log())
+		w = audit(w, r, config.AuditLog)
 
 		if r.Method != Method {
 			w.Header().Set("Accept", Method)
