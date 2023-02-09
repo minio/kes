@@ -116,21 +116,53 @@ func main() {
 
 func newClient(insecureSkipVerify bool) *kes.Client {
 	const DefaultServer = "https://127.0.0.1:7373"
+	const (
+		EnvServer     = "KES_SERVER"
+		EnvAPIKey     = "KES_API_KEY"
+		EnvClientKey  = "KES_CLIENT_KEY"
+		EnvClientCert = "KES_CLIENT_CERT"
+	)
 
-	certPath, ok := os.LookupEnv("KES_CLIENT_CERT")
+	if apiKey, ok := os.LookupEnv(EnvAPIKey); ok {
+		if _, ok = os.LookupEnv(EnvClientCert); ok {
+			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientCert)
+		}
+		if _, ok = os.LookupEnv(EnvClientKey); ok {
+			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientKey)
+		}
+		key, err := kes.ParseAPIKey(apiKey)
+		if err != nil {
+			cli.Fatalf("invalid API key: %v", err)
+		}
+		cert, err := kes.GenerateCertificate(key)
+		if err != nil {
+			cli.Fatalf("failed to generate client certificate from API key: %v", err)
+		}
+
+		addr := DefaultServer
+		if env, ok := os.LookupEnv(EnvServer); ok {
+			addr = env
+		}
+		return kes.NewClientWithConfig(addr, &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: insecureSkipVerify,
+		})
+	}
+
+	certPath, ok := os.LookupEnv(EnvClientCert)
 	if !ok {
-		cli.Fatal("no TLS client certificate. Environment variable 'KES_CLIENT_CERT' is not set")
+		cli.Fatalf("no TLS client certificate. Environment variable '%s' is not set", EnvClientCert)
 	}
 	if strings.TrimSpace(certPath) == "" {
-		cli.Fatal("no TLS client certificate. Environment variable 'KES_CLIENT_CERT' is empty")
+		cli.Fatalf("no TLS client certificate. Environment variable '%s' is empty", EnvClientCert)
 	}
 
-	keyPath, ok := os.LookupEnv("KES_CLIENT_KEY")
+	keyPath, ok := os.LookupEnv(EnvClientKey)
 	if !ok {
-		cli.Fatal("no TLS private key. Environment variable 'KES_CLIENT_KEY' is not set")
+		cli.Fatalf("no TLS private key. Environment variable '%s' is not set", EnvClientKey)
 	}
 	if strings.TrimSpace(keyPath) == "" {
-		cli.Fatal("no TLS private key. Environment variable 'KES_CLIENT_KEY' is empty")
+		cli.Fatalf("no TLS private key. Environment variable '%s' is empty", EnvClientKey)
 	}
 
 	certPem, err := os.ReadFile(certPath)
@@ -176,7 +208,7 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 	}
 
 	addr := DefaultServer
-	if env, ok := os.LookupEnv("KES_SERVER"); ok {
+	if env, ok := os.LookupEnv(EnvServer); ok {
 		addr = env
 	}
 	return kes.NewClientWithConfig(addr, &tls.Config{
