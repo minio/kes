@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 )
 

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"

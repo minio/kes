@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/kms"
 )

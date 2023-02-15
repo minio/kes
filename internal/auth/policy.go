@@ -13,7 +13,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // A PolicySet is a set of policies.

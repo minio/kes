@@ -24,7 +24,7 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/cpu"

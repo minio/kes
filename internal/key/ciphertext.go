@@ -7,7 +7,7 @@ package key
 import (
 	"encoding/json"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/tinylib/msgp/msgp"
 )
 

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/auth"
 )
 

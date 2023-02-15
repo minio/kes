@@ -7,7 +7,7 @@ package keserv
 import (
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 type serverConfigYAML struct {

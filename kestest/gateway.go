@@ -21,7 +21,7 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/auth"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"

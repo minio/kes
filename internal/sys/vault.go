@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // NewVault returns a new Vault that uses the given

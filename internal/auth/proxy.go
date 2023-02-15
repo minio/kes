@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // A TLSProxy handles HTTP requests sent by a client through
