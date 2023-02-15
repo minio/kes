@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 var jsonWriterWriteTests = []struct {

@@ -9,7 +9,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
 )
 

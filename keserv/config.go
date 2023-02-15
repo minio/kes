@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
 	"github.com/minio/kes/internal/keystore/fortanix"

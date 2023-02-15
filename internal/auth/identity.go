@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // VerifyRequest verifies whether the request's identity is allowed to perform

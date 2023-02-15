@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/keserv"
 	flag "github.com/spf13/pflag"

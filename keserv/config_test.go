@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"gopkg.in/yaml.v3"
 )
 

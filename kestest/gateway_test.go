@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kestest"
 )
 

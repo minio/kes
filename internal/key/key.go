@@ -19,7 +19,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"golang.org/x/crypto/chacha20"

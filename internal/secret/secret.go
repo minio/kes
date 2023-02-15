@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // MaxSize is the maximum size of a secret.

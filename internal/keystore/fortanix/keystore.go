@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/kms"

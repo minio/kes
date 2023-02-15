@@ -23,7 +23,7 @@ import (
 
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
 )
 
@@ -158,7 +158,7 @@ func (s *Conn) Status(ctx context.Context) (kms.State, error) {
 
 	// First, we try to fetch the Vault health information.
 	// Only if this fails we try to dial Vault directly over
-	// a TCP connection. See: https://github.com/minio/kes/issues/230
+	// a TCP connection. See: https://github.com/minio/kes-go/issues/230
 
 	start := time.Now()
 	health, err := client.Sys().HealthWithContext(ctx)
@@ -286,7 +286,7 @@ func (s *Conn) Create(ctx context.Context, name string, value []byte) error {
 	}
 
 	// Vault returns 204 No Content for K/V v1 and 200 OK for K/V v2.
-	// We have to check both status codes. Ref: https://github.com/minio/kes/issues/224
+	// We have to check both status codes. Ref: https://github.com/minio/kes-go/issues/224
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		if _, err = vaultapi.ParseSecret(resp.Body); err != nil {
 			return fmt.Errorf("vault: failed to create '%s': %v", location, err)

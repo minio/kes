@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 // Env wraps a type T and an optional environment

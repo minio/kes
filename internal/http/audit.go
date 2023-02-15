@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/log"
 )
 
