@@ -190,8 +190,8 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 // Count distingushes requests that fail with some sort of
 // well-defined error (HTTP 4xx) and requests that fail due
 // to some internal error (HTTP 5xx).
-func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (m *Metrics) Count(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.requestActive.Inc()
 		defer m.requestActive.Dec()
 
@@ -204,8 +204,8 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 		if flusher, ok := w.(http.Flusher); ok {
 			rw.flusher = flusher
 		}
-		h(&rw, r)
-	}
+		h.ServeHTTP(&rw, r)
+	})
 }
 
 // Latency returns a HandlerFunc that wraps h and measures the
@@ -215,8 +215,8 @@ func (m *Metrics) Count(h http.HandlerFunc) http.HandlerFunc {
 // application takes to generate and send a response after
 // receiving a request. It basically shows how many request
 // the application can handle.
-func (m *Metrics) Latency(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (m *Metrics) Latency(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rw := latencyResponseWriter{
 			ResponseWriter: w,
 			start:          time.Now(),
@@ -225,8 +225,8 @@ func (m *Metrics) Latency(h http.HandlerFunc) http.HandlerFunc {
 		if flusher, ok := w.(http.Flusher); ok {
 			rw.flusher = flusher
 		}
-		h(&rw, r)
-	}
+		h.ServeHTTP(&rw, r)
+	})
 }
 
 // ErrorEventCounter returns an io.Writer that increments
@@ -284,6 +284,11 @@ func (w *latencyResponseWriter) Flush() {
 	}
 }
 
+// Unwrap returns the underlying http.ResponseWriter.
+//
+// This method is implemented for http.ResponseController.
+func (w *latencyResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 // countResponseWriter is an http.ResponseWriter that
 // counts the number of requests partition by requests
 // that:
@@ -336,3 +341,8 @@ func (w *countResponseWriter) Flush() {
 		w.flusher.Flush()
 	}
 }
+
+// Unwrap returns the underlying http.ResponseWriter.
+//
+// This method is implemented for http.ResponseController.
+func (w *countResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

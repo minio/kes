@@ -22,10 +22,10 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/fips"
-	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/log"
 	xlog "github.com/minio/kes/internal/log"
@@ -210,7 +210,7 @@ func startServer(path string, sConfig serverConfig) {
 
 	server := https.NewServer(&https.Config{
 		Addr: init.Address.Value(),
-		Handler: xhttp.NewServerMux(&xhttp.ServerConfig{
+		Handler: api.NewRouter(&api.RouterConfig{
 			Vault:    vault,
 			Proxy:    proxy,
 			AuditLog: auditLog,
