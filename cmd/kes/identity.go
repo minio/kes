@@ -161,6 +161,7 @@ func newIdentityCmd(args []string) {
 		options := []kes.CertificateOption{
 			func(cert *x509.Certificate) { cert.DNSNames = domains },
 			func(cert *x509.Certificate) { cert.IPAddresses = IPs },
+			func(cert *x509.Certificate) { cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth) },
 		}
 		if cmd.NArg() == 1 {
 			name := cmd.Arg(0)

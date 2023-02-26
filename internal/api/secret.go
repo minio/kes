@@ -1,23 +1,23 @@
-// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Copyright 2023 - MinIO, Inc. All rights reserved.
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package http
+package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"path"
-	"strings"
 	"time"
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/audit"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/secret"
 )
 
-func serverCreateSecret(mux *http.ServeMux, config *ServerConfig) API {
+func createSecret(config *RouterConfig) API {
 	const (
 		Method  = http.MethodPost
 		APIPath = "/v1/secret/create/"
@@ -28,31 +28,19 @@ func serverCreateSecret(mux *http.ServeMux, config *ServerConfig) API {
 		Type  kes.SecretType `json:"type"`
 		Bytes []byte         `json:"bytes"`
 	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog)
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
+	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
+		name, err := nameFromRequest(r, APIPath)
+		if err != nil {
+			return err
 		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		err := Sync(config.Vault.RLocker(), func() error {
-			enclave, err := lookupEnclave(config.Vault, r)
+		if err = Sync(config.Vault.RLocker(), func() error {
+			enclave, err := enclaveFromRequest(config.Vault, r)
 			if err != nil {
 				return err
 			}
 			return Sync(enclave.Locker(), func() error {
 				if err = enclave.VerifyRequest(r); err != nil {
-					return err
-				}
-
-				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-				if err = validateName(name); err != nil {
 					return err
 				}
 
@@ -63,32 +51,32 @@ func serverCreateSecret(mux *http.ServeMux, config *ServerConfig) API {
 				if req.Type != kes.SecretGeneric { // Currently, we only support generic secrets
 					return kes.NewError(http.StatusBadRequest, "unsupported secret type '"+req.Type.String()+"'")
 				}
-
 				secret := secret.NewSecret(req.Bytes, auth.Identify(r))
 				return enclave.CreateSecret(r.Context(), name, secret)
 			})
-		})
-		if err != nil {
-			Error(w, err)
-			return
+		}); err != nil {
+			return err
 		}
+
 		w.WriteHeader(http.StatusOK)
+		return nil
 	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
-func serverDescribeSecret(mux *http.ServeMux, config *ServerConfig) API {
+func describeSecret(config *RouterConfig) API {
 	const (
-		Method  = http.MethodGet
-		APIPath = "/v1/secret/describe/"
-		MaxBody = 0
-		Timeout = 15 * time.Second
+		Method      = http.MethodGet
+		APIPath     = "/v1/secret/describe/"
+		MaxBody     = 0
+		Timeout     = 15 * time.Second
+		ContentType = "application/json"
 	)
 	type Response struct {
 		Type      kes.SecretType `json:"type"`
@@ -96,22 +84,14 @@ func serverDescribeSecret(mux *http.ServeMux, config *ServerConfig) API {
 		ModTime   time.Time      `json:"mod_time"`
 		CreatedBy kes.Identity   `json:"created_by"`
 	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog)
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
+	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
+		name, err := nameFromRequest(r, APIPath)
+		if err != nil {
+			return err
 		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
 		secret, err := VSync(config.Vault.RLocker(), func() (secret.Secret, error) {
-			enclave, err := lookupEnclave(config.Vault, r)
+			enclave, err := enclaveFromRequest(config.Vault, r)
 			if err != nil {
 				return secret.Secret{}, err
 			}
@@ -119,19 +99,14 @@ func serverDescribeSecret(mux *http.ServeMux, config *ServerConfig) API {
 				if err = enclave.VerifyRequest(r); err != nil {
 					return secret.Secret{}, err
 				}
-
-				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-				if err = validateName(name); err != nil {
-					return secret.Secret{}, err
-				}
 				return enclave.GetSecret(r.Context(), name)
 			})
 		})
 		if err != nil {
-			Error(w, err)
-			return
+			return err
 		}
-		w.Header().Set("Content-Type", "application/json")
+
+		w.Header().Set("Content-Type", ContentType)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			Type:      secret.Type(),
@@ -139,17 +114,18 @@ func serverDescribeSecret(mux *http.ServeMux, config *ServerConfig) API {
 			ModTime:   secret.ModTime(),
 			CreatedBy: secret.CreatedBy(),
 		})
+		return nil
 	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
-func serverReadSecret(mux *http.ServeMux, config *ServerConfig) API {
+func readSecret(config *RouterConfig) API {
 	const (
 		Method  = http.MethodGet
 		APIPath = "/v1/secret/read/"
@@ -163,22 +139,14 @@ func serverReadSecret(mux *http.ServeMux, config *ServerConfig) API {
 		ModTime   time.Time      `json:"mod_time"`
 		CreatedBy kes.Identity   `json:"created_by"`
 	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog)
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
+	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
+		name, err := nameFromRequest(r, APIPath)
+		if err != nil {
+			return err
 		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
 		secret, err := VSync(config.Vault.RLocker(), func() (secret.Secret, error) {
-			enclave, err := lookupEnclave(config.Vault, r)
+			enclave, err := enclaveFromRequest(config.Vault, r)
 			if err != nil {
 				return secret.Secret{}, err
 			}
@@ -186,18 +154,13 @@ func serverReadSecret(mux *http.ServeMux, config *ServerConfig) API {
 				if err = enclave.VerifyRequest(r); err != nil {
 					return secret.Secret{}, err
 				}
-
-				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-				if err = validateName(name); err != nil {
-					return secret.Secret{}, err
-				}
 				return enclave.GetSecret(r.Context(), name)
 			})
 		})
 		if err != nil {
-			Error(w, err)
-			return
+			return err
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
@@ -207,39 +170,32 @@ func serverReadSecret(mux *http.ServeMux, config *ServerConfig) API {
 			ModTime:   secret.ModTime(),
 			CreatedBy: secret.CreatedBy(),
 		})
+		return nil
 	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
-func serverDeleteSecret(mux *http.ServeMux, config *ServerConfig) API {
+func deleteSecret(config *RouterConfig) API {
 	const (
 		Method  = http.MethodDelete
 		APIPath = "/v1/secret/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
 	)
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog)
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
+	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
+		name, err := nameFromRequest(r, APIPath)
+		if err != nil {
+			return err
 		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
-		err := Sync(config.Vault.RLocker(), func() error {
-			enclave, err := lookupEnclave(config.Vault, r)
+		if err = Sync(config.Vault.RLocker(), func() error {
+			enclave, err := enclaveFromRequest(config.Vault, r)
 			if err != nil {
 				return err
 			}
@@ -247,30 +203,25 @@ func serverDeleteSecret(mux *http.ServeMux, config *ServerConfig) API {
 				if err = enclave.VerifyRequest(r); err != nil {
 					return err
 				}
-
-				name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-				if err = validateName(name); err != nil {
-					return err
-				}
 				return enclave.DeleteSecret(r.Context(), name)
 			})
-		})
-		if err != nil {
-			Error(w, err)
-			return
+		}); err != nil {
+			return err
 		}
+
 		w.WriteHeader(http.StatusOK)
+		return nil
 	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
-func serverListSecrets(mux *http.ServeMux, config *ServerConfig) API {
+func listSecret(config *RouterConfig) API {
 	const (
 		Method      = http.MethodGet
 		APIPath     = "/v1/secret/list/"
@@ -287,31 +238,19 @@ func serverListSecrets(mux *http.ServeMux, config *ServerConfig) API {
 
 		Err string `json:"error,omitempty"`
 	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w = audit(w, r, config.AuditLog)
-
-		if r.Method != Method {
-			w.Header().Set("Accept", Method)
-			Error(w, errMethodNotAllowed)
-			return
+	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
+		pattern, err := patternFromRequest(r, APIPath)
+		if err != nil {
+			return err
 		}
-		if err := normalizeURL(r.URL, APIPath); err != nil {
-			Error(w, err)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
 
 		hasWritten, err := VSync(config.Vault.RLocker(), func() (bool, error) {
-			enclave, err := lookupEnclave(config.Vault, r)
+			enclave, err := enclaveFromRequest(config.Vault, r)
 			if err != nil {
 				return false, err
 			}
 			return VSync(enclave.RLocker(), func() (bool, error) {
 				if err = enclave.VerifyRequest(r); err != nil {
-					return false, err
-				}
-				pattern := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, APIPath))
-				if err = validatePattern(pattern); err != nil {
 					return false, err
 				}
 
@@ -324,7 +263,8 @@ func serverListSecrets(mux *http.ServeMux, config *ServerConfig) API {
 				var hasWritten bool
 				encoder := json.NewEncoder(w)
 				for iterator.Next() {
-					if ok, _ := path.Match(pattern, iterator.Name()); !ok || iterator.Name() == "" {
+					name := iterator.Name()
+					if ok, _ := path.Match(pattern, name); !ok || name == "" {
 						continue
 					}
 					secret, err := enclave.GetSecret(r.Context(), iterator.Name())
@@ -353,20 +293,20 @@ func serverListSecrets(mux *http.ServeMux, config *ServerConfig) API {
 		if err != nil {
 			if hasWritten {
 				json.NewEncoder(w).Encode(Response{Err: err.Error()})
-			} else {
-				Error(w, err)
+				return nil
 			}
-			return
+			return err
 		}
 		if !hasWritten {
 			w.WriteHeader(http.StatusOK)
 		}
+		return nil
 	}
-	mux.HandleFunc(APIPath, timeout(Timeout, proxy(config.Proxy, config.Metrics.Count(config.Metrics.Latency(handler)))))
 	return API{
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

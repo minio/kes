@@ -25,11 +25,11 @@ import (
 
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
-	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/log"
@@ -81,7 +81,7 @@ func startGateway(cliConfig gatewayConfig) {
 
 	server := https.NewServer(&https.Config{
 		Addr:      config.Addr.Value,
-		Handler:   xhttp.NewGatewayMux(gwConfig),
+		Handler:   api.NewEdgeRouter(gwConfig),
 		TLSConfig: tlsConfig,
 	})
 	go func(ctx context.Context) {
@@ -116,7 +116,7 @@ func startGateway(cliConfig gatewayConfig) {
 				}
 				err = server.Update(&https.Config{
 					Addr:      config.Addr.Value,
-					Handler:   xhttp.NewGatewayMux(gwConfig),
+					Handler:   api.NewEdgeRouter(gwConfig),
 					TLSConfig: tlsConfig,
 				})
 				if err != nil {
@@ -507,48 +507,48 @@ func newTLSConfig(config *keserv.ServerConfig, auth string) (*tls.Config, error)
 	}, nil
 }
 
-func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfig *tls.Config) (*xhttp.GatewayConfig, error) {
-	gwConfig := &xhttp.GatewayConfig{}
+func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfig *tls.Config) (*api.EdgeRouterConfig, error) {
+	rConfig := &api.EdgeRouterConfig{}
 	switch strings.ToLower(config.Log.Error.Value) {
 	case "on":
-		gwConfig.ErrorLog = log.New(os.Stderr, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+		rConfig.ErrorLog = log.New(os.Stderr, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
 	case "off":
-		gwConfig.ErrorLog = log.New(ioutil.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+		rConfig.ErrorLog = log.New(ioutil.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
 	default:
 		return nil, fmt.Errorf("invalid error log configuration '%s'", config.Log.Error.Value)
 	}
 
 	switch strings.ToLower(config.Log.Audit.Value) {
 	case "on":
-		gwConfig.AuditLog = log.New(os.Stdout, "", 0)
+		rConfig.AuditLog = log.New(os.Stdout, "", 0)
 	case "off":
-		gwConfig.AuditLog = log.New(ioutil.Discard, "", 0)
+		rConfig.AuditLog = log.New(ioutil.Discard, "", 0)
 	default:
 		return nil, fmt.Errorf("invalid audit log configuration '%s'", config.Log.Audit.Value)
 	}
 
 	if len(config.TLS.Proxies) != 0 {
-		gwConfig.Proxy = &auth.TLSProxy{
+		rConfig.Proxy = &auth.TLSProxy{
 			CertHeader: http.CanonicalHeaderKey(config.TLS.ForwardCertHeader.Value),
 		}
 		if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
-			gwConfig.Proxy.VerifyOptions = &x509.VerifyOptions{
+			rConfig.Proxy.VerifyOptions = &x509.VerifyOptions{
 				Roots: tlsConfig.RootCAs,
 			}
 		}
 		for _, identity := range config.TLS.Proxies {
 			if !identity.Value.IsUnknown() {
-				gwConfig.Proxy.Add(identity.Value)
+				rConfig.Proxy.Add(identity.Value)
 			}
 		}
 	}
 
 	var err error
-	gwConfig.Policies, err = policySetFromConfig(config)
+	rConfig.Policies, err = policySetFromConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	gwConfig.Identities, err = identitySetFromConfig(config)
+	rConfig.Identities, err = identitySetFromConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +558,7 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 		return nil, err
 	}
 	store := key.Store{Conn: conn}
-	gwConfig.Keys = key.NewCache(store, &key.CacheConfig{
+	rConfig.Keys = key.NewCache(store, &key.CacheConfig{
 		Expiry:        config.Cache.Expiry.Value,
 		ExpiryUnused:  config.Cache.ExpiryUnused.Value,
 		ExpiryOffline: config.Cache.ExpiryOffline.Value,
@@ -581,10 +581,10 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 		}
 	}
 
-	gwConfig.Metrics = metric.New()
-	gwConfig.AuditLog.Add(gwConfig.Metrics.AuditEventCounter())
-	gwConfig.ErrorLog.Add(gwConfig.Metrics.ErrorEventCounter())
-	return gwConfig, nil
+	rConfig.Metrics = metric.New()
+	rConfig.AuditLog.Add(rConfig.Metrics.AuditEventCounter())
+	rConfig.ErrorLog.Add(rConfig.Metrics.ErrorEventCounter())
+	return rConfig, nil
 }
 
 func gatewayMessage(config *keserv.ServerConfig, tlsConfig *tls.Config, mlock bool) (*cli.Buffer, error) {
