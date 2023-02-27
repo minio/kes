@@ -42,7 +42,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-          args: --config ./.golangci.yml
+          args: --config ./.golangci.yml --timeout=2m
   test:
     name: Test ${{ matrix.os }}
     needs: Lint
