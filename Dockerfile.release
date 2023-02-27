@@ -1,4 +1,10 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.7
+FROM --platform=linux/amd64 registry.access.redhat.com/ubi8/ubi-minimal:8.7 as build
+
+RUN microdnf update --nodocs && microdnf install ca-certificates --nodocs
+RUN  curl -s -q https://raw.githubusercontent.com/minio/kes/master/LICENSE -o LICENSE
+RUN  curl -s -q https://raw.githubusercontent.com/minio/kes/master/CREDITS -o CREDITS
+
+FROM registry.access.redhat.com/ubi8/ubi-micro:8.7
 
 ARG TAG
 
@@ -7,17 +13,15 @@ LABEL name="MinIO" \
       maintainer="MinIO Inc <dev@min.io>" \
       version="${TAG}" \
       release="${TAG}" \
-      summary="KES is a stateless and distributed key-management system for high-performance applications." \
-      description="KES as the bridge between modern applications - running as containers on Kubernetes - and centralized KMS solutions. Therefore, KES has been designed to be simple, scalable and secure by default. It has just a few knobs to tweak instead of a complex configuration and does not require a deep understanding of secure key-management or cryptography."
+	  summary="KES is a cloud-native distributed key management and encryption server designed to build zero-trust infrastructures at scale."
 
-RUN \
-    microdnf update --nodocs && \
-    microdnf install ca-certificates --nodocs && \
-    microdnf clean all && \
-    mkdir /licenses && \
-    curl -s -q https://raw.githubusercontent.com/minio/kes/master/CREDITS -o /licenses/CREDITS && \
-    curl -s -q https://raw.githubusercontent.com/minio/kes/master/LICENSE -o /licenses/LICENSE
+# On RHEL the certificate bundle is located at:
+# - /etc/pki/tls/certs/ca-bundle.crt (RHEL 6)
+# - /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem (RHEL 7)
+COPY --from=build /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/pki/ca-trust/extracted/pem/
 
+COPY --from=build LICENSE /LICENSE
+COPY --from=build CREDITS /CREDITS
 COPY kes /kes
 
 EXPOSE 7373
