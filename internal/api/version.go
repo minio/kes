@@ -19,6 +19,7 @@ func version(config *RouterConfig) API {
 		APIPath = "/version"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = false
 	)
 	type Response struct {
 		Version string `json:"version"`
@@ -35,6 +36,7 @@ func version(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -45,6 +47,7 @@ func edgeVersion(config *EdgeRouterConfig) API {
 		APIPath = "/version"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = false
 	)
 	type Response struct {
 		Version string `json:"version"`
@@ -61,6 +64,7 @@ func edgeVersion(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

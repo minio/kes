@@ -23,6 +23,7 @@ func createSecret(config *RouterConfig) API {
 		APIPath = "/v1/secret/create/"
 		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Request struct {
 		Type  kes.SecretType `json:"type"`
@@ -66,6 +67,7 @@ func createSecret(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -76,6 +78,7 @@ func describeSecret(config *RouterConfig) API {
 		APIPath     = "/v1/secret/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -121,6 +124,7 @@ func describeSecret(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -131,6 +135,7 @@ func readSecret(config *RouterConfig) API {
 		APIPath = "/v1/secret/read/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Response struct {
 		Bytes     []byte         `json:"bytes"`
@@ -177,6 +182,7 @@ func readSecret(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -187,6 +193,7 @@ func deleteSecret(config *RouterConfig) API {
 		APIPath = "/v1/secret/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -217,6 +224,7 @@ func deleteSecret(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -227,6 +235,7 @@ func listSecret(config *RouterConfig) API {
 		APIPath     = "/v1/secret/list/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
@@ -307,6 +316,7 @@ func listSecret(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

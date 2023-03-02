@@ -18,6 +18,7 @@ func metrics(config *RouterConfig) API {
 		APIPath = "/v1/metrics"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		if err := Sync(config.Vault.RLocker(), func() error {
@@ -43,19 +44,27 @@ func metrics(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: handler,
 	}
 }
 
 func edgeMetrics(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method  = http.MethodGet
 		APIPath = "/v1/metrics"
-		MaxBody = 0
+		MaxBody int64
+		Verify  = true
 		Timeout = 15 * time.Second
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+		Verify = !c.InsecureSkipAuth
+	}
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); Verify && err != nil {
 			Fail(w, err)
 			return
 		}
@@ -71,6 +80,7 @@ func edgeMetrics(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: handler,
 	}
 }

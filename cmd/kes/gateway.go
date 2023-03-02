@@ -543,6 +543,22 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 		}
 	}
 
+	rConfig.APIConfig = make(map[string]api.Config, len(config.API.Paths))
+	for k, v := range config.API.Paths {
+		k = strings.TrimSpace(k) // Ensure that the API path starts with a '/'
+		if !strings.HasPrefix(k, "/") {
+			k = "/" + k
+		}
+
+		if _, ok := rConfig.APIConfig[k]; ok {
+			return nil, fmt.Errorf("ambiguous API configuration for '%s'", k)
+		}
+		rConfig.APIConfig[k] = api.Config{
+			Timeout:          v.Timeout.Value,
+			InsecureSkipAuth: v.InsecureSkipAuth.Value,
+		}
+	}
+
 	var err error
 	rConfig.Policies, err = policySetFromConfig(config)
 	if err != nil {
