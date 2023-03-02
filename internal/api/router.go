@@ -18,7 +18,7 @@ import (
 )
 
 // RouterConfig is a structure containing the
-// API configuration a KES server.
+// API configuration for a KES server.
 type RouterConfig struct {
 	Vault *sys.Vault
 
@@ -43,6 +43,8 @@ type EdgeRouterConfig struct {
 	Metrics *metric.Metrics
 
 	Proxy *auth.TLSProxy
+
+	APIConfig map[string]Config
 
 	AuditLog *log.Logger
 

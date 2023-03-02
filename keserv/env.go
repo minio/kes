@@ -5,14 +5,12 @@
 package keserv
 
 import (
-	"encoding"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/minio/kes-go"
+	"gopkg.in/yaml.v3"
 )
 
 // Env wraps a type T and an optional environment
@@ -30,116 +28,54 @@ import (
 // During marshaling, Env preserves and encodes
 // the env. variable reference, if not empty.
 // Otherwise, it encodes Env generic type value.
-type Env[T string | kes.Identity | time.Duration] struct {
+type Env[T any] struct {
 	Name  string // Name of the env. variable
 	Value T      // Value obtained by unmarshalling or from the environment
 }
 
-// For now we limit Env[T] to:
-// - string
-// - kes.Identity
-// - time.Duration
+// MarshalYAML returns the Env[T]'s YAML representation.
 //
-// It is possible to add more types in the future (e.g. net.IP, url.URL, ...)
-// and relax the constraints further (e.g. ~string or ~int64). However,
-// this has implications for marshaling and esp. unmarshaling.
-//
-// For marshaling we can get away with some reasonable interface checks.
-// For example fmt.Stringer and encoding.TextMarshaler.
-// However, unmarshalling semantics are complex. For example, we could allow
-// Env for any type based on int64 via `~int64` - including time.Duration.
-// But we want to unmarshal a time.Duration via time.ParseDuration, not via
-// strconv.ParseInt64. For other types we just don't know whether there is
-// a specialised parse function or whether ParseInt64 should be used.
-//
-// The current implementation is very primitive but good enough
-// for the moment.
-
-// MarshalText returns a text representation of the Env[T].
-//
-// If Env[T] refers to an environment variable then MarshalText
-// returns the environment variable name as "${variable}".
-// Otherwise, it returns a text representation of T.
-func (e Env[_]) MarshalText() ([]byte, error) {
-	if name := strings.TrimSpace(e.Name); name != "" {
+// If Env[T] refers to an environment variable then MarshalYAML
+// returns the environment variable name as "${name}".
+// Otherwise, it returns the YAML representation of T.
+func (e Env[_]) MarshalYAML() (any, error) {
+	if e.Name != "" {
+		name := strings.TrimSpace(e.Name)
 		switch hasPrefix, hasSuffix := strings.HasPrefix(name, "${"), strings.HasSuffix(name, "}"); {
 		case hasPrefix && hasSuffix:
-			return []byte(name), nil
+			return name, nil
 		case !hasPrefix && !hasSuffix:
-			return []byte("${" + name + "}"), nil
+			return "${" + name + "}", nil
 		default:
 			return nil, errors.New("keserv: invalid env variable name '" + e.Name + "'")
 		}
 	}
-	return marshalText(e.Value)
+	return e.Value, nil
 }
 
-// UnmarshalText parses the text as Env[T].
+// UnmarshalYAML decodes the YAML node into the Env[T].
 //
-// If the given text refers to an environment variable then
-// UnmarshalText looks up the value from the environment.
-// It returns an error if no such environment variable exists.
-//
-// Otherwise, it parses the text as T and sets the Env[T] name
-// to the empty string.
-func (e *Env[_]) UnmarshalText(text []byte) error {
-	s := strings.TrimSpace(string(text))
-	switch hasPrefix, hasSuffix := strings.HasPrefix(s, "${"), strings.HasSuffix(s, "}"); {
-	case hasPrefix && hasSuffix:
-		name := strings.TrimSuffix(strings.TrimPrefix(s, "${"), "}")
+// If the YAML node refers to an environment variable then
+// UnmarshalYAML first looks up the value from the environment
+// before unmarshaling it.
+func (e *Env[_]) UnmarshalYAML(node *yaml.Node) error {
+	if name := strings.TrimSpace(node.Value); strings.HasPrefix(name, "${") && strings.HasSuffix(name, "}") {
+		name = strings.TrimSpace(name[2 : len(name)-1]) // We know that there is a '${' prefix and '}' suffix
 		value, ok := os.LookupEnv(name)
 		if !ok {
-			return errors.New("keserv: env variable '" + name + "' not found")
+			return fmt.Errorf("keserv: line %d: env. variable '%s' not found", node.Line, name)
 		}
-		if err := unmarshalText([]byte(value), &e.Value); err != nil {
+
+		node.Value = value
+		if err := node.Decode(&e.Value); err != nil {
 			return err
 		}
 		e.Name = name
 		return nil
-	case !hasPrefix && !hasSuffix:
-		if err := unmarshalText(text, &e.Value); err != nil {
-			return err
-		}
-		e.Name = ""
-		return nil
-	default:
-		return errors.New("keserv: invalid env variable name '" + s + "'")
 	}
-}
-
-func marshalText(v any) ([]byte, error) {
-	switch v := v.(type) {
-	case encoding.TextMarshaler:
-		return v.MarshalText()
-	case string:
-		return []byte(v), nil
-	case time.Duration:
-		return []byte(v.String()), nil
-	case kes.Identity:
-		return []byte(v.String()), nil
-	default: // Go compiler ensures via type constraints that this never happens
-		panic(fmt.Sprintf("keserv: cannot marshal unsupported type %T", v))
+	if err := node.Decode(&e.Value); err != nil {
+		return err
 	}
-}
-
-func unmarshalText(text []byte, v any) error {
-	switch v := v.(type) {
-	case encoding.TextUnmarshaler:
-		return v.UnmarshalText(text)
-	case *string:
-		*v = string(text)
-		return nil
-	case *kes.Identity:
-		*v = kes.Identity(text)
-		return nil
-	case *time.Duration:
-		d, err := time.ParseDuration(string(text))
-		if err != nil {
-			return err
-		}
-		*v = d
-		return nil
-	default: // Go compiler ensures via type constraints that this never happens
-		panic(fmt.Sprintf("keserv: cannot unmarshal unsupported type %T", v))
-	}
+	e.Name = ""
+	return nil
 }

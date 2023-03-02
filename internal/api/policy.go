@@ -22,6 +22,7 @@ func assignPolicy(config *RouterConfig) API {
 		APIPath = "/v1/policy/assign/"
 		MaxBody = int64(1 * mem.KiB)
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Request struct {
 		Identity kes.Identity `json:"identity"`
@@ -76,6 +77,7 @@ func assignPolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -86,6 +88,7 @@ func describePolicy(config *RouterConfig) API {
 		APIPath     = "/v1/policy/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -127,18 +130,25 @@ func describePolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeDescribePolicy(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/policy/describe/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
@@ -170,6 +180,7 @@ func edgeDescribePolicy(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -180,6 +191,7 @@ func readPolicy(config *RouterConfig) API {
 		APIPath     = "/v1/policy/read/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -225,18 +237,25 @@ func readPolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeReadPolicy(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/policy/read/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		Allow     []string     `json:"allow,omitempty"`
 		Deny      []string     `json:"deny,omitempty"`
@@ -272,6 +291,7 @@ func edgeReadPolicy(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -282,6 +302,7 @@ func writePolicy(config *RouterConfig) API {
 		APIPath = "/v1/policy/write/"
 		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Request struct {
 		Allow []string `json:"allow,omitempty"`
@@ -326,6 +347,7 @@ func writePolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -336,6 +358,7 @@ func deletePolicy(config *RouterConfig) API {
 		APIPath = "/v1/policy/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -366,6 +389,7 @@ func deletePolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -376,6 +400,7 @@ func listPolicy(config *RouterConfig) API {
 		APIPath     = "/v1/policy/list/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
@@ -451,18 +476,25 @@ func listPolicy(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeListPolicy(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/policy/list/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		Name      string       `json:"name"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
@@ -528,6 +560,7 @@ func edgeListPolicy(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

@@ -22,6 +22,7 @@ func createEnclave(config *RouterConfig) API {
 		APIPath = "/v1/enclave/create/"
 		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Request struct {
 		Admin kes.Identity `json:"admin"`
@@ -70,6 +71,7 @@ func createEnclave(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -80,6 +82,7 @@ func describeEnclave(config *RouterConfig) API {
 		APIPath     = "/v1/enclave/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -121,6 +124,7 @@ func describeEnclave(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -131,6 +135,7 @@ func deleteEnclave(config *RouterConfig) API {
 		APIPath = "/v1/enclave/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -159,6 +164,7 @@ func deleteEnclave(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

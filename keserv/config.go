@@ -146,6 +146,9 @@ type ServerConfig struct {
 	// TLS holds the KES server TLS configuration.
 	TLS TLSConfig
 
+	// API holds the KES server API configuration.
+	API APIConfig
+
 	// Cache holds the KES server cache configuration.
 	Cache CacheConfig
 
@@ -199,6 +202,37 @@ type TLSConfig struct {
 	// TLS / HTTPS proxy to forward the actual client certificate
 	// to KES.
 	ForwardCertHeader Env[string]
+
+	_ [0]int
+}
+
+// APIConfig is a structure that holds the API configuration
+// for a (stateless) KES server.
+type APIConfig struct {
+	// Paths contains a set of API paths and there
+	// API configuration.
+	Paths map[string]APIPathConfig
+
+	_ [0]int
+}
+
+// APIPathConfig is a structure that holds the API configuration
+// for one particular KES API.
+type APIPathConfig struct {
+	// Timeout is the duration after which the API response with
+	// a HTTP timeout error response.
+	// If Timeout <= 0 the API default is used.
+	Timeout Env[time.Duration]
+
+	// InsecureSkipAuth controls whether the API verifies
+	// client identities. If InsecureSkipAuth is true,
+	// the API accepts requests from arbitrary identities.
+	// In this mode, the API can be used by anyone who can
+	// communicate to the KES server over HTTPS.
+	// This should only be set for testing or in certain
+	// cases for APIs that don't expose sensitive information,
+	// like metrics.
+	InsecureSkipAuth Env[bool]
 
 	_ [0]int
 }
