@@ -26,6 +26,7 @@ func createKey(config *RouterConfig) API {
 		APIPath = "/v1/key/create/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -66,17 +67,24 @@ func createKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeCreateKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/create/"
-		MaxBody = 0
+		MaxBody int64
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
 		if err != nil {
@@ -109,6 +117,7 @@ func edgeCreateKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -119,6 +128,7 @@ func importKey(config *RouterConfig) API {
 		APIPath = "/v1/key/import/"
 		MaxBody = int64(1 * mem.MiB)
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	type Request struct {
 		Bytes     []byte           `json:"bytes"`
@@ -163,17 +173,24 @@ func importKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeImportKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method  = http.MethodPost
 		APIPath = "/v1/key/import/"
 		MaxBody = 1 * mem.MiB
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Request struct {
 		Bytes     []byte           `json:"bytes"`
 		Algorithm kes.KeyAlgorithm `json:"algorithm"`
@@ -210,6 +227,7 @@ func edgeImportKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: int64(MaxBody),
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -220,6 +238,7 @@ func describeKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -266,17 +285,24 @@ func describeKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeDescribeKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method  = http.MethodGet
 		APIPath = "/v1/key/describe/"
-		MaxBody = 0
+		MaxBody int64
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		Name      string           `json:"name"`
 		ID        string           `json:"id,omitempty"`
@@ -313,6 +339,7 @@ func edgeDescribeKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -323,6 +350,7 @@ func deleteKey(config *RouterConfig) API {
 		APIPath = "/v1/key/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -352,17 +380,24 @@ func deleteKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeDeleteKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method  = http.MethodDelete
 		APIPath = "/v1/key/delete/"
-		MaxBody = 0
+		MaxBody int64
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
 		if err != nil {
@@ -383,6 +418,7 @@ func edgeDeleteKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -393,6 +429,7 @@ func generateKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/generate/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Request struct {
@@ -450,18 +487,25 @@ func generateKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeGenerateKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/generate/"
 		MaxBody     = 1 * mem.MiB
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Request struct {
 		Context []byte `json:"context"` // optional
 	}
@@ -508,6 +552,7 @@ func edgeGenerateKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: int64(MaxBody),
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -518,6 +563,7 @@ func encryptKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/encrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Request struct {
@@ -570,18 +616,25 @@ func encryptKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeEncryptKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/encrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Request struct {
 		Plaintext []byte `json:"plaintext"`
 		Context   []byte `json:"context"` // optional
@@ -623,6 +676,7 @@ func edgeEncryptKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -633,6 +687,7 @@ func decryptKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/decrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Request struct {
@@ -684,18 +739,25 @@ func decryptKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeDecryptKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/decrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Request struct {
 		Ciphertext []byte `json:"ciphertext"`
 		Context    []byte `json:"context"` // optional
@@ -737,6 +799,7 @@ func edgeDecryptKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -747,6 +810,7 @@ func bulkDecryptKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/bulk/decrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 		MaxRequests = 1000 // For now, we limit the number of decryption requests in a single API call to 1000.
 	)
@@ -810,19 +874,26 @@ func bulkDecryptKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeBulkDecryptKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodPost
 		APIPath     = "/v1/key/bulk/decrypt/"
 		MaxBody     = int64(1 * mem.MiB)
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 		MaxRequests = 1000 // For now, we limit the number of decryption requests in a single API call to 1000.
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Request struct {
 		Ciphertext []byte `json:"ciphertext"`
 		Context    []byte `json:"context"` // optional
@@ -874,6 +945,7 @@ func edgeBulkDecryptKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -884,6 +956,7 @@ func listKey(config *RouterConfig) API {
 		APIPath     = "/v1/key/list/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
@@ -964,18 +1037,25 @@ func listKey(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeListKey(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/key/list/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		Name string `json:"name,omitempty"`
 		Err  string `json:"error,omitempty"`
@@ -1031,6 +1111,7 @@ func edgeListKey(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

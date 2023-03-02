@@ -51,6 +51,36 @@ tls:
       # certificate of the kes client forwarded by the TLS proxy.
       cert: X-Tls-Client-Cert
 
+# The API configuration. The APIs exposed by the KES server can
+# be adjusted here. Each API is identified by its API path.
+#
+# In general, the KES server uses sane defaults for all APIs.
+# Only customize the APIs if there is a real need.
+# 
+# Disabling authentication for an API must be carefully evaluated.
+# One example, when authentication may be justified monitoring via
+# the /v1/metrics API. It is possible that providing identities
+# to auto-scaling monitoring instances may not be feasable in certain
+# environments. However, in general it is better to use API keys or
+# TLS client certificates if possible.
+#
+# When authentication is disabled, the particular API can be
+# accessed by any client that can send HTTPS requests to the
+# KES server.
+# Currently, authentication can only be disabled for the
+# following APIs:
+#   - /v1/status
+#   - /v1/metrics
+#   - /v1/api
+#
+api:
+  /v1/metrics:
+    skip_auth: false
+    timeout:   15s
+  /v1/status:
+    skip_auth: false
+    timeout:   15s
+    
 # The (pre-defined) policy definitions.
 #
 # A policy must have an unique name (e.g my-app) and specifies which

@@ -22,6 +22,7 @@ func status(config *RouterConfig) API {
 		APIPath     = "/v1/status"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -76,6 +77,7 @@ func status(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -86,13 +88,15 @@ func listAPI(router *Router, config *RouterConfig) API {
 		APIPath     = "/v1/api"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
 		Method  string `json:"method"`
 		Path    string `json:"path"`
 		MaxBody int64  `json:"max_body"`
-		Timeout int64  `json:"timeout"` // Timeout in seconds
+		Timeout int64  `json:"timeout"`     // Timeout in seconds
+		Verify  bool   `json:"verify_auth"` // Whether the API requires authentication
 	}
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		if err := Sync(config.Vault.RLocker(), func() error {
@@ -116,6 +120,7 @@ func listAPI(router *Router, config *RouterConfig) API {
 				Path:    api.Path,
 				MaxBody: api.MaxBody,
 				Timeout: int64(api.Timeout.Truncate(time.Second).Seconds()),
+				Verify:  api.Verify,
 			})
 		}
 
@@ -128,18 +133,26 @@ func listAPI(router *Router, config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeStatus(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/status"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+		Verify = !c.InsecureSkipAuth
+	}
 	type Response struct {
 		Version    string        `json:"version"`
 		OS         string        `json:"os"`
@@ -157,7 +170,7 @@ func edgeStatus(config *EdgeRouterConfig) API {
 
 	startTime := time.Now().UTC()
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); Verify && err != nil {
 			Fail(w, err)
 			return
 		}
@@ -196,27 +209,36 @@ func edgeStatus(config *EdgeRouterConfig) API {
 		Method:  Method,
 		Path:    APIPath,
 		MaxBody: MaxBody,
+		Verify:  Verify,
 		Timeout: Timeout,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeListAPI(router *Router, config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/api"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+		Verify = !c.InsecureSkipAuth
+	}
 	type Response struct {
 		Method  string `json:"method"`
 		Path    string `json:"path"`
 		MaxBody int64  `json:"max_body"`
-		Timeout int64  `json:"timeout"` // Timeout in seconds
+		Timeout int64  `json:"timeout"`     // Timeout in seconds
+		Verify  bool   `json:"verify_auth"` // Whether the API requires authentication
 	}
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
+		if err := auth.VerifyRequest(r, config.Policies, config.Identities); Verify && err != nil {
 			Fail(w, err)
 			return
 		}
@@ -229,6 +251,7 @@ func edgeListAPI(router *Router, config *EdgeRouterConfig) API {
 				Path:    api.Path,
 				MaxBody: api.MaxBody,
 				Timeout: int64(api.Timeout.Truncate(time.Second).Seconds()),
+				Verify:  api.Verify,
 			})
 		}
 		w.Header().Set("Content-Type", ContentType)
@@ -240,6 +263,7 @@ func edgeListAPI(router *Router, config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

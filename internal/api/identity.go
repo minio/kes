@@ -21,6 +21,7 @@ func describeIdentity(config *RouterConfig) API {
 		APIPath     = "/v1/identity/describe/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
 	type Response struct {
@@ -66,18 +67,25 @@ func describeIdentity(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeDescribeIdentity(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/identity/describe/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		IsAdmin   bool         `json:"admin,omitempty"`
 		Policy    string       `json:"policy"`
@@ -113,6 +121,7 @@ func edgeDescribeIdentity(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -123,6 +132,7 @@ func selfDescribeIdentity(config *RouterConfig) API {
 		APIPath     = "/v1/identity/self/describe"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = false
 		ContentType = "application/json"
 	)
 	type InlinePolicy struct {
@@ -188,18 +198,25 @@ func selfDescribeIdentity(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeSelfDescribeIdentity(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/identity/self/describe"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = false
 		ContentType = "application/json"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type InlinePolicy struct {
 		Allow     []string     `json:"allow,omitempty"`
 		Deny      []string     `json:"deny,omitempty"`
@@ -251,6 +268,7 @@ func edgeSelfDescribeIdentity(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -261,6 +279,7 @@ func deleteIdentity(config *RouterConfig) API {
 		APIPath = "/v1/identity/delete/"
 		MaxBody = 0
 		Timeout = 15 * time.Second
+		Verify  = true
 	)
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -300,6 +319,7 @@ func deleteIdentity(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
@@ -310,6 +330,7 @@ func listIdentity(config *RouterConfig) API {
 		APIPath     = "/v1/identity/list/"
 		MaxBody     = 0
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
 	type Response struct {
@@ -389,18 +410,25 @@ func listIdentity(config *RouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }
 
 func edgeListIdentity(config *EdgeRouterConfig) API {
-	const (
+	var (
 		Method      = http.MethodGet
 		APIPath     = "/v1/identity/list/"
-		MaxBody     = 0
+		MaxBody     int64
 		Timeout     = 15 * time.Second
+		Verify      = true
 		ContentType = "application/x-ndjson"
 	)
+	if c, ok := config.APIConfig[APIPath]; ok {
+		if c.Timeout > 0 {
+			Timeout = c.Timeout
+		}
+	}
 	type Response struct {
 		Identity  kes.Identity `json:"identity"`
 		IsAdmin   bool         `json:"admin"`
@@ -472,6 +500,7 @@ func edgeListIdentity(config *EdgeRouterConfig) API {
 		Path:    APIPath,
 		MaxBody: MaxBody,
 		Timeout: Timeout,
+		Verify:  Verify,
 		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
 	}
 }

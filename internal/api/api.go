@@ -16,12 +16,32 @@ import (
 	"github.com/minio/kes/internal/sys"
 )
 
+// Config is a structure for configuring
+// a KES server API.
+type Config struct {
+	// Timeout is the duration after which a request
+	// times out. If Timeout <= 0 the API default
+	// is used.
+	Timeout time.Duration
+
+	// InsecureSkipAuth controls whether the API verifies
+	// client identities. If InsecureSkipAuth is true,
+	// the API accepts requests from arbitrary identities.
+	// In this mode, the API can be used by anyone who can
+	// communicate to the KES server over HTTPS.
+	// This should only be set for testing or in certain
+	// cases for APIs that don't expose sensitive information,
+	// like metrics.
+	InsecureSkipAuth bool
+}
+
 // API describes a KES server API.
 type API struct {
 	Method  string        // The HTTP method
 	Path    string        // The URI API path
 	MaxBody int64         // The max. body size the API accepts
 	Timeout time.Duration // The duration after which an API request times out. 0 means no timeout
+	Verify  bool          // Whether the API verifies the client identity
 
 	// Handler implements the API.
 	//
@@ -32,6 +52,8 @@ type API struct {
 	//  - the request body being limited to the API's MaxBody size.
 	//  - the request timing out after the duration specified for the API.
 	Handler http.Handler
+
+	_ [0]int
 }
 
 // ServerHTTP takes an HTTP Request and ResponseWriter and executes the

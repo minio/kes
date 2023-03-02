@@ -52,6 +52,13 @@ type serverConfigYAML struct {
 		Audit Env[string] `yaml:"audit,omitempty"`
 	} `yaml:"log,omitempty"`
 
+	API struct {
+		Paths map[string]struct {
+			InsecureSkipAuth Env[bool]          `yaml:"skip_auth,omitempty"`
+			Timeout          Env[time.Duration] `yaml:"timeout,omitempty"`
+		} `yaml:",omitempty,inline"`
+	} `yaml:"api,omitempty"`
+
 	Keys []struct {
 		Name Env[string] `yaml:"name,omitempty"`
 	} `yaml:"keys,omitempty"`
@@ -203,6 +210,22 @@ func serverConfigToYAML(config *ServerConfig) *serverConfigYAML {
 	yml.TLS.Proxy.Identities = config.TLS.Proxies
 	yml.TLS.Proxy.Header.ClientCert = config.TLS.ForwardCertHeader
 
+	// API
+	yml.API.Paths = make(map[string]struct {
+		InsecureSkipAuth Env[bool]          `yaml:"skip_auth,omitempty"`
+		Timeout          Env[time.Duration] `yaml:"timeout,omitempty"`
+	}, len(config.API.Paths))
+	for path, api := range config.API.Paths {
+		type API struct {
+			InsecureSkipAuth Env[bool]          `yaml:"skip_auth,omitempty"`
+			Timeout          Env[time.Duration] `yaml:"timeout,omitempty"`
+		}
+		yml.API.Paths[path] = API{
+			InsecureSkipAuth: api.InsecureSkipAuth,
+			Timeout:          api.Timeout,
+		}
+	}
+
 	// Cache
 	yml.Cache.Expiry.Any = config.Cache.Expiry
 	yml.Cache.Expiry.Unused = config.Cache.ExpiryUnused
@@ -260,6 +283,15 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 	config.TLS.Password = yml.TLS.Password
 	config.TLS.Proxies = yml.TLS.Proxy.Identities
 	config.TLS.ForwardCertHeader = yml.TLS.Proxy.Header.ClientCert
+
+	// API
+	config.API.Paths = make(map[string]APIPathConfig, len(yml.API.Paths))
+	for path, api := range yml.API.Paths {
+		config.API.Paths[path] = APIPathConfig{
+			InsecureSkipAuth: api.InsecureSkipAuth,
+			Timeout:          api.Timeout,
+		}
+	}
 
 	// Cache
 	config.Cache.Expiry = yml.Cache.Expiry.Any
