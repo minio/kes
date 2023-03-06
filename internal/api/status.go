@@ -13,6 +13,7 @@ import (
 	"github.com/minio/kes/internal/audit"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/sys"
+	"github.com/minio/kes/kms"
 )
 
 func status(config *RouterConfig) API {
@@ -24,15 +25,18 @@ func status(config *RouterConfig) API {
 		ContentType = "application/json"
 	)
 	type Response struct {
-		Version string        `json:"version"`
-		OS      string        `json:"os"`
-		Arch    string        `json:"arch"`
-		UpTime  time.Duration `json:"uptime"`
+		Version    string        `json:"version"`
+		OS         string        `json:"os"`
+		Arch       string        `json:"arch"`
+		UpTime     time.Duration `json:"uptime"`
+		CPUs       int           `json:"num_cpu"`
+		UsableCPUs int           `json:"num_cpu_used"`
+		HeapAlloc  uint64        `json:"mem_heap_used"`
+		StackAlloc uint64        `json:"mem_stack_used"`
 
-		CPUs       int    `json:"num_cpu"`
-		UsableCPUs int    `json:"num_cpu_used"`
-		HeapAlloc  uint64 `json:"mem_heap_used"`
-		StackAlloc uint64 `json:"mem_stack_used"`
+		KeyStoreLatency     int64 `json:"keystore_latency"` // In milliseconds
+		KeyStoreUnavailable bool  `json:"keystore_unavailable,omitempty"`
+		KeyStoreUnreachable bool  `json:"keystore_unreachable,omitempty"`
 	}
 	startTime := time.Now().UTC()
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +67,8 @@ func status(config *RouterConfig) API {
 			UsableCPUs: runtime.GOMAXPROCS(0),
 			HeapAlloc:  memStats.HeapAlloc,
 			StackAlloc: memStats.StackSys,
+
+			KeyStoreLatency: (1 * time.Millisecond).Milliseconds(), // The keystore is always available - set the min. latency.
 		})
 	}
 	return API{
@@ -135,16 +141,20 @@ func edgeStatus(config *EdgeRouterConfig) API {
 		ContentType = "application/json"
 	)
 	type Response struct {
-		Version string        `json:"version"`
-		OS      string        `json:"os"`
-		Arch    string        `json:"arch"`
-		UpTime  time.Duration `json:"uptime"`
+		Version    string        `json:"version"`
+		OS         string        `json:"os"`
+		Arch       string        `json:"arch"`
+		UpTime     time.Duration `json:"uptime"`
+		CPUs       int           `json:"num_cpu"`
+		UsableCPUs int           `json:"num_cpu_used"`
+		HeapAlloc  uint64        `json:"mem_heap_used"`
+		StackAlloc uint64        `json:"mem_stack_used"`
 
-		CPUs       int    `json:"num_cpu"`
-		UsableCPUs int    `json:"num_cpu_used"`
-		HeapAlloc  uint64 `json:"mem_heap_used"`
-		StackAlloc uint64 `json:"mem_stack_used"`
+		KeyStoreLatency     int64 `json:"keystore_latency,omitempty"`
+		KeyStoreUnavailable bool  `json:"keystore_unavailable,omitempty"`
+		KeyStoreUnreachable bool  `json:"keystore_unreachable,omitempty"`
 	}
+
 	startTime := time.Now().UTC()
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.VerifyRequest(r, config.Policies, config.Identities); err != nil {
@@ -155,8 +165,7 @@ func edgeStatus(config *EdgeRouterConfig) API {
 		var memStats runtime.MemStats
 		runtime.ReadMemStats(&memStats)
 
-		w.Header().Set("Content-Type", ContentType)
-		json.NewEncoder(w).Encode(Response{
+		response := Response{
 			Version: sys.BinaryInfo().Version,
 			OS:      runtime.GOOS,
 			Arch:    runtime.GOARCH,
@@ -166,7 +175,22 @@ func edgeStatus(config *EdgeRouterConfig) API {
 			UsableCPUs: runtime.GOMAXPROCS(0),
 			HeapAlloc:  memStats.HeapAlloc,
 			StackAlloc: memStats.StackSys,
-		})
+		}
+
+		state, err := config.Keys.Status(r.Context())
+		if err != nil {
+			response.KeyStoreUnavailable = true
+			_, response.KeyStoreUnreachable = kms.IsUnreachable(err)
+		} else {
+			latency := state.Latency.Round(time.Millisecond)
+			if latency == 0 { // Make sure we actually send a latency even if the key store respond time is < 1ms.
+				latency = 1 * time.Millisecond
+			}
+			response.KeyStoreLatency = latency.Milliseconds()
+		}
+
+		w.Header().Set("Content-Type", ContentType)
+		json.NewEncoder(w).Encode(response)
 	}
 	return API{
 		Method:  Method,
