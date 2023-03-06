@@ -22,7 +22,22 @@ are stateful systems that store and manage cryptographic keys and secrets secure
 
 The KES server and CLI is available as a single binary, container image or can be build from source.
 
-<details open="true"><summary><b><a name="binary-releases">Binary Releases</a></b></summary>
+<details open="true"><summary><b><a name="homebrew">Homebrew</a></b></summary>
+
+```sh
+brew install minio/stable/kes
+```
+</details>
+
+<details><summary><b><a name="docker">Docker</a></b></summary>
+
+Pull the latest release via:
+```
+docker pull minio/kes
+```
+</details>
+
+<details><summary><b><a name="binary-releases">Binary Releases</a></b></summary>
 
 | OS       | ARCH    | Binary                                                                                       |
 |:--------:|:-------:|:--------------------------------------------------------------------------------------------:|
@@ -39,14 +54,6 @@ You can also verify the binary with [minisign](https://jedisct1.github.io/minisi
 minisign -Vm kes-<OS>-<ARCH> -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 ```
 </details>   
-   
-<details><summary><b><a name="docker">Docker</a></b></summary>
-
-Pull the latest release via:
-```
-docker pull minio/kes
-```
-</details>
    
 <details><summary><b><a name="build-from-source">Build from source</a></b></summary>
 
