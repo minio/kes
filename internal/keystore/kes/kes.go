@@ -30,6 +30,11 @@ type Config struct {
 	// If empty, the default enclave is used.
 	Enclave string
 
+	// APIKey is an API key to authenticate to the
+	// KES server. Either an API key or a mTLS private
+	// key and certificate can be used for authentication.
+	APIKey kes.APIKey
+
 	// PrivateKey is a path to a file containing
 	// a X.509 private key for mTLS authentication.
 	PrivateKey string
@@ -50,17 +55,35 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 	if len(config.Endpoints) == 0 {
 		return nil, errors.New("kes: no endpoints provided")
 	}
-	if config.Certificate == "" {
-		return nil, errors.New("kes: no certificate provided")
-	}
-	if config.PrivateKey == "" {
-		return nil, errors.New("kes: no private key provided")
+	if config.APIKey != nil && (config.PrivateKey != "" || config.Certificate != "") {
+		return nil, errors.New("kes: ambiguous configuration: API key as well as mTLS private key and/or certificate provided")
 	}
 
-	cert, err := https.CertificateFromFile(config.Certificate, config.PrivateKey, "")
-	if err != nil {
-		return nil, err
+	var (
+		err  error
+		cert tls.Certificate
+	)
+	switch {
+	case config.APIKey != nil:
+		cert, err = kes.GenerateCertificate(config.APIKey)
+		if err != nil {
+			return nil, err
+		}
+	case config.PrivateKey != "" || config.Certificate != "":
+		if config.Certificate == "" {
+			return nil, errors.New("kes: no certificate provided")
+		}
+		if config.PrivateKey == "" {
+			return nil, errors.New("kes: no private key provided")
+		}
+		cert, err = https.CertificateFromFile(config.Certificate, config.PrivateKey, "")
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("kes: no API key nor private key and certificate provided")
 	}
+
 	var rootCAs *x509.CertPool
 	if config.CAPath != "" {
 		rootCAs, err = https.CertPoolFromFile(config.CAPath)

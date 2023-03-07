@@ -234,6 +234,7 @@ keystore:
     endpoint: 
     - ""           # The endpoint (or list of endpoints) to the KES server(s)
     enclave: ""    # An optional enclave name. If empty, the default enclave will be used
+    api_key: ""    # The KES API key to authenticate to KES server
     tls:           # The KES mTLS authentication credentials - i.e. client certificate.
       cert: ""     # Path to the TLS client certificate for mTLS authentication
       key: ""      # Path to the TLS client private key for mTLS authentication

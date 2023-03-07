@@ -364,6 +364,10 @@ type KESConfig struct {
 	// the default enclave name will be used.
 	Enclave Env[string]
 
+	// APIKey is an API key to authenticate to the
+	// KES server.
+	APIKey Env[string]
+
 	// CertificateFile is a path to a mTLS client
 	// certificate file used to authenticate to
 	// the KES server.
@@ -389,9 +393,19 @@ func (c *KESConfig) Connect(ctx context.Context) (kms.Conn, error) {
 	for _, endpoint := range c.Endpoints {
 		endpoints = append(endpoints, endpoint.Value)
 	}
+
+	var key kes.APIKey
+	if c.APIKey.Value != "" {
+		k, err := kes.ParseAPIKey(c.APIKey.Value)
+		if err != nil {
+			return nil, err
+		}
+		key = k
+	}
 	return kesstore.Connect(ctx, &kesstore.Config{
 		Endpoints:   endpoints,
 		Enclave:     c.Enclave.Value,
+		APIKey:      key,
 		Certificate: c.CertificateFile.Value,
 		PrivateKey:  c.PrivateKeyFile.Value,
 		CAPath:      c.CAPath.Value,
@@ -400,6 +414,7 @@ func (c *KESConfig) Connect(ctx context.Context) (kms.Conn, error) {
 
 func (c *KESConfig) toYAML(yml *serverConfigYAML) {
 	yml.KeyStore.KES.Endpoint = c.Endpoints
+	yml.KeyStore.KES.APIKey = c.APIKey
 	yml.KeyStore.KES.TLS.Certificate = c.CertificateFile
 	yml.KeyStore.KES.TLS.PrivateKey = c.PrivateKeyFile
 	yml.KeyStore.KES.TLS.CAPath = c.CAPath
@@ -408,6 +423,7 @@ func (c *KESConfig) toYAML(yml *serverConfigYAML) {
 func (c *KESConfig) fromYAML(yml *serverConfigYAML) {
 	c.Endpoints = yml.KeyStore.KES.Endpoint
 	c.Enclave = yml.KeyStore.KES.Enclave
+	c.APIKey = yml.KeyStore.KES.APIKey
 	c.CertificateFile = yml.KeyStore.KES.TLS.Certificate
 	c.PrivateKeyFile = yml.KeyStore.KES.TLS.PrivateKey
 	c.CAPath = yml.KeyStore.KES.TLS.CAPath
