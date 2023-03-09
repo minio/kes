@@ -19,7 +19,10 @@ package restapi
 
 import (
 	"crypto/tls"
+	"encoding/base64"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
@@ -55,10 +58,29 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 
 	api.JSONProducer = runtime.JSONProducer()
 
-	if api.KeyAuth == nil {
-		api.KeyAuth = func(token string, scopes []string) (*models.Principal, error) {
-			return nil, errors.NotImplemented("oauth2 bearer auth (key) has not yet been implemented")
+	api.KeyAuth = func(token string, scopes []string) (*models.Principal, error) {
+		invalidSession := fmt.Errorf("invalid session")
+		token = strings.TrimSpace(token)
+		data, err := base64.StdEncoding.DecodeString(token)
+		if err != nil {
+			return nil, invalidSession
 		}
+		content := strings.Split(string(data), "||")
+		if len(content) != 3 {
+			return nil, invalidSession
+		}
+		clientCertificate := content[0]
+		clientKey := content[1]
+		insecure := content[2]
+		_, err = tls.X509KeyPair([]byte(clientCertificate), []byte(clientKey))
+		if err != nil {
+			return nil, invalidSession
+		}
+		return &models.Principal{
+			ClientCertificate: clientCertificate,
+			ClientKey:         clientKey,
+			Insecure:          insecure == "true",
+		}, nil
 	}
 
 	// Set your custom authorizer if needed. Default one is security.Authorized()
@@ -67,27 +89,11 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 	// Example:
 	// api.APIAuthorizer = security.Authorized()
 
-	if api.AuthLoginHandler == nil {
-		api.AuthLoginHandler = auth.LoginHandlerFunc(func(params auth.LoginParams) middleware.Responder {
-			return middleware.NotImplemented("operation auth.Login has not yet been implemented")
-		})
-	}
-	if api.AuthLoginDetailHandler == nil {
-		api.AuthLoginDetailHandler = auth.LoginDetailHandlerFunc(func(params auth.LoginDetailParams) middleware.Responder {
-			return middleware.NotImplemented("operation auth.LoginDetail has not yet been implemented")
-		})
-	}
-	if api.AuthLogoutHandler == nil {
-		api.AuthLogoutHandler = auth.LogoutHandlerFunc(func(params auth.LogoutParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation auth.Logout has not yet been implemented")
-		})
-	}
-	if api.AuthSessionCheckHandler == nil {
-		api.AuthSessionCheckHandler = auth.SessionCheckHandlerFunc(func(params auth.SessionCheckParams, principal *models.Principal) middleware.Responder {
-			return middleware.NotImplemented("operation auth.SessionCheck has not yet been implemented")
-		})
-	}
+	api.AuthSessionCheckHandler = auth.SessionCheckHandlerFunc(func(params auth.SessionCheckParams, principal *models.Principal) middleware.Responder {
+		return auth.NewSessionCheckOK()
+	})
 
+	registerLoginHandlers(api)
 	registerEncryptionHandlers(api)
 
 	api.PreServerShutdown = func() {}
@@ -118,5 +124,18 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
-	return handler
+	next := AuthenticationMiddleware(handler)
+	return next
+}
+
+func AuthenticationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCookie, _ := r.Cookie(CookieName)
+		var token string
+		if tokenCookie != nil {
+			token = tokenCookie.Value
+		}
+		r.Header.Add("Authorization", fmt.Sprintf("Bearer  %s", token))
+		next.ServeHTTP(w, r)
+	})
 }

@@ -24,15 +24,21 @@ package auth
 
 import (
 	"io"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/go-openapi/validate"
-
-	"github.com/minio/kes/models"
+	"github.com/go-openapi/strfmt"
 )
+
+// LoginMaxParseMemory sets the maximum size in bytes for
+// the multipart form parser for this operation.
+//
+// The default value is 32 MB.
+// The multipart parser stores up to this + 10MB.
+var LoginMaxParseMemory int64 = 32 << 20
 
 // NewLoginParams creates a new LoginParams object
 //
@@ -52,10 +58,27 @@ type LoginParams struct {
 	HTTPRequest *http.Request `json:"-"`
 
 	/*
-	  Required: true
-	  In: body
+	  In: formData
 	*/
-	Body *models.LoginRequest
+	APIKey *string
+	/*
+	  Required: true
+	  In: formData
+	*/
+	Cert io.ReadCloser
+	/*
+	  In: formData
+	*/
+	Insecure *string
+	/*
+	  Required: true
+	  In: formData
+	*/
+	Key io.ReadCloser
+	/*
+	  In: formData
+	*/
+	Password *string
 }
 
 // BindRequest both binds and validates a request, it assumes that complex things implement a Validatable(strfmt.Registry) error interface
@@ -67,35 +90,116 @@ func (o *LoginParams) BindRequest(r *http.Request, route *middleware.MatchedRout
 
 	o.HTTPRequest = r
 
-	if runtime.HasBody(r) {
-		defer r.Body.Close()
-		var body models.LoginRequest
-		if err := route.Consumer.Consume(r.Body, &body); err != nil {
-			if err == io.EOF {
-				res = append(res, errors.Required("body", "body", ""))
-			} else {
-				res = append(res, errors.NewParseError("body", "body", "", err))
-			}
-		} else {
-			// validate body object
-			if err := body.Validate(route.Formats); err != nil {
-				res = append(res, err)
-			}
-
-			ctx := validate.WithOperationRequest(r.Context())
-			if err := body.ContextValidate(ctx, route.Formats); err != nil {
-				res = append(res, err)
-			}
-
-			if len(res) == 0 {
-				o.Body = &body
-			}
+	if err := r.ParseMultipartForm(LoginMaxParseMemory); err != nil {
+		if err != http.ErrNotMultipart {
+			return errors.New(400, "%v", err)
+		} else if err := r.ParseForm(); err != nil {
+			return errors.New(400, "%v", err)
 		}
+	}
+	fds := runtime.Values(r.Form)
+
+	fdAPIKey, fdhkAPIKey, _ := fds.GetOK("apiKey")
+	if err := o.bindAPIKey(fdAPIKey, fdhkAPIKey, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	cert, certHeader, err := r.FormFile("cert")
+	if err != nil {
+		res = append(res, errors.New(400, "reading file %q failed: %v", "cert", err))
+	} else if err := o.bindCert(cert, certHeader); err != nil {
+		// Required: true
+		res = append(res, err)
 	} else {
-		res = append(res, errors.Required("body", "body", ""))
+		o.Cert = &runtime.File{Data: cert, Header: certHeader}
+	}
+
+	fdInsecure, fdhkInsecure, _ := fds.GetOK("insecure")
+	if err := o.bindInsecure(fdInsecure, fdhkInsecure, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	key, keyHeader, err := r.FormFile("key")
+	if err != nil {
+		res = append(res, errors.New(400, "reading file %q failed: %v", "key", err))
+	} else if err := o.bindKey(key, keyHeader); err != nil {
+		// Required: true
+		res = append(res, err)
+	} else {
+		o.Key = &runtime.File{Data: key, Header: keyHeader}
+	}
+
+	fdPassword, fdhkPassword, _ := fds.GetOK("password")
+	if err := o.bindPassword(fdPassword, fdhkPassword, route.Formats); err != nil {
+		res = append(res, err)
 	}
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindAPIKey binds and validates parameter APIKey from formData.
+func (o *LoginParams) bindAPIKey(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+
+	if raw == "" { // empty values pass all other validations
+		return nil
+	}
+	o.APIKey = &raw
+
+	return nil
+}
+
+// bindCert binds file parameter Cert.
+//
+// The only supported validations on files are MinLength and MaxLength
+func (o *LoginParams) bindCert(file multipart.File, header *multipart.FileHeader) error {
+	return nil
+}
+
+// bindInsecure binds and validates parameter Insecure from formData.
+func (o *LoginParams) bindInsecure(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+
+	if raw == "" { // empty values pass all other validations
+		return nil
+	}
+	o.Insecure = &raw
+
+	return nil
+}
+
+// bindKey binds file parameter Key.
+//
+// The only supported validations on files are MinLength and MaxLength
+func (o *LoginParams) bindKey(file multipart.File, header *multipart.FileHeader) error {
+	return nil
+}
+
+// bindPassword binds and validates parameter Password from formData.
+func (o *LoginParams) bindPassword(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+
+	if raw == "" { // empty values pass all other validations
+		return nil
+	}
+	o.Password = &raw
+
 	return nil
 }

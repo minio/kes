@@ -34,26 +34,14 @@ import (
 // swagger:model principal
 type Principal struct {
 
-	// s t s access key ID
-	STSAccessKeyID string `json:"STSAccessKeyID,omitempty"`
+	// client certificate
+	ClientCertificate string `json:"clientCertificate,omitempty"`
 
-	// s t s secret access key
-	STSSecretAccessKey string `json:"STSSecretAccessKey,omitempty"`
+	// client key
+	ClientKey string `json:"clientKey,omitempty"`
 
-	// s t s session token
-	STSSessionToken string `json:"STSSessionToken,omitempty"`
-
-	// account access key
-	AccountAccessKey string `json:"accountAccessKey,omitempty"`
-
-	// custom style ob
-	CustomStyleOb string `json:"customStyleOb,omitempty"`
-
-	// hm
-	Hm bool `json:"hm,omitempty"`
-
-	// ob
-	Ob bool `json:"ob,omitempty"`
+	// insecure
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // Validate validates this principal

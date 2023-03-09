@@ -626,6 +626,9 @@ func init() {
       },
       "post": {
         "security": [],
+        "consumes": [
+          "multipart/form-data"
+        ],
         "tags": [
           "Auth"
         ],
@@ -633,12 +636,31 @@ func init() {
         "operationId": "Login",
         "parameters": [
           {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/loginRequest"
-            }
+            "type": "string",
+            "name": "password",
+            "in": "formData"
+          },
+          {
+            "type": "string",
+            "name": "apiKey",
+            "in": "formData"
+          },
+          {
+            "type": "string",
+            "name": "insecure",
+            "in": "formData"
+          },
+          {
+            "type": "file",
+            "name": "cert",
+            "in": "formData",
+            "required": true
+          },
+          {
+            "type": "file",
+            "name": "key",
+            "in": "formData",
+            "required": true
           }
         ],
         "responses": {
@@ -661,16 +683,6 @@ func init() {
         ],
         "summary": "Logout from Console.",
         "operationId": "Logout",
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/logoutRequest"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "A successful response."
@@ -1119,14 +1131,6 @@ func init() {
         }
       }
     },
-    "loginRequest": {
-      "type": "object",
-      "properties": {
-        "certificate": {
-          "type": "string"
-        }
-      }
-    },
     "loginResponse": {
       "type": "object",
       "properties": {
@@ -1149,25 +1153,13 @@ func init() {
     "principal": {
       "type": "object",
       "properties": {
-        "STSAccessKeyID": {
+        "clientCertificate": {
           "type": "string"
         },
-        "STSSecretAccessKey": {
+        "clientKey": {
           "type": "string"
         },
-        "STSSessionToken": {
-          "type": "string"
-        },
-        "accountAccessKey": {
-          "type": "string"
-        },
-        "customStyleOb": {
-          "type": "string"
-        },
-        "hm": {
-          "type": "boolean"
-        },
-        "ob": {
+        "insecure": {
           "type": "boolean"
         }
       }
@@ -1801,6 +1793,9 @@ func init() {
       },
       "post": {
         "security": [],
+        "consumes": [
+          "multipart/form-data"
+        ],
         "tags": [
           "Auth"
         ],
@@ -1808,12 +1803,31 @@ func init() {
         "operationId": "Login",
         "parameters": [
           {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/loginRequest"
-            }
+            "type": "string",
+            "name": "password",
+            "in": "formData"
+          },
+          {
+            "type": "string",
+            "name": "apiKey",
+            "in": "formData"
+          },
+          {
+            "type": "string",
+            "name": "insecure",
+            "in": "formData"
+          },
+          {
+            "type": "file",
+            "name": "cert",
+            "in": "formData",
+            "required": true
+          },
+          {
+            "type": "file",
+            "name": "key",
+            "in": "formData",
+            "required": true
           }
         ],
         "responses": {
@@ -1836,16 +1850,6 @@ func init() {
         ],
         "summary": "Logout from Console.",
         "operationId": "Logout",
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/logoutRequest"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "A successful response."
@@ -2294,14 +2298,6 @@ func init() {
         }
       }
     },
-    "loginRequest": {
-      "type": "object",
-      "properties": {
-        "certificate": {
-          "type": "string"
-        }
-      }
-    },
     "loginResponse": {
       "type": "object",
       "properties": {
@@ -2324,25 +2320,13 @@ func init() {
     "principal": {
       "type": "object",
       "properties": {
-        "STSAccessKeyID": {
+        "clientCertificate": {
           "type": "string"
         },
-        "STSSecretAccessKey": {
+        "clientKey": {
           "type": "string"
         },
-        "STSSessionToken": {
-          "type": "string"
-        },
-        "accountAccessKey": {
-          "type": "string"
-        },
-        "customStyleOb": {
-          "type": "string"
-        },
-        "hm": {
-          "type": "boolean"
-        },
-        "ob": {
+        "insecure": {
           "type": "boolean"
         }
       }

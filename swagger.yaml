@@ -41,12 +41,26 @@ paths:
     post:
       summary: Login to Console
       operationId: Login
+      consumes:
+        - multipart/form-data
       parameters:
-        - name: body
-          in: body
+        - name: password
+          in: formData
+          type: string
+        - name: apiKey
+          in: formData
+          type: string
+        - name: insecure
+          in: formData
+          type: string
+        - name: cert
+          in: formData
           required: true
-          schema:
-            $ref: "#/definitions/loginRequest"
+          type: file
+        - name: key
+          in: formData
+          required: true
+          type: file
       responses:
         204:
           description: A successful login.
@@ -62,12 +76,6 @@ paths:
     post:
       summary: Logout from Console.
       operationId: Logout
-      parameters:
-        - name: body
-          in: body
-          required: true
-          schema:
-            $ref: "#/definitions/logoutRequest"
       responses:
         200:
           description: A successful response.
@@ -456,20 +464,12 @@ definitions:
   principal:
     type: object
     properties:
-      STSAccessKeyID:
+      clientCertificate:
         type: string
-      STSSecretAccessKey:
+      clientKey:
         type: string
-      STSSessionToken:
-        type: string
-      accountAccessKey:
-        type: string
-      hm:
+      insecure:
         type: boolean
-      ob:
-        type: boolean
-      customStyleOb:
-        type: string
   error:
     type: object
     required:
@@ -493,11 +493,6 @@ definitions:
         type: array
         items:
           $ref: "#/definitions/redirectRule"
-  loginRequest:
-    type: object
-    properties:
-      certificate:
-        type: string
   loginResponse:
     type: object
     properties:
