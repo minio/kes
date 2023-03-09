@@ -217,6 +217,7 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
           selectedItem={policyName}
           endpoint={"/api/v1/encryption/policies/"}
           element={"Policy"}
+          label={"Delete Policy"}
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}

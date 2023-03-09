@@ -114,6 +114,9 @@ const ListKeys = ({ classes }: IKeysProps) => {
           selectedItem={selectedKey}
           endpoint={"/api/v1/encryption/keys/"}
           element={"Key"}
+          label={
+            "Please note that this is a dangerous operation. Once a key has been deleted all data that has been encrypted with it cannot be decrypted anymore, and therefore, is lost."
+          }
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}

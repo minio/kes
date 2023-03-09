@@ -126,6 +126,7 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
           selectedItem={selectedPolicy}
           endpoint={"/api/v1/kms/policies/"}
           element={"Policy"}
+          label={"Delete Policy"}
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}

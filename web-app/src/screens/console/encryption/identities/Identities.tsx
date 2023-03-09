@@ -116,6 +116,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
           selectedItem={selectedIdentity}
           endpoint={"/api/v1/kms/identities/"}
           element={"Identity"}
+          label={"Delete Identity"}
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
