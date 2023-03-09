@@ -152,7 +152,7 @@ const ConsoleMenuList = ({
         <ListItem
           button
           component="a"
-          href={`${window.location.origin}${basename}logout`}
+          href={`/logout`}
           disableRipple
           sx={{
             ...menuItemContainerStyles,

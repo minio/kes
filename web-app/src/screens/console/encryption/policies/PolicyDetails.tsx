@@ -16,33 +16,40 @@
 
 import React, { Fragment, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "mds";
+import {
+  PageHeader,
+  BackLink,
+  IAMPoliciesIcon,
+  Tooltip,
+  Button,
+  TrashIcon,
+  RefreshIcon,
+  DataTable,
+} from "mds";
 import { Theme } from "@mui/material/styles";
 import createStyles from "@mui/styles/createStyles";
 import withStyles from "@mui/styles/withStyles";
 import Grid from "@mui/material/Grid";
 import { useAppDispatch } from "../../../../app/hooks";
-import { setErrorSnackMessage, setSnackBarMessage } from "../../../../systemSlice";
+import {
+  setErrorSnackMessage,
+  setSnackBarMessage,
+} from "../../../../systemSlice";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import useApi from "../../../../common/hooks/useApi";
-// import TableWrapper from "../Common/TableWrapper/TableWrapper";
-// import PageHeader from "../Common/PageHeader/PageHeader";
 
-// import PageLayout from "../Common/Layout/PageLayout";
-// import VerticalTabs from "../Common/VerticalTabs/VerticalTabs";
-// import BackLink from "../../../common/BackLink";
-
-// import { decodeURLString } from "../../../common/utils";
-// import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
 // import PolicyDetailsPanel from "./PolicyDetailsPanel";
-// import SearchBox from "../Common/SearchBox";
 import { EncryptionPolicy } from "../types";
 import api from "../../../../common/api";
 import { ROUTES } from "../../valid-routes";
-import PageHeader from "../../common/PageHeader";
-import BackLink from "../../common/BackLink";
 import PageLayout from "../../common/PageLayout";
-// import useApi from "../Common/Hooks/useApi";
+import ScreenTitle from "../../common/ScreenTitle";
+import VerticalTabs from "../../common/VerticalTabs";
+import SectionTitle from "../../common/SectionTitle";
+import PolicyDetailsPanel from "./PolicyDetailsPanel";
+import SearchBox from "../../common/SearchBox";
+import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
+import { Box } from "@mui/material";
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -179,12 +186,13 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
     {
       type: "share",
       label: "Assign Identity",
-      onClick: (identity: string) =>
+      onClick: (identity: string) => {
         invokeAssignPolicyApi(
           "POST",
           `/api/v1/encryption/policies/${policyName}/assign`,
           { identity }
-        ),
+        );
+      },
       sendOnlyId: true,
     },
   ];
@@ -214,41 +222,43 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
       )}
       <PageHeader
         label={
-          <Fragment>
-            <BackLink to={ROUTES.ENCRYPTION_POLICIES} label={"Policies"} />
-          </Fragment>
+          <BackLink
+            label={"Policies"}
+            onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
+          />
         }
       />
 
       <PageLayout className={classes.pageContainer}>
         <Grid item xs={12}>
-          {/* <ScreenTitle
+          <ScreenTitle
             icon={
               <Fragment>
                 <IAMPoliciesIcon width={40} />
               </Fragment>
             }
             title={policyName}
-            subTitle={<Fragment>KMS Policy</Fragment>}
+            subTitle={<Fragment>KES Policy</Fragment>}
             actions={
               <Fragment>
-                <SecureComponent
+                {/* <SecureComponent
                   scopes={[IAM_SCOPES.KMS_DELETE_POLICY]}
                   resource={CONSOLE_UI_RESOURCE}
                   errorProps={{ disabled: true }}
-                >
-                  <TooltipWrapper tooltip={"Delete Policy"}>
-                    <Button
-                      id={"delete-policy"}
-                      label={"Delete Policy"}
-                      variant="secondary"
-                      icon={<TrashIcon />}
-                      onClick={deletePolicy}
-                    />
-                  </TooltipWrapper>
-                </SecureComponent>
+                > */}
 
-                <TooltipWrapper tooltip={"Refresh"}>
+                <Tooltip placement="bottom" tooltip={"Delete Policy"}>
+                  <Button
+                    id={"delete-policy"}
+                    label={"Delete Policy"}
+                    variant="secondary"
+                    icon={<TrashIcon />}
+                    onClick={deletePolicy}
+                  />
+                </Tooltip>
+                {/* </SecureComponent> */}
+
+                <Tooltip placement="bottom" tooltip={"Refresh"}>
                   <Button
                     id={"refresh-policy"}
                     label={"Refresh"}
@@ -259,13 +269,13 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
                       setLoadingIdentities(true);
                     }}
                   />
-                </TooltipWrapper>
+                </Tooltip>
               </Fragment>
             }
-          /> */}
+          />
         </Grid>
 
-        {/* <VerticalTabs>
+        <VerticalTabs>
           {{
             tabConfig: { label: "Summary", disabled: !displayPolicy },
             content: (
@@ -308,23 +318,23 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
                     />
                   </Grid>
                   <Grid item xs={12} className={classes.tableBlock}>
-                    <SecureComponent
+                    {/* <SecureComponent
                       scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
                       resource={CONSOLE_UI_RESOURCE}
                       errorProps={{ disabled: true }}
-                    >
-                      <TableWrapper
-                        itemActions={identitiesTableActions}
-                        columns={[
-                          { label: "Identity", elementKey: "identity" },
-                          { label: "Policy", elementKey: "policy" },
-                        ]}
-                        isLoading={loadingIdentities || assignPolicyloading}
-                        records={identities}
-                        entityName="Identities"
-                        idField="identity"
-                      />
-                    </SecureComponent>
+                    > */}
+                    <DataTable
+                      itemActions={identitiesTableActions}
+                      columns={[
+                        { label: "Identity", elementKey: "identity" },
+                        { label: "Policy", elementKey: "policy" },
+                      ]}
+                      isLoading={loadingIdentities || assignPolicyloading}
+                      records={identities}
+                      entityName="Identities"
+                      idField="identity"
+                    />
+                    {/* </SecureComponent> */}
                   </Grid>
                 </Grid>
               </Fragment>
@@ -353,21 +363,30 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
                         editorHeight={"350px"}
                       />
                     </Grid>
-                    <Grid item xs={12} className={classes.buttonContainer}>
-                      {!policy && (
-                        <Button
-                          id={"clear"}
-                          type="button"
-                          variant="regular"
-                          onClick={() => setPolicyDefinition("")}
-                          label={"Clear"}
-                        />
-                      )}
-                      <SecureComponent
+                    <Grid item xs={12} textAlign={"right"}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          marginTop: "20px",
+                          gap: "15px",
+                        }}
+                      >
+                        {!policy && (
+                          <Button
+                            id={"clear"}
+                            type="button"
+                            variant="regular"
+                            onClick={() => setPolicyDefinition("")}
+                            label={"Clear"}
+                          />
+                        )}
+                        {/* <SecureComponent
                         scopes={[IAM_SCOPES.KMS_SET_POLICY]}
                         resource={CONSOLE_UI_RESOURCE}
                         errorProps={{ disabled: true }}
-                      >
+                      > */}
                         <Button
                           id={"save"}
                           type="submit"
@@ -376,14 +395,15 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
                           disabled={addLoading}
                           label={"Save"}
                         />
-                      </SecureComponent>
+                      </Box>
+                      {/* </SecureComponent> */}
                     </Grid>
                   </Grid>
                 </form>
               </Fragment>
             ),
           }}
-        </VerticalTabs> */}
+        </VerticalTabs>
       </PageLayout>
     </Fragment>
   );

@@ -23,7 +23,7 @@ import { setErrorSnackMessage } from "../../../systemSlice";
 import useApi from "../../../common/hooks/useApi";
 // import ConfirmDialog from "../Common/ModalWrapper/ConfirmDialog";
 
-interface IDeleteKMSModalProps {
+interface IDeleteModalProps {
   closeDeleteModalAndRefresh: (refresh: boolean) => void;
   deleteOpen: boolean;
   selectedItem: string;
@@ -31,13 +31,13 @@ interface IDeleteKMSModalProps {
   element: string;
 }
 
-const DeleteKMSModal = ({
+const DeleteModal = ({
   closeDeleteModalAndRefresh,
   deleteOpen,
   selectedItem,
   endpoint,
   element,
-}: IDeleteKMSModalProps) => {
+}: IDeleteModalProps) => {
   const dispatch = useAppDispatch();
   const onDelSuccess = () => closeDeleteModalAndRefresh(true);
   const onDelError = (err: ErrorResponseHandler) =>
@@ -45,7 +45,6 @@ const DeleteKMSModal = ({
   const onClose = () => closeDeleteModalAndRefresh(false);
 
   const [deleteLoading, invokeDeleteApi] = useApi(onDelSuccess, onDelError);
-
   if (!selectedItem) {
     return null;
   }
@@ -74,4 +73,4 @@ const DeleteKMSModal = ({
   );
 };
 
-export default DeleteKMSModal;
+export default DeleteModal;

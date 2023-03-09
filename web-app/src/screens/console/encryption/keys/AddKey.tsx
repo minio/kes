@@ -18,29 +18,17 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, Button } from "mds";
-// import PageHeader from "../Common/PageHeader/PageHeader";
-// import PageLayout from "../Common/Layout/PageLayout";
-// import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
-// import BackLink from "../../../common/BackLink";
-// import { AddAccessRuleIcon } from "../../../icons";
-// import { IAM_PAGES } from "../../../common/SecureComponent/permissions";
-// import { ErrorResponseHandler } from "../../../common/types";
-// import FormLayout from "../Common/FormLayout";
+import { AddAccessRuleIcon, BackLink, Button, PageHeader } from "mds";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import PageHeader from "../../common/PageHeader";
-import BackLink from "../../common/BackLink";
 import FormLayout from "../../common/FormLayout";
 import PageLayout from "../../common/PageLayout";
 import HelpBox from "../../common/Helpbox";
-// import { useAppDispatch } from "../../../store";
-// import useApi from "../Common/Hooks/useApi";
-// import KMSHelpBox from "./KMSHelpbox";
+import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 const AddKey = () => {
   const dispatch = useAppDispatch();
@@ -75,7 +63,12 @@ const AddKey = () => {
     <Fragment>
       <Grid item xs={12}>
         <PageHeader
-          label={<BackLink to={ROUTES.ENCRYPTION_KEYS} label={"Keys"} />}
+          label={
+            <BackLink
+              label={"Keys"}
+              onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
+            />
+          }
         />
         <PageLayout>
           <FormLayout
@@ -84,9 +77,7 @@ const AddKey = () => {
             helpbox={
               <HelpBox
                 helpText={"Encryption Key"}
-                contents={[
-                  "Create a new cryptographic key in KES.",
-                ]}
+                contents={["Create a new cryptographic key in KES."]}
               />
             }
           >
@@ -99,7 +90,7 @@ const AddKey = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  {/* <InputBoxWrapper
+                  <InputBoxWrapper
                     id="key-name"
                     name="key-name"
                     label="Key Name"
@@ -109,7 +100,7 @@ const AddKey = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setKeyName(e.target.value);
                     }}
-                  /> */}
+                  />
                 </Grid>
                 <Grid item xs={12} textAlign={"right"}>
                   <Box

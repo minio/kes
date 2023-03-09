@@ -16,7 +16,14 @@
 
 import { Grid, Theme } from "@mui/material";
 import { createStyles, withStyles } from "@mui/styles";
-import { Button, RefreshIcon, DataTable, Tooltip, Grid as GridMDS, PageHeader } from "mds";
+import {
+  Button,
+  RefreshIcon,
+  DataTable,
+  Tooltip,
+  Grid as GridMDS,
+  PageHeader,
+} from "mds";
 import React, { useEffect, useState } from "react";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
@@ -24,9 +31,6 @@ import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
-// import SearchBox from "../Common/SearchBox";
-// import TableWrapper from "../Common/TableWrapper/TableWrapper";
-// import TooltipWrapper from "../Common/TooltipWrapper/TooltipWrapper";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
@@ -81,7 +85,8 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
   };
 
   const confirmDeleteIdentity = (identity: string) => {
-    console.log("TODO: Delete Identity");
+    console.log("TODO: Delete Identity", identity);
+    identity = identity || "";
     setDeleteOpen(true);
     setSelectedIdentity(identity);
   };
@@ -180,6 +185,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
                 ]}
                 entityName="identities"
                 records={records}
+                idField="name"
               />
             </GridMDS>
             {/* </SecureComponent> */}

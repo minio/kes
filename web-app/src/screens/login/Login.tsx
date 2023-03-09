@@ -1,61 +1,58 @@
-import { Button, LoginWrapper } from "mds";
-import React, { Fragment } from "react";
+// This file is part of MinIO KES
+// Copyright (c) 2023 MinIO, Inc.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-const demoInputStyles = {
-  width: "100%",
-  backgroundColor: "transparent",
-  border: "#00000020 1px solid",
-  borderRadius: "3px",
-  height: "30px",
-  marginBottom: "20px",
-  padding: "5px",
-};
+import { LoginWrapper } from "mds";
+import React, { Fragment } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import LoginForm from "./LoginForm";
+import { resetForm } from "./loginSlice";
 
 const Login = () => {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+
+  const navigateTo = useAppSelector((state) => state.login.navigateTo);
+
+  if (navigateTo !== "") {
+    navigate(navigateTo);
+    dispatch(resetForm());
+  }
+
   return (
     <LoginWrapper
-      promoHeader={<Fragment>Multi-Cloud Object&nbsp;Store</Fragment>}
+      promoHeader={<Fragment>KES</Fragment>}
       promoInfo={
         <Fragment>
-          MinIO offers high-performance, S3 compatible object storage. <br />
-          Native to Kubernetes, MinIO is the only object storage suite available
-          on every public cloud, every Kubernetes distribution, the private
-          cloud and the edge. MinIO is software-defined and is 100% open source
-          under GNU AGPL v3. <a href={"#"}>link</a>
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+          minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+          aliquip ex ea commodo consequat. Duis aute irure dolor in
+          reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+          pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+          culpa qui officia deserunt mollit anim id est laborum.
         </Fragment>
       }
       logoProps={{
-        applicationName: "console",
-        subVariant: "AGPL",
+        applicationName: "kes",
       }}
-      form={
-        <Fragment>
-          DEMO FORM
-          <input
-            name={"testInput"}
-            style={demoInputStyles}
-            placeholder="User"
-          />
-          <br />
-          <input
-            name={"testInput"}
-            type={"password"}
-            style={demoInputStyles}
-            placeholder="Password"
-          />
-          <br />
-          <Button
-            id={"submit"}
-            type={"button"}
-            label={"Login"}
-            variant={"callAction"}
-            fullWidth
-          />
-        </Fragment>
-      }
+      form={<LoginForm />}
       formFooter={
         <Fragment>
-          Documentation│<a href={"#"}>GitHub</a>│Support│Download
+          Documentation│<a href={"/"}>GitHub</a>│Support│Download
         </Fragment>
       }
     />

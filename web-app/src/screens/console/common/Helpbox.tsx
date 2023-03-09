@@ -41,7 +41,9 @@ const HelpBox = ({ helpText, contents }: IHelpBoxProps) => {
       </Box>
       <Box sx={{ fontSize: "14px", marginBottom: "15px" }}>
         {contents.map((content, index) => (
-          <Box key={index} sx={{ paddingBottom: "20px" }}>{content}</Box>
+          <Box key={index} sx={{ paddingBottom: "20px" }}>
+            {content}
+          </Box>
         ))}
       </Box>
     </Box>

@@ -34,7 +34,6 @@ import { setErrorSnackMessage } from "../../../../systemSlice";
 import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
-// import TableWrapper from "../Common/TableWrapper/TableWrapper";
 
 const DeleteKMSModal = React.lazy(() => import("../DeleteModal"));
 
@@ -213,6 +212,7 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
                 ]}
                 entityName="policies"
                 records={records}
+                idField={"name"}
               />
             </GridMDS>
             {/* </SecureComponent> */}

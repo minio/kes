@@ -21,12 +21,14 @@ import { ISessionResponse } from "./screens/console/types";
 import { userLogged } from "./systemSlice";
 import { saveSessionResponse } from "./screens/console/consoleSlice";
 import { useAppDispatch, useAppSelector } from "./app/hooks";
+import LoadingComponent from "./common/LoadingComponent";
 
 interface ProtectedRouteProps {
   Component: any;
 }
 
 const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
+  const location = useLocation();
   const dispatch = useAppDispatch();
 
   const [sessionLoading, setSessionLoading] = useState<boolean>(true);
@@ -38,7 +40,6 @@ const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
     localStorage.setItem("redirect-path", pathname);
     return <Navigate to={{ pathname: `login` }} />;
   };
-
   useEffect(() => {
     api
       .invoke("GET", `/api/v1/session`)
@@ -47,12 +48,13 @@ const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
         dispatch(userLogged(true));
         setSessionLoading(false);
       })
-      .catch(() => setSessionLoading(false));
-  }, [dispatch]);
-
+      .catch(() => {
+        setSessionLoading(false);
+        dispatch(userLogged(false));
+      });
+  }, [dispatch, location]);
   if (sessionLoading) {
-    console.log("implement loading component");
-    // return <LoadingComponent />;
+    return <LoadingComponent />;
   }
   return userLoggedIn ? <Component /> : <StorePathAndRedirect />;
 };

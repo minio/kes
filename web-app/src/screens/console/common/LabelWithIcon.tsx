@@ -1,5 +1,5 @@
-// This file is part of MinIO KES
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of MinIO Console Server
+// Copyright (c) 2022 MinIO, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -15,5 +15,34 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React from "react";
+import { Box } from "@mui/material";
 
-export interface ISessionResponse {}
+type LabelWithIconProps = {
+  icon: React.ReactNode | null;
+  label: React.ReactNode | null;
+};
+
+const LabelWithIcon = ({ icon = null, label = null }: LabelWithIconProps) => {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+      }}
+    >
+      <div
+        style={{
+          height: 16,
+          width: 16,
+          display: "flex",
+          alignItems: "center",
+          marginTop: 5,
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ marginLeft: icon ? 5 : "none" }}>{label}</div>
+    </Box>
+  );
+};
+
+export default LabelWithIcon;

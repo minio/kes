@@ -17,6 +17,10 @@
 import { IMenuItem } from "./menu/types";
 import { NavLink } from "react-router-dom";
 import { AuditLogsMenuIcon } from "mds";
+import StatusIcon from "./encryption/api/StatusIcon";
+import KeysIcon from "./encryption/keys/KeysIcon";
+import PoliciesIcon from "./encryption/policies/PoliciesIcon";
+import IdentitiesIcon from "./encryption/identities/IdentitiesIcon";
 
 export const ROUTES = {
   ENCRYPTION: "/encryption",
@@ -40,35 +44,8 @@ export const validRoutes = () => {
       name: "Status",
       id: "encryption-status",
       component: NavLink,
-      icon: AuditLogsMenuIcon,
+      icon: StatusIcon,
       to: ROUTES.ENCRYPTION_STATUS,
-      children: [],
-    },
-    {
-      group: "Encryption",
-      name: "Metrics",
-      id: "encryption-metrics",
-      component: NavLink,
-      icon: AuditLogsMenuIcon,
-      to: ROUTES.ENCRYPTION_METRICS,
-      children: [],
-    },
-    {
-      group: "Encryption",
-      name: "Version",
-      id: "encryption-version",
-      component: NavLink,
-      icon: AuditLogsMenuIcon,
-      to: ROUTES.ENCRYPTION_VERSION,
-      children: [],
-    },
-    {
-      group: "Encryption",
-      name: "Endpoints",
-      id: "encryption-endpoints",
-      component: NavLink,
-      icon: AuditLogsMenuIcon,
-      to: ROUTES.ENCRYPTION_SUPPORTED_ENDPOINTS,
       children: [],
     },
     {
@@ -76,7 +53,7 @@ export const validRoutes = () => {
       name: "Keys",
       id: "encryption-keys",
       component: NavLink,
-      icon: AuditLogsMenuIcon,
+      icon: KeysIcon,
       to: ROUTES.ENCRYPTION_KEYS,
       children: [],
     },
@@ -85,7 +62,7 @@ export const validRoutes = () => {
       name: "Policies",
       id: "encryption-policies",
       component: NavLink,
-      icon: AuditLogsMenuIcon,
+      icon: PoliciesIcon,
       to: ROUTES.ENCRYPTION_POLICIES,
       children: [],
     },
@@ -94,7 +71,7 @@ export const validRoutes = () => {
       name: "Identities",
       id: "encryption-identities",
       component: NavLink,
-      icon: AuditLogsMenuIcon,
+      icon: IdentitiesIcon,
       to: ROUTES.ENCRYPTION_IDENTITIES,
       children: [],
     },

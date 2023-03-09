@@ -179,36 +179,6 @@ const Console = ({ classes }: IConsoleProps) => {
         <Menu />
 
         <main className={classes.content}>
-          {/* {needsRestart && (
-                <div className={classes.warningBar}>
-                  {isServerLoading ? (
-                    <Fragment>
-                      The server is restarting.
-                      <LinearProgress className={classes.progress} />
-                    </Fragment>
-                  ) : (
-                    <Fragment>
-                      The instance needs to be restarted for configuration changes
-                      to take effect.{" "}
-                      <Button
-                        id={"restart-server"}
-                        variant="secondary"
-                        onClick={() => {
-                          restartServer();
-                        }}
-                        label={"Restart"}
-                      />
-                    </Fragment>
-                  )}
-                </div>
-              )} */}
-          {/* {loadingProgress < 100 && (
-                <LinearProgress
-                  className={classes.progress}
-                  variant="determinate"
-                  value={loadingProgress}
-                />
-              )} */}
           {/* <MainError /> */}
           <div className={classes.snackDiv}>
             <Snackbar

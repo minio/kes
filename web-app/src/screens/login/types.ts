@@ -14,7 +14,17 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-export interface EncryptionPolicy {
-  allow: string[];
-  deny: string[];
+export interface ILoginDetails {
+  loginStrategy: loginStrategyType;
+  redirectRules: redirectRule[];
+}
+
+export interface redirectRule {
+  redirect: string;
+  displayName: string;
+}
+
+export enum loginStrategyType {
+  unknown = "unknown",
+  form = "form",
 }

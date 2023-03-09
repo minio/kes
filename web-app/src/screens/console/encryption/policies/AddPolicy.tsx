@@ -18,7 +18,7 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, Button } from "mds";
+import { AddAccessRuleIcon, Button, PageHeader, BackLink } from "mds";
 // import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
@@ -26,12 +26,11 @@ import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import PageHeader from "../../common/PageHeader";
-import BackLink from "../../common/BackLink";
 import PageLayout from "../../common/PageLayout";
 import FormLayout from "../../common/FormLayout";
 import HelpBox from "../../common/Helpbox";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
+import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 export const emptyContent = '{\n    "allow": [],\n    "deny": []\n}';
 
@@ -68,7 +67,12 @@ const AddPolicy = () => {
     <Fragment>
       <Grid item xs={12}>
         <PageHeader
-          label={<BackLink to={ROUTES.ENCRYPTION_POLICIES} label={"Policies"} />}
+          label={
+            <BackLink
+              label={"Policies"}
+              onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
+            />
+          }
         />
         <PageLayout>
           <FormLayout
@@ -77,9 +81,7 @@ const AddPolicy = () => {
             helpbox={
               <HelpBox
                 helpText={"Encryption Policy"}
-                contents={[
-                  "Create a new policy in KES.",
-                ]}
+                contents={["Create a new policy in KES."]}
               />
             }
           >
@@ -92,7 +94,7 @@ const AddPolicy = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  {/* <InputBoxWrapper
+                  <InputBoxWrapper
                     id="policy"
                     name="policy"
                     label="Policy Name"
@@ -102,7 +104,7 @@ const AddPolicy = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setPolicy(e.target.value);
                     }}
-                  /> */}
+                  />
                 </Grid>
                 <Grid item xs={12}>
                   <CodeMirrorWrapper

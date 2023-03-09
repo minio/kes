@@ -81,9 +81,7 @@ const SearchBox = ({
   const inputProps = {
     disableUnderline: true,
     [`${adornmentPosition}Adornment`]: (
-      <InputAdornment
-        position={adornmentPosition}
-      >
+      <InputAdornment position={adornmentPosition}>
         <SearchIcon />
       </InputAdornment>
     ),

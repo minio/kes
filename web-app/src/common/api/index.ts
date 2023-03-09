@@ -28,11 +28,7 @@ export class API {
       .then((res) => res.body)
       .catch((err) => {
         // if we get unauthorized and we are not doing login, kick out the user
-        if (
-          err.status === 401 &&
-          localStorage.getItem("userLoggedIn") &&
-          !url.includes("api/v1/login")
-        ) {
+        if (err.status === 401 && !url.includes("api/v1/login")) {
           if (window.location.pathname !== "/") {
             localStorage.setItem("redirect-path", window.location.pathname);
           }

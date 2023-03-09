@@ -14,7 +14,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-export interface EncryptionPolicy {
-  allow: string[];
-  deny: string[];
-}
+import React from "react";
+import { Grid } from "@mui/material";
+import { Loader } from "mds";
+
+const LoadingComponent = () => {
+  return (
+    <Grid
+      container
+      spacing={0}
+      direction="column"
+      alignItems="center"
+      justifyContent="center"
+      style={{ minHeight: "100vh" }}
+    >
+      <Grid item xs={3} style={{ textAlign: "center" }}>
+        <Loader style={{ width: 35, height: 35 }} />
+      </Grid>
+    </Grid>
+  );
+};
+
+export default LoadingComponent;

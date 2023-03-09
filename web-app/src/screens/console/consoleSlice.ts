@@ -23,9 +23,7 @@ export interface ConsoleState {
 }
 
 const initialState: ConsoleState = {
-  session: {
-    status: "",
-  },
+  session: {},
 };
 
 export const consoleSlice = createSlice({

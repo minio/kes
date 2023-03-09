@@ -98,28 +98,12 @@ const MenuToggle = ({ isOpen, onToggle }: MenuToggleProps) => {
         }}
       >
         {isOpen ? (
-          // <TooltipWrapper
-          //   tooltip={"Click to Collapse Menu"}
-          //   placement={"right"}
-          // >
           <div className={`logo ${stateClsName}`}>
             <Fragment>
-              <ApplicationLogo
-                applicationName={"console"}
-                subVariant={
-                  logoPlan as
-                    | "AGPL"
-                    | "simple"
-                    | "standard"
-                    | "enterprise"
-                    | undefined
-                }
-                inverse
-              />
+              <ApplicationLogo applicationName={"kes"} inverse />
             </Fragment>
           </div>
         ) : (
-          // </TooltipWrapper>
           <Fragment>
             <div className={`logo ${stateClsName}`}>
               <Suspense fallback={<div>...</div>}>

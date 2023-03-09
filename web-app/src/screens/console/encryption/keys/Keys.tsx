@@ -28,10 +28,6 @@ import { setErrorSnackMessage } from "../../../../systemSlice";
 import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
-// import withSuspense from "../Common/Components/withSuspense";
-// import PageLayout from "../Common/Layout/PageLayout";
-// import SearchBox from "../Common/SearchBox";
-// import TableWrapper from "../Common/TableWrapper/TableWrapper";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
@@ -219,6 +215,7 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 ]}
                 entityName="keys"
                 records={records}
+                idField={"name"}
               />
             </GridMDS>
             {/* </SecureComponent> */}

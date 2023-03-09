@@ -14,13 +14,129 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { useAppDispatch } from "../../../../app/hooks";
+import api from "../../../../common/api";
+import { ErrorResponseHandler } from "../../../../common/api/types";
+import { setErrorSnackMessage } from "../../../../systemSlice";
 
 const Metrics = () => {
+  const dispatch = useAppDispatch();
+  const [metrics, setMetrics] = useState<any | null>(null);
+  const [loadingMetrics, setLoadingMetrics] = useState<boolean>(true);
+
+  // TODO: Use supported apis endpoint to check available apis
+  const displayMetrics = true;
+
+  useEffect(() => {
+    const loadMetrics = () => {
+      if (displayMetrics) {
+        api
+          .invoke("GET", `/api/v1/encryption/metrics`)
+          .then((result: any) => {
+            if (result) {
+              setMetrics(result);
+            }
+            setLoadingMetrics(false);
+          })
+          .catch((err: ErrorResponseHandler) => {
+            dispatch(setErrorSnackMessage(err));
+            setLoadingMetrics(false);
+          });
+      } else {
+        setLoadingMetrics(false);
+      }
+    };
+
+    if (loadingMetrics) {
+      loadMetrics();
+    }
+  }, [dispatch, displayMetrics, loadingMetrics]);
+
+  const getAPIRequestsData = () => {
+    return [
+      { label: "Success", success: metrics.requestOK },
+      { label: "Failures", failures: metrics.requestFail },
+      { label: "Errors", errors: metrics.requestErr },
+      { label: "Active", active: metrics.requestActive },
+    ];
+  };
+
+  const getEventsData = () => {
+    return [
+      { label: "Audit", audit: metrics.auditEvents },
+      { label: "Errors", errors: metrics.errorEvents },
+    ];
+  };
+
+  const getHistogramData = () => {
+    return metrics.latencyHistogram.map((h: any) => {
+      return {
+        ...h,
+        duration: `${h.duration / 1000000}ms`,
+      };
+    });
+  };
+
   return (
-    <Fragment>
-      <h1>TODO: Implement Metrics</h1>
-    </Fragment>
+    metrics && (
+      <Fragment>
+        <h3>API Requests</h3>
+        <BarChart width={750} height={250} data={getAPIRequestsData()}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="success" fill="green" />
+          <Bar dataKey="failures" fill="red" />
+          <Bar dataKey="errors" fill="black" />
+          <Bar dataKey="active" fill="#8884d8" />
+        </BarChart>
+        <h3>Events</h3>
+        <BarChart width={750} height={250} data={getEventsData()}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="audit" fill="green" />
+          <Bar dataKey="errors" fill="black" />
+        </BarChart>
+        <h3>Latency Histogram</h3>
+        {metrics.latencyHistogram && (
+          <LineChart
+            width={730}
+            height={250}
+            data={getHistogramData()}
+            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="duration" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="total"
+              stroke="#8884d8"
+              name={"Requests that took T ms or less"}
+            />
+          </LineChart>
+        )}
+      </Fragment>
+    )
   );
 };
 
