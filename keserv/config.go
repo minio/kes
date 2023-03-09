@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
 	"github.com/minio/kes/internal/keystore/fortanix"
@@ -20,6 +20,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
 	"github.com/minio/kes/internal/keystore/generic"
+	kesstore "github.com/minio/kes/internal/keystore/kes"
 	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/keystore/vault"
 	"github.com/minio/kes/kms"
@@ -321,6 +322,68 @@ func (c *FSConfig) toYAML(yml *serverConfigYAML) {
 
 func (c *FSConfig) fromYAML(yml *serverConfigYAML) {
 	c.Dir = yml.KeyStore.Fs.Path
+}
+
+// KESConfig is a structure containing the configuration
+// for using a KES server/cluster as KMS.
+type KESConfig struct {
+	// Endpoints is a set of KES server endpoints.
+	//
+	// If multiple endpoints are provided, the requests
+	// will be automatically balanced across them.
+	Endpoints []Env[string]
+
+	// Enclave is an optional enclave name. If empty,
+	// the default enclave name will be used.
+	Enclave Env[string]
+
+	// CertificateFile is a path to a mTLS client
+	// certificate file used to authenticate to
+	// the KES server.
+	CertificateFile Env[string]
+
+	// PrivateKeyFile is a path to a mTLS private
+	// key used to authenticate to the KES server.
+	PrivateKeyFile Env[string]
+
+	// CAPath is an optional path to the root
+	// CA certificate(s) for verifying the TLS
+	// certificate of the KES server.
+	//
+	// If empty, the OS default root CA set is
+	// used.
+	CAPath Env[string]
+}
+
+// Connect establishes and returns a kms.Conn to the
+// KES server.
+func (c *KESConfig) Connect(ctx context.Context) (kms.Conn, error) {
+	endpoints := make([]string, 0, len(c.Endpoints))
+	for _, endpoint := range c.Endpoints {
+		endpoints = append(endpoints, endpoint.Value)
+	}
+	return kesstore.Connect(ctx, &kesstore.Config{
+		Endpoints:   endpoints,
+		Enclave:     c.Enclave.Value,
+		Certificate: c.CertificateFile.Value,
+		PrivateKey:  c.PrivateKeyFile.Value,
+		CAPath:      c.CAPath.Value,
+	})
+}
+
+func (c *KESConfig) toYAML(yml *serverConfigYAML) {
+	yml.KeyStore.KES.Endpoint = c.Endpoints
+	yml.KeyStore.KES.TLS.Certificate = c.CertificateFile
+	yml.KeyStore.KES.TLS.PrivateKey = c.PrivateKeyFile
+	yml.KeyStore.KES.TLS.CAPath = c.CAPath
+}
+
+func (c *KESConfig) fromYAML(yml *serverConfigYAML) {
+	c.Endpoints = yml.KeyStore.KES.Endpoint
+	c.Enclave = yml.KeyStore.KES.Enclave
+	c.CertificateFile = yml.KeyStore.KES.TLS.Certificate
+	c.PrivateKeyFile = yml.KeyStore.KES.TLS.PrivateKey
+	c.CAPath = yml.KeyStore.KES.TLS.CAPath
 }
 
 // KMSPluginConfig is a structure containing the

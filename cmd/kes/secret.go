@@ -19,7 +19,7 @@ import (
 
 	"aead.dev/mem"
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/secret"
 	flag "github.com/spf13/pflag"

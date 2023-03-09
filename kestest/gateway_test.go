@@ -17,36 +17,40 @@ import (
 	"testing"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kestest"
 )
 
-var gatewayAPIs = []kes.API{
-	{Method: http.MethodGet, Path: "/version", MaxBody: 0, Timeout: 15 * time.Second},    // 0
-	{Method: http.MethodGet, Path: "/v1/status", MaxBody: 0, Timeout: 15 * time.Second},  // 1
-	{Method: http.MethodGet, Path: "/v1/metrics", MaxBody: 0, Timeout: 15 * time.Second}, // 2
-	{Method: http.MethodGet, Path: "/v1/api", MaxBody: 0, Timeout: 15 * time.Second},     // 3
+var gatewayAPIs = map[string]struct {
+	Method  string
+	MaxBody int64
+	Timeout time.Duration
+}{
+	"/version":    {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/status":  {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/metrics": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/api":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 
-	{Method: http.MethodPost, Path: "/v1/key/create/", MaxBody: 0, Timeout: 15 * time.Second},             // 4
-	{Method: http.MethodPost, Path: "/v1/key/import/", MaxBody: 1 << 20, Timeout: 15 * time.Second},       // 5
-	{Method: http.MethodGet, Path: "/v1/key/describe/", MaxBody: 0, Timeout: 15 * time.Second},            // 5
-	{Method: http.MethodDelete, Path: "/v1/key/delete/", MaxBody: 0, Timeout: 15 * time.Second},           // 6
-	{Method: http.MethodPost, Path: "/v1/key/generate/", MaxBody: 1 << 20, Timeout: 15 * time.Second},     // 7
-	{Method: http.MethodPost, Path: "/v1/key/encrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second},      // 8
-	{Method: http.MethodPost, Path: "/v1/key/decrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second},      // 9
-	{Method: http.MethodPost, Path: "/v1/key/bulk/decrypt/", MaxBody: 1 << 20, Timeout: 15 * time.Second}, // 10
-	{Method: http.MethodGet, Path: "/v1/key/list/", MaxBody: 0, Timeout: 15 * time.Second},                // 11
+	"/v1/key/create/":       {Method: http.MethodPost, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/key/import/":       {Method: http.MethodPost, MaxBody: 1 << 20, Timeout: 15 * time.Second},
+	"/v1/key/describe/":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/key/list/":         {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/key/delete/":       {Method: http.MethodDelete, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/key/generate/":     {Method: http.MethodPost, MaxBody: 1 << 20, Timeout: 15 * time.Second},
+	"/v1/key/encrypt/":      {Method: http.MethodPost, MaxBody: 1 << 20, Timeout: 15 * time.Second},
+	"/v1/key/decrypt/":      {Method: http.MethodPost, MaxBody: 1 << 20, Timeout: 15 * time.Second},
+	"/v1/key/bulk/decrypt/": {Method: http.MethodPost, MaxBody: 1 << 20, Timeout: 15 * time.Second},
 
-	{Method: http.MethodGet, Path: "/v1/policy/describe/", MaxBody: 0, Timeout: 15 * time.Second}, // 12
-	{Method: http.MethodGet, Path: "/v1/policy/read/", MaxBody: 0, Timeout: 15 * time.Second},     // 14
-	{Method: http.MethodGet, Path: "/v1/policy/list/", MaxBody: 0, Timeout: 15 * time.Second},     // 15
+	"/v1/policy/describe/": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/policy/read/":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/policy/list/":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 
-	{Method: http.MethodGet, Path: "/v1/identity/describe/", MaxBody: 0, Timeout: 15 * time.Second},     // 17
-	{Method: http.MethodGet, Path: "/v1/identity/self/describe", MaxBody: 0, Timeout: 15 * time.Second}, // 18
-	{Method: http.MethodGet, Path: "/v1/identity/list/", MaxBody: 0, Timeout: 15 * time.Second},         // 19
+	"/v1/identity/describe/":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/identity/self/describe": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/identity/list/":         {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 
-	{Method: http.MethodGet, Path: "/v1/log/error", MaxBody: 0, Timeout: 0}, // 20
-	{Method: http.MethodGet, Path: "/v1/log/audit", MaxBody: 0, Timeout: 0}, // 21
+	"/v1/log/error": {Method: http.MethodGet, MaxBody: 0, Timeout: 0},
+	"/v1/log/audit": {Method: http.MethodGet, MaxBody: 0, Timeout: 0},
 }
 
 func TestMetrics(t *testing.T) {
@@ -96,17 +100,18 @@ func TestAPIs(t *testing.T) {
 		t.Fatalf("API mismatch: got len '%d' - want len '%d'", len(apis), len(gatewayAPIs))
 	}
 	for i := range apis {
-		if apis[i].Method != gatewayAPIs[i].Method {
-			t.Fatalf("API %d: method mismatch: got '%s' - want '%s'", i, apis[i].Method, gatewayAPIs[i].Method)
+		api, ok := gatewayAPIs[apis[i].Path]
+		if !ok {
+			t.Fatalf("API '%s': API not found", apis[i].Path)
 		}
-		if apis[i].Path != gatewayAPIs[i].Path {
-			t.Fatalf("API %d: path mismatch: got '%s' - want '%s'", i, apis[i].Path, gatewayAPIs[i].Path)
+		if apis[i].Method != api.Method {
+			t.Fatalf("API '%s': method mismatch: got '%s' - want '%s'", apis[i].Path, apis[i].Method, api.Method)
 		}
-		if apis[i].MaxBody != gatewayAPIs[i].MaxBody {
-			t.Fatalf("API %d: max body mismatch: got '%d' - want '%d'", i, apis[i].MaxBody, gatewayAPIs[i].MaxBody)
+		if apis[i].MaxBody != api.MaxBody {
+			t.Fatalf("API '%s': max body mismatch: got '%d' - want '%d'", apis[i].Path, apis[i].MaxBody, api.MaxBody)
 		}
-		if apis[i].Timeout != gatewayAPIs[i].Timeout {
-			t.Fatalf("API %d: timeout mismatch: got '%v' - want '%v'", i, apis[i].Timeout, gatewayAPIs[i].Timeout)
+		if apis[i].Timeout != api.Timeout {
+			t.Fatalf("API '%s': timeout mismatch: got '%v' - want '%v'", apis[i].Path, apis[i].Timeout, api.Timeout)
 		}
 	}
 }

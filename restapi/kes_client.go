@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"os"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/models"
 )
 

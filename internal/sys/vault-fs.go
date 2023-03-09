@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/key"

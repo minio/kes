@@ -17,7 +17,7 @@ import (
 
 	"aead.dev/mem"
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 )

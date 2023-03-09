@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
 )
 

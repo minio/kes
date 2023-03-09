@@ -7,20 +7,13 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"os"
 	"os/signal"
@@ -29,10 +22,9 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/fips"
-	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -120,12 +112,12 @@ func newIdentityCmd(args []string) {
 		expiry    time.Duration
 		encrypt   bool
 	)
-	cmd.StringVar(&keyPath, "key", "private.key", "Path to private key")
-	cmd.StringVar(&certPath, "cert", "public.crt", "Path to certificate")
+	cmd.StringVar(&keyPath, "key", "", "Path to private key")
+	cmd.StringVar(&certPath, "cert", "", "Path to certificate")
 	cmd.BoolVarP(&forceFlag, "force", "f", false, "Overwrite an existing private key and/or certificate")
 	cmd.IPSliceVar(&IPs, "ip", []net.IP{}, "Add <IP> as subject alternative name")
 	cmd.StringSliceVar(&domains, "dns", []string{}, "Add <DOMAIN> as subject alternative name")
-	cmd.DurationVar(&expiry, "expiry", 720*time.Hour, "Duration until the certificate expires")
+	cmd.DurationVar(&expiry, "expiry", 0, "Duration until the certificate expires")
 	cmd.BoolVar(&encrypt, "encrypt", false, "Encrypt the private key with a password")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -133,129 +125,151 @@ func newIdentityCmd(args []string) {
 		}
 		cli.Fatalf("%v. See 'kes identity new --help'", err)
 	}
-	if cmd.NArg() == 0 {
-		cli.Fatal("no certificate subject specified. See 'kes identity new --help'")
-	}
 	if cmd.NArg() > 1 {
 		cli.Fatal("too many arguments. See 'kes identity new --help'")
 	}
-
-	var (
-		subject    = cmd.Arg(0)
-		publicKey  crypto.PublicKey
-		privateKey crypto.PrivateKey
-	)
-	if fips.Enabled {
-		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			cli.Fatalf("failed to generate private key: %v", err)
+	if keyPath != "" && certPath == "" {
+		cli.Fatalf("private key file specified but no certificate file. Set the '--cert' flag")
+	}
+	if keyPath == "" && certPath != "" {
+		cli.Fatalf("certificate file specified but no private key file. Set the '--key' flag")
+	}
+	if keyPath == "" || certPath == "" {
+		if encrypt {
+			cli.Fatalf("'--encrypt' requires a private key and certificate file. Set the '--cert' and '--key' flag")
 		}
-		publicKey, privateKey = private.Public(), private
-	} else {
-		public, private, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			cli.Fatalf("failed to generate private key: %v", err)
+		if forceFlag {
+			cli.Fatalf("'--force' requires a private key and certificate file. Set the '--cert' and '--key' flag")
 		}
-		publicKey, privateKey = public, private
+		if expiry > 0 {
+			cli.Fatalf("'--expiry' requires a private key and certificate file. Set the '--cert' and '--key' flag")
+		}
+		if len(IPs) > 0 {
+			cli.Fatalf("'--ip' requires a private key and certificate file. Set the '--cert' and '--key' flag")
+		}
+		if len(domains) > 0 {
+			cli.Fatalf("'--dns' requires a private key and certificate file. Set the '--cert' and '--key' flag")
+		}
 	}
 
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	key, err := kes.GenerateAPIKey(nil)
 	if err != nil {
-		cli.Fatalf("failed to create certificate serial number: %v", err)
-	}
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName: subject,
-		},
-		NotBefore: time.Now().UTC(),
-		NotAfter:  time.Now().UTC().Add(expiry),
-		KeyUsage:  x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-			x509.ExtKeyUsageClientAuth,
-		},
-		DNSNames:              domains,
-		IPAddresses:           IPs,
-		BasicConstraintsValid: true,
+		cli.Fatalf("failed to generate API key: %v", err)
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, privateKey)
-	if err != nil {
-		cli.Fatalf("failed to create certificate: %v", err)
-	}
-	privBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		cli.Fatalf("failed to create private key: %v", err)
-	}
-
-	if !forceFlag {
-		if _, err = os.Stat(keyPath); err == nil {
-			cli.Fatal("private key already exists. Use --force to overwrite it")
+	if keyPath != "" && certPath != "" {
+		options := []kes.CertificateOption{
+			func(cert *x509.Certificate) { cert.DNSNames = domains },
+			func(cert *x509.Certificate) { cert.IPAddresses = IPs },
+			func(cert *x509.Certificate) { cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth) },
 		}
-		if _, err = os.Stat(certPath); err == nil {
-			cli.Fatal("certificate already exists. Use --force to overwrite it")
+		if cmd.NArg() == 1 {
+			name := cmd.Arg(0)
+			options = append(options, func(cert *x509.Certificate) { cert.Subject.CommonName = name })
 		}
-	}
-
-	var keyPem []byte
-	if encrypt {
-		fmt.Fprint(os.Stderr, "Enter password for private key:")
-		p, err := term.ReadPassword(int(os.Stderr.Fd()))
+		if expiry > 0 {
+			options = append(options, func(cert *x509.Certificate) {
+				now := time.Now()
+				cert.NotBefore, cert.NotAfter = now, now.Add(expiry)
+			})
+		}
+		cert, err := kes.GenerateCertificate(key, options...)
 		if err != nil {
-			cli.Fatal(err)
+			cli.Fatalf("failed to generate certificate: %v", err)
 		}
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprint(os.Stderr, "Confirm password for private key:")
-		confirm, err := term.ReadPassword(int(os.Stderr.Fd()))
+
+		certBytes := cert.Certificate[0]
+		privBytes, err := x509.MarshalPKCS8PrivateKey(key.Private())
 		if err != nil {
-			cli.Fatal(err)
-		}
-		fmt.Fprintln(os.Stderr)
-		if !bytes.Equal(p, confirm) {
-			cli.Fatal("passwords don't match")
+			cli.Fatalf("failed to create private key: %v", err)
 		}
 
-		block, err := x509.EncryptPEMBlock(rand.Reader, "PRIVATE KEY", privBytes, p, x509.PEMCipherAES256)
-		if err != nil {
-			cli.Fatalf("failed to encrypt private key: %v", err)
+		if !forceFlag {
+			if _, err = os.Stat(keyPath); err == nil {
+				cli.Fatal("private key already exists. Use --force to overwrite it")
+			}
+			if _, err = os.Stat(certPath); err == nil {
+				cli.Fatal("certificate already exists. Use --force to overwrite it")
+			}
 		}
-		keyPem = pem.EncodeToMemory(block)
-	} else {
-		keyPem = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
-	}
-	certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
 
-	if err = os.WriteFile(keyPath, keyPem, 0o600); err != nil {
-		cli.Fatalf("failed to create private key: %v", err)
-	}
-	if err = os.WriteFile(certPath, certPem, 0o644); err != nil {
-		os.Remove(keyPath)
-		cli.Fatalf("failed to create certificate: %v", err)
+		var keyPem []byte
+		if encrypt {
+			fmt.Fprint(os.Stderr, "Enter password for private key:")
+			p, err := term.ReadPassword(int(os.Stderr.Fd()))
+			if err != nil {
+				cli.Fatal(err)
+			}
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprint(os.Stderr, "Confirm password for private key:")
+			confirm, err := term.ReadPassword(int(os.Stderr.Fd()))
+			if err != nil {
+				cli.Fatal(err)
+			}
+			fmt.Fprintln(os.Stderr)
+			if !bytes.Equal(p, confirm) {
+				cli.Fatal("passwords don't match")
+			}
+
+			block, err := x509.EncryptPEMBlock(rand.Reader, "PRIVATE KEY", privBytes, p, x509.PEMCipherAES256)
+			if err != nil {
+				cli.Fatalf("failed to encrypt private key: %v", err)
+			}
+			keyPem = pem.EncodeToMemory(block)
+		} else {
+			keyPem = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+		}
+		certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+
+		if err = os.WriteFile(keyPath, keyPem, 0o600); err != nil {
+			cli.Fatalf("failed to create private key: %v", err)
+		}
+		if err = os.WriteFile(certPath, certPem, 0o644); err != nil {
+			os.Remove(keyPath)
+			cli.Fatalf("failed to create certificate: %v", err)
+		}
 	}
 
+	bold := tui.NewStyle()
 	if isTerm(os.Stdout) {
-		fmt.Printf("\n  Private key:  %s\n", keyPath)
-		fmt.Printf("  Certificate:  %s\n", certPath)
-
-		cert, err := x509.ParseCertificate(certBytes)
-		if err == nil {
-			identity := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-			fmt.Printf("  Identity:     %s\n", hex.EncodeToString(identity[:]))
-		}
+		bold = bold.Bold(true)
 	}
+	var buffer strings.Builder
+	fmt.Fprintln(&buffer, "Your API key:")
+	fmt.Fprintln(&buffer)
+	fmt.Fprintln(&buffer, "   "+bold.Render(key.String())+"\n")
+	fmt.Fprintln(&buffer, "This is the only time it is shown. Keep it secret and secure!")
+	fmt.Fprintln(&buffer)
+	fmt.Fprintln(&buffer, "Your Identity:")
+	fmt.Fprintln(&buffer)
+	fmt.Fprintln(&buffer, "   "+bold.Render(key.Identity().String())+"\n")
+	fmt.Fprintln(&buffer, "The identity is not a secret. It can be shared. Any peer")
+	fmt.Fprintln(&buffer, "needs this identity in order to verify your API key.")
+	if keyPath != "" && certPath != "" {
+		fmt.Fprintln(&buffer)
+		fmt.Fprintf(&buffer, "The generated TLS private key is stored at: %s\n", keyPath)
+		fmt.Fprintf(&buffer, "The generated TLS certificate is stored at: %s\n", certPath)
+	}
+	fmt.Fprintln(&buffer)
+	fmt.Fprintln(&buffer, "The identity can be computed again via:")
+	fmt.Fprintln(&buffer)
+	fmt.Fprintf(&buffer, "    kes identity of %s\n", key.String())
+	if keyPath != "" && certPath != "" {
+		fmt.Fprintf(&buffer, "    kes identity of %s", certPath)
+	}
+	cli.Println(buffer.String())
 }
 
 const ofIdentityCmdUsage = `Usage:
-    kes identity of <certificate>...
+    kes identity of <api-key>
+    kes identity of <certificate>
 
 Options:
     -h, --help               Print command line options.
 
 Examples:
+    $ kes identity of kes:v1:ACQpoGqx3rHHjT938Hfu5hVVQJHZWSqVI2Xp1KlYxFVw
     $ kes identity of client.crt
-    $ kes identity of client1.crt client2.crt
 `
 
 func ofIdentityCmd(args []string) {
@@ -269,63 +283,43 @@ func ofIdentityCmd(args []string) {
 		cli.Fatalf("%v. See 'kes identity of --help'", err)
 	}
 	if cmd.NArg() == 0 {
-		cli.Fatal("no certificate specified. See 'kes identity of --help'")
+		cli.Fatal("no API key or certificate specified. See 'kes identity of --help'")
 	}
 
-	identify := func(filename string) (kes.Identity, error) {
+	var identity kes.Identity
+	if strings.HasPrefix(cmd.Arg(0), "kes:v1:") {
+		key, err := kes.ParseAPIKey(cmd.Arg(0))
+		if err != nil {
+			cli.Fatal(err)
+		}
+		identity = key.Identity()
+	} else {
+		filename := cmd.Arg(0)
 		pemBlock, err := os.ReadFile(filename)
 		if err != nil {
-			return "", err
+			cli.Fatal(err)
 		}
-		pemBlock, err = xhttp.FilterPEM(pemBlock, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+		pemBlock, err = https.FilterPEM(pemBlock, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 		if err != nil {
-			return "", fmt.Errorf("failed to parse certificate in %q: %v", filename, err)
+			cli.Fatalf("failed to parse certificate in '%s': %v", filename, err)
 		}
 
 		next, _ := pem.Decode(pemBlock)
 		cert, err := x509.ParseCertificate(next.Bytes)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse certificate in %q: %v", filename, err)
+			cli.Fatalf("failed to parse certificate in '%s': %v", filename, err)
 		}
-		identity := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-		return kes.Identity(hex.EncodeToString(identity[:])), nil
+		h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+		identity = kes.Identity(hex.EncodeToString(h[:]))
 	}
-
-	switch {
-	case cmd.NArg() == 1:
-		identity, err := identify(cmd.Arg(0))
-		if err != nil {
-			cli.Fatal(err)
-		}
-		if isTerm(os.Stdout) {
-			fmt.Printf("\n  Identity:  %s\n", identity)
-		} else {
-			fmt.Print(identity)
-		}
-	case isTerm(os.Stdout):
-		for _, filename := range cmd.Args() {
-			identity, err := identify(filename)
-			if err != nil {
-				cli.Fatal(err)
-			}
-			fmt.Printf("%s: %s\n", filename, identity)
-		}
-	default:
-		type Pair struct {
-			Name     string       `json:"name"`
-			Identity kes.Identity `json:"identity"`
-		}
-		encoder := json.NewEncoder(os.Stdout)
-		for _, filename := range cmd.Args() {
-			identity, err := identify(filename)
-			if err != nil {
-				cli.Fatal(err)
-			}
-			encoder.Encode(Pair{
-				Name:     filename,
-				Identity: identity,
-			})
-		}
+	if isTerm(os.Stdout) {
+		var buffer strings.Builder
+		fmt.Fprintln(&buffer, "Identity:")
+		fmt.Fprintln(&buffer)
+		fmt.Fprintln(&buffer, "   "+tui.NewStyle().Bold(true).Render(identity.String()))
+		cli.Print(buffer.String())
+	} else {
+		fmt.Print(identity)
 	}
 }
 

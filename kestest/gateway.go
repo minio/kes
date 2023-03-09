@@ -21,9 +21,9 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
-	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/log"
@@ -94,8 +94,8 @@ func (g *Gateway) CAs() *x509.CertPool {
 func (g *Gateway) start() {
 	var (
 		rootCAs   = g.CAs()
-		auditLog  = log.NewTarget(io.Discard)
-		errorLog  = log.NewTarget(io.Discard)
+		auditLog  = log.New(io.Discard, "", 0)
+		errorLog  = log.New(io.Discard, "Error", log.Ldate|log.Ltime)
 		metrics   = metric.New()
 		adminCert = g.IssueClientCertificate("kestest: admin")
 	)
@@ -105,15 +105,15 @@ func (g *Gateway) start() {
 		identities: make(map[kes.Identity]auth.IdentityInfo),
 	}
 
-	errorLog.Add(metrics.ErrorEventCounter())
 	auditLog.Add(metrics.AuditEventCounter())
+	errorLog.Add(metrics.ErrorEventCounter())
 	store := key.NewCache(key.Store{Conn: &mem.Store{}}, &key.CacheConfig{
 		Expiry:       30 * time.Second,
 		ExpiryUnused: 5 * time.Second,
 	})
 
 	serverCert := issueCertificate("kestest: gateway", g.caCertificate, g.caPrivateKey, x509.ExtKeyUsageServerAuth)
-	g.server = httptest.NewUnstartedServer(xhttp.NewGatewayMux(&xhttp.GatewayConfig{
+	g.server = httptest.NewUnstartedServer(api.NewEdgeRouter(&api.EdgeRouterConfig{
 		Keys:       store,
 		Policies:   g.policies.policySet(),
 		Identities: g.policies.identitySet(),

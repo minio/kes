@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/models"
 	"github.com/minio/kes/restapi/operations"
 	"github.com/minio/kes/restapi/operations/encryption"

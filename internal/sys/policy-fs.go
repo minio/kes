@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	"aead.dev/mem"
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
 )

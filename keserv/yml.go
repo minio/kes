@@ -7,7 +7,7 @@ package keserv
 import (
 	"time"
 
-	"github.com/minio/kes"
+	"github.com/minio/kes-go"
 )
 
 type serverConfigYAML struct {
@@ -60,6 +60,16 @@ type serverConfigYAML struct {
 		Fs struct {
 			Path Env[string] `yaml:"path,omitempty"`
 		} `yaml:"fs,omitempty"`
+
+		KES struct {
+			Endpoint []Env[string] `yaml:"endpoint,omitempty"`
+			Enclave  Env[string]   `yaml:"enclave,omitempty"`
+			TLS      struct {
+				Certificate Env[string] `yaml:"cert,omitempty"`
+				PrivateKey  Env[string] `yaml:"key,omitempty"`
+				CAPath      Env[string] `yaml:"ca,omitempty"`
+			} `yaml:"tls,omitempty"`
+		} `yaml:"kes,omitempty"`
 
 		Generic struct {
 			Endpoint Env[string] `yaml:"endpoint,omitempty"`
@@ -281,6 +291,8 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 	switch {
 	case yml.KeyStore.Fs.Path.Value != "":
 		config.KMS = new(FSConfig)
+	case len(yml.KeyStore.KES.Endpoint) != 0:
+		config.KMS = new(KESConfig)
 	case yml.KeyStore.Generic.Endpoint.Value != "":
 		config.KMS = new(KMSPluginConfig)
 	case yml.KeyStore.Vault.Endpoint.Value != "":
