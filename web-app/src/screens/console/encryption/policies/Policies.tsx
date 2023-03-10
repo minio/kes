@@ -90,7 +90,6 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
   };
 
   const confirmDeletePolicy = (policy: string) => {
-    console.log("TODO: Delete Policy");
     setDeleteOpen(true);
     setSelectedPolicy(policy);
   };
@@ -123,6 +122,7 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
       {deleteOpen && (
         <DeleteKMSModal
           deleteOpen={deleteOpen}
+          withWarning={false}
           selectedItem={selectedPolicy}
           endpoint={"/api/v1/kms/policies/"}
           element={"Policy"}

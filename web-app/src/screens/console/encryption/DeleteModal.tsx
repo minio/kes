@@ -25,11 +25,11 @@ import { ConfirmDeleteIcon, Grid } from "mds";
 import InputBoxWrapper from "../common/InputBoxWrapper";
 import ConfirmDialog from "../common/ConfirmDialog";
 import WarningMessage from "../WarningMessage";
-// import ConfirmDialog from "../Common/ModalWrapper/ConfirmDialog";
 
 interface IDeleteModalProps {
   closeDeleteModalAndRefresh: (refresh: boolean) => void;
   deleteOpen: boolean;
+  withWarning: boolean;
   selectedItem: string;
   endpoint: string;
   element: string;
@@ -39,6 +39,7 @@ interface IDeleteModalProps {
 const DeleteModal = ({
   closeDeleteModalAndRefresh,
   deleteOpen,
+  withWarning,
   selectedItem,
   endpoint,
   element,
@@ -75,9 +76,11 @@ const DeleteModal = ({
       }}
       confirmationContent={
         <DialogContentText>
-          <Grid item xs={12}>
-            <WarningMessage title={"WARNING"} label={label} />
-          </Grid>
+          {withWarning && (
+            <Grid item xs={12}>
+              <WarningMessage title={"WARNING"} label={label} />
+            </Grid>
+          )}
           To continue please type <b>{selectedItem}</b> in the box.
           <Grid item xs={12}>
             <InputBoxWrapper
@@ -86,7 +89,6 @@ const DeleteModal = ({
               onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                 setRetype(event.target.value);
               }}
-              onPaste={(e) => e.preventDefault()}
               label=""
               value={retype}
             />

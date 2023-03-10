@@ -85,8 +85,6 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
   };
 
   const confirmDeleteIdentity = (identity: string) => {
-    console.log("TODO: Delete Identity", identity);
-    identity = identity || "";
     setDeleteOpen(true);
     setSelectedIdentity(identity);
   };
@@ -113,6 +111,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
       {deleteOpen && (
         <DeleteModal
           deleteOpen={deleteOpen}
+          withWarning={false}
           selectedItem={selectedIdentity}
           endpoint={"/api/v1/kms/identities/"}
           element={"Identity"}
@@ -186,7 +185,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
                 ]}
                 entityName="identities"
                 records={records}
-                idField="name"
+                idField="identity"
               />
             </GridMDS>
             {/* </SecureComponent> */}

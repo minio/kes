@@ -213,6 +213,7 @@ const PolicyDetails = ({ classes }: IPolicyDetailsProps) => {
     <Fragment>
       {deleteOpen && (
         <DeleteModal
+          withWarning={false}
           deleteOpen={deleteOpen}
           selectedItem={policyName}
           endpoint={"/api/v1/encryption/policies/"}

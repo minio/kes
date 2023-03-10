@@ -30,7 +30,7 @@ import (
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
-	xhttp "github.com/minio/kes/internal/http"
+	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/models"
 	"github.com/minio/kes/restapi/operations"
 	authApi "github.com/minio/kes/restapi/operations/auth"
@@ -105,7 +105,7 @@ func getCertificateContent(params authApi.LoginParams) ([]byte, error) {
 		return nil, err
 	}
 	certBuf = certBuf[:sc]
-	return xhttp.FilterPEM(certBuf, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+	return https.FilterPEM(certBuf, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 }
 
 func getKeyContent(params authApi.LoginParams) ([]byte, error) {

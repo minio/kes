@@ -84,7 +84,6 @@ const ListKeys = ({ classes }: IKeysProps) => {
   };
 
   const confirmDeleteKey = (key: string) => {
-    console.log("TODO: Delete Key");
     setDeleteOpen(true);
     setSelectedKey(key);
   };
@@ -112,6 +111,7 @@ const ListKeys = ({ classes }: IKeysProps) => {
         <DeleteModal
           deleteOpen={deleteOpen}
           selectedItem={selectedKey}
+          withWarning={true}
           endpoint={"/api/v1/encryption/keys/"}
           element={"Key"}
           label={
