@@ -33,27 +33,11 @@ var (
 	ErrInternalError = &APIError{Code: 500, Message: "Internal Server Error", DetailedMessage: "An internal server error occurred"}
 )
 
-func newAPIError(code int32, message string, detailedMessage string) *models.Error {
-	return &models.Error{
-		Code:            code,
-		Message:         &message,
-		DetailedMessage: &detailedMessage,
-	}
-}
-
 func newDefaultAPIError(err error) *models.Error {
 	msg := err.Error()
 	return &models.Error{
 		Code:            500,
 		Message:         &msg,
 		DetailedMessage: &msg,
-	}
-}
-
-func getAPIError(err *APIError) *models.Error {
-	return &models.Error{
-		Code:            err.Code,
-		Message:         &err.Message,
-		DetailedMessage: &err.DetailedMessage,
 	}
 }
