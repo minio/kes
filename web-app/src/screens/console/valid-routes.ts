@@ -16,7 +16,6 @@
 
 import { IMenuItem } from "./menu/types";
 import { NavLink } from "react-router-dom";
-import { AuditLogsMenuIcon } from "mds";
 import StatusIcon from "./encryption/api/StatusIcon";
 import KeysIcon from "./encryption/keys/KeysIcon";
 import PoliciesIcon from "./encryption/policies/PoliciesIcon";

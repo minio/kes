@@ -21,10 +21,6 @@ import { Theme } from "@mui/material/styles";
 import createStyles from "@mui/styles/createStyles";
 import withStyles from "@mui/styles/withStyles";
 import { HelpIcon } from "mds";
-// import { fieldBasic } from "../common/styleLibrary";
-import { CopyIcon } from "mds";
-import { Button } from "mds";
-import CopyToClipboard from "react-copy-to-clipboard";
 import CodeEditor from "@uiw/react-textarea-code-editor";
 
 interface ICodeWrapper {

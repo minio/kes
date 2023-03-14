@@ -29,8 +29,6 @@ type MenuToggleProps = {
 const MenuToggle = ({ isOpen, onToggle }: MenuToggleProps) => {
   const stateClsName = isOpen ? "wide" : "mini";
 
-  let logoPlan = "simple";
-
   return (
     <Box
       className={`${stateClsName}`}

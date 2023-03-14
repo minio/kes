@@ -18,21 +18,46 @@
 package restapi
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
+	"path"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 
 	"github.com/go-openapi/runtime/middleware"
+	webApp "github.com/minio/kes/web-app"
+	"github.com/minio/pkg/env"
+	"github.com/minio/pkg/mimedb"
 
 	"github.com/minio/kes/models"
 	"github.com/minio/kes/restapi/operations"
 	"github.com/minio/kes/restapi/operations/auth"
 )
+
+const (
+	SubPath = "CONSOLE_SUBPATH"
+)
+
+var (
+	subPath     = "/"
+	subPathOnce sync.Once
+)
+
+type notFoundRedirectRespWr struct {
+	http.ResponseWriter // We embed http.ResponseWriter
+	status              int
+}
 
 //go:generate swagger generate server --target ../../kes --name Kes --spec ../swagger.yaml --principal models.Principal --exclude-main
 
@@ -101,6 +126,133 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 	api.ServerShutdown = func() {}
 
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
+}
+
+// FileServerMiddleware serves files from the static folder
+func FileServerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server", "KES Console")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api"):
+			next.ServeHTTP(w, r)
+		default:
+			buildFs, err := fs.Sub(webApp.GetStaticAssets(), "build")
+			if err != nil {
+				panic(err)
+			}
+			wrapHandlerSinglePageApplication(requestBounce(http.FileServer(http.FS(buildFs)))).ServeHTTP(w, r)
+		}
+	})
+}
+
+func requestBounce(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func wrapHandlerSinglePageApplication(h http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			handleSPA(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", mimedb.TypeByExtension(filepath.Ext(r.URL.Path)))
+		nfw := &notFoundRedirectRespWr{ResponseWriter: w}
+		h.ServeHTTP(nfw, r)
+		if nfw.status == http.StatusNotFound {
+			handleSPA(w, r)
+		}
+	}
+}
+
+// handleSPA handles the serving of the React Single Page Application
+func handleSPA(w http.ResponseWriter, r *http.Request) {
+	basePath := "/"
+	// For SPA mode we will replace root base with a sub path if configured unless we received cp=y and cpb=/NEW/BASE
+	if v := r.URL.Query().Get("cp"); v == "y" {
+		if base := r.URL.Query().Get("cpb"); base != "" {
+			// make sure the subpath has a trailing slash
+			if !strings.HasSuffix(base, "/") {
+				base = fmt.Sprintf("%s/", base)
+			}
+			basePath = base
+		}
+	}
+
+	indexPage, err := webApp.GetStaticAssets().Open("build/index.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	indexPageBytes, err := io.ReadAll(indexPage)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// if we have a seeded basePath. This should override CONSOLE_SUBPATH every time, thus the `if else`
+	if basePath != "/" {
+		indexPageBytes = replaceBaseInIndex(indexPageBytes, basePath)
+		// if we have a custom subpath replace it in
+	} else if getSubPath() != "/" {
+		indexPageBytes = replaceBaseInIndex(indexPageBytes, getSubPath())
+	}
+
+	mimeType := mimedb.TypeByExtension(filepath.Ext(r.URL.Path))
+
+	if mimeType == "application/octet-stream" {
+		mimeType = "text/html"
+	}
+
+	w.Header().Set("Content-Type", mimeType)
+	http.ServeContent(w, r, "index.html", time.Now(), bytes.NewReader(indexPageBytes))
+}
+
+func replaceBaseInIndex(indexPageBytes []byte, basePath string) []byte {
+	if basePath != "" {
+		validBasePath := regexp.MustCompile(`^[0-9a-zA-Z\/-]+$`)
+		if !validBasePath.MatchString(basePath) {
+			return indexPageBytes
+		}
+		indexPageStr := string(indexPageBytes)
+		newBase := fmt.Sprintf("<base href=\"%s\"/>", basePath)
+		indexPageStr = strings.Replace(indexPageStr, "<base href=\"/\"/>", newBase, 1)
+		indexPageBytes = []byte(indexPageStr)
+
+	}
+	return indexPageBytes
+}
+
+func getSubPath() string {
+	subPathOnce.Do(func() {
+		subPath = parseSubPath(env.Get(SubPath, ""))
+	})
+	return subPath
+}
+
+func parseSubPath(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return SlashSeparator
+	}
+	// Replace all unnecessary `\` to `/`
+	// also add pro-actively at the end.
+	subPath = path.Clean(filepath.ToSlash(v))
+	if !strings.HasPrefix(subPath, SlashSeparator) {
+		subPath = SlashSeparator + subPath
+	}
+	if !strings.HasSuffix(subPath, SlashSeparator) {
+		subPath += SlashSeparator
+	}
+	return subPath
 }
 
 // The TLS configuration before HTTPS server starts.

@@ -9,8 +9,50 @@ on:
     - master
 
 jobs:
+  ui-assets:
+    name: "Generate UI Assets"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 1.19.x ]
+        os: [ ubuntu-latest ]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Read .nvmrc
+        id: node_version
+        run: echo "$(cat .nvmrc)" && echo "NVMRC=$(cat .nvmrc)" >> $GITHUB_ENV
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NVMRC }}
+          cache: 'yarn'
+          cache-dependency-path: web-app/yarn.lock
+      - uses: actions/cache@v3
+        id: assets-cache
+        name: Assets Cache
+        with:
+          path: |
+            ./web-app/build/
+          key: ${{ runner.os }}-assets-${{ github.run_id }}
+      - name: Install Dependencies
+        working-directory: ./web-app
+        continue-on-error: false
+        run: |
+          yarn install --frozen-lockfile --immutable
+      - name: Check for Warnings in build output
+        working-directory: ./web-app
+        continue-on-error: false
+        run: |
+          ./check-warnings.sh
+      - name: Check if Files are Prettified
+        working-directory: ./web-app
+        continue-on-error: false
+        run: |
+          ./check-prettier.sh
   build:
     name: Build
+    needs:
+      - ui-assets
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go

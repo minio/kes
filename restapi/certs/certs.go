@@ -133,7 +133,7 @@ func NewConfigDirFromCtx(cmd *flag.FlagSet, option string, getDefaultDir func() 
 	var dir string
 	var dirSet bool
 
-	dir, err := cmd.GetString(option)
+	dir, _ = cmd.GetString(option)
 	if dir != "" {
 		dirSet = true
 	} else {

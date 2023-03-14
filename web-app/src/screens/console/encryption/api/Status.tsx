@@ -234,6 +234,21 @@ const Status = () => {
             <Metrics />
           </Box>
         </TabPanel>
+        {false && (
+          <TabPanel index={1} value={curTab}>
+            <Box
+              sx={{
+                border: "1px solid #eaeaea",
+                borderRadius: "2px",
+                display: "flex",
+                flexFlow: "column",
+                padding: "43px",
+              }}
+            >
+              {statusPanel}
+            </Box>
+          </TabPanel>
+        )}
       </PageLayout>
     </Fragment>
   );

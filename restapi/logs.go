@@ -20,9 +20,10 @@ package restapi
 import (
 	"context"
 	"errors"
-	flag "github.com/spf13/pflag"
 	"log"
 	"os"
+
+	flag "github.com/spf13/pflag"
 )
 
 var (

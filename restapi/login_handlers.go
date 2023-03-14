@@ -64,7 +64,6 @@ func registerLoginHandlers(api *operations.KesAPI) {
 			authApi.NewLogoutOK().WriteResponse(w, p)
 		})
 	})
-
 }
 
 // getLoginResponse performs login() and serializes it to the handler's output

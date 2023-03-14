@@ -59,7 +59,6 @@ const ConsoleMenuList = ({
     setSelectedMenuItem(groupToSelect);
   }, [groupToSelect]);
 
-  let basename = document.baseURI.replace(window.location.origin, "");
   let header = "";
 
   return (

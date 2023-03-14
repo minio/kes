@@ -6,12 +6,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-openapi/loads"
-	"github.com/jessevdk/go-flags"
-	"github.com/minio/kes/restapi"
-	"github.com/minio/kes/restapi/certs"
-	"github.com/minio/kes/restapi/operations"
-	flag "github.com/spf13/pflag"
 	"io/ioutil"
 	"log"
 	"os"
@@ -19,6 +13,13 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/go-openapi/loads"
+	"github.com/jessevdk/go-flags"
+	"github.com/minio/kes/restapi"
+	"github.com/minio/kes/restapi/certs"
+	"github.com/minio/kes/restapi/operations"
+	flag "github.com/spf13/pflag"
 )
 
 const uiCmdUsage = `Usage:
@@ -111,7 +112,6 @@ func uiCmd(args []string) {
 	defer server.Shutdown()
 
 	server.Serve()
-
 }
 
 func buildServer() (*restapi.Server, error) {
