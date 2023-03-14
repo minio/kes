@@ -59,6 +59,20 @@ type notFoundRedirectRespWr struct {
 	status              int
 }
 
+func (w *notFoundRedirectRespWr) WriteHeader(status int) {
+	w.status = status // Store the status for our own use
+	if status != http.StatusNotFound {
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *notFoundRedirectRespWr) Write(p []byte) (int, error) {
+	if w.status != http.StatusNotFound {
+		return w.ResponseWriter.Write(p)
+	}
+	return len(p), nil // Lie that we successfully wrote it
+}
+
 //go:generate swagger generate server --target ../../kes --name Kes --spec ../swagger.yaml --principal models.Principal --exclude-main
 
 func configureFlags(api *operations.KesAPI) {
@@ -277,6 +291,7 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
 	next := AuthenticationMiddleware(handler)
+	next = FileServerMiddleware(next)
 	return next
 }
 
