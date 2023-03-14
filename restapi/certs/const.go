@@ -17,18 +17,18 @@
 package certs
 
 const (
-	// Default minio configuration directory where below configuration files/directories are stored.
+	// DefaultConsoleConfigDir default minio configuration directory where below configuration files/directories are stored.
 	DefaultConsoleConfigDir = ".console"
 
-	// Directory contains below files/directories for HTTPS configuration.
+	// CertsDir directory that contains below files/directories for HTTPS configuration.
 	CertsDir = "certs"
 
-	// Directory contains all CA certificates other than system defaults for HTTPS.
+	// CertsCADir directory that contains all CA certificates other than system defaults for HTTPS.
 	CertsCADir = "CAs"
 
-	// Public certificate file for HTTPS.
+	// PublicCertFile file for HTTPS.
 	PublicCertFile = "public.crt"
 
-	// Private key file for HTTPS.
+	// PrivateKeyFile for HTTPS.
 	PrivateKeyFile = "private.key"
 )

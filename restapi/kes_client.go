@@ -9,6 +9,7 @@ import (
 	"github.com/minio/kes/models"
 )
 
+// KESClientI interface for KESClient
 type KESClientI interface {
 	status(ctx context.Context) (kes.State, error)
 	metrics(ctx context.Context) (kes.Metric, error)
@@ -31,6 +32,7 @@ type KESClientI interface {
 	deleteIdentity(ctx context.Context, name string) error
 }
 
+// KESClient is a wrapper around the KES client
 type KESClient struct {
 	Client *kes.Client
 }
@@ -111,7 +113,7 @@ func (k KESClient) deleteIdentity(ctx context.Context, name string) error {
 	return k.Client.DeleteIdentity(ctx, kes.Identity(name))
 }
 
-func NewKESClient(session *models.Principal) (*kes.Client, error) {
+func newKESClient(session *models.Principal) (*kes.Client, error) {
 	const DefaultServer = "https://127.0.0.1:7373"
 	cert, err := tls.X509KeyPair([]byte(session.ClientCertificate), []byte(session.ClientKey))
 	if err != nil {

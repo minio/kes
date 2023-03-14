@@ -21,14 +21,14 @@ import (
 	"time"
 )
 
-const CookieName = "kes-ui-token"
+const cookieName = "kes-ui-token"
 
-func NewSessionCookieForConsole(token string) http.Cookie {
+func newSessionCookieForConsole(token string) http.Cookie {
 	// sessionDuration := xjwt.GetConsoleSTSDuration()
 	sessionDuration := 24 * time.Hour
 	return http.Cookie{
 		Path:     "/",
-		Name:     CookieName,
+		Name:     cookieName,
 		Value:    token,
 		MaxAge:   int(sessionDuration.Seconds()), // default 1 hr
 		Expires:  time.Now().Add(sessionDuration),
@@ -41,26 +41,10 @@ func NewSessionCookieForConsole(token string) http.Cookie {
 	}
 }
 
-func RemoveSessionCookie() http.Cookie {
+func removeSessionCookie() http.Cookie {
 	return http.Cookie{
 		Path:     "/",
-		Name:     CookieName,
-		Value:    "",
-		MaxAge:   -1,
-		Expires:  time.Now().Add(-100 * time.Hour),
-		HttpOnly: true,
-		// if len(GlobalPublicCerts) > 0 is true, that means Console is running with TLS enable and the browser
-		// should not leak any cookie if we access the site using HTTP
-		Secure: len(GlobalPublicCerts) > 0,
-		// read more: https://web.dev/samesite-cookies-explained/
-		SameSite: http.SameSiteLaxMode,
-	}
-}
-
-func ExpireSessionCookie() http.Cookie {
-	return http.Cookie{
-		Path:     "/",
-		Name:     "token",
+		Name:     cookieName,
 		Value:    "",
 		MaxAge:   -1,
 		Expires:  time.Now().Add(-100 * time.Hour),

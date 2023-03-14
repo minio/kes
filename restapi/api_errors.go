@@ -20,19 +20,6 @@ import (
 	"github.com/minio/kes/models"
 )
 
-type APIError struct {
-	Code            int32
-	Message         string
-	DetailedMessage string
-}
-
-var (
-	ErrForbidden     = &APIError{Code: 403, Message: "Forbidden", DetailedMessage: "You are not authorized to perform this operation"}
-	ErrBadRequest    = &APIError{Code: 400, Message: "Bad Request", DetailedMessage: "The request is invalid"}
-	ErrNotFound      = &APIError{Code: 404, Message: "Not Found", DetailedMessage: "The requested resource was not found"}
-	ErrInternalError = &APIError{Code: 500, Message: "Internal Server Error", DetailedMessage: "An internal server error occurred"}
-)
-
 func newDefaultAPIError(err error) *models.Error {
 	msg := err.Error()
 	return &models.Error{

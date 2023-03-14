@@ -6,4 +6,4 @@ then
     nvm use;
 fi
 yarn install
-yarn prettier --check .
+yarn prettier --check ./src

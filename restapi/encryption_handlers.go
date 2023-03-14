@@ -39,7 +39,7 @@ func registerEncryptionHandlers(api *operations.KesAPI) {
 
 func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	api.EncryptionStatusHandler = encryption.StatusHandlerFunc(func(params encryption.StatusParams, session *models.Principal) middleware.Responder {
-		resp, err := GetStatusResponse(session, params)
+		resp, err := getStatusResponse(session, params)
 		if err != nil {
 			return encryption.NewStatusDefault(int(err.Code)).WithPayload(err)
 		}
@@ -47,7 +47,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionMetricsHandler = encryption.MetricsHandlerFunc(func(params encryption.MetricsParams, session *models.Principal) middleware.Responder {
-		resp, err := GetMetricsResponse(session, params)
+		resp, err := getMetricsResponse(session, params)
 		if err != nil {
 			return encryption.NewMetricsDefault(int(err.Code)).WithPayload(err)
 		}
@@ -55,7 +55,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionAPIsHandler = encryption.APIsHandlerFunc(func(params encryption.APIsParams, session *models.Principal) middleware.Responder {
-		resp, err := GetAPIsResponse(session, params)
+		resp, err := getAPIsResponse(session, params)
 		if err != nil {
 			return encryption.NewAPIsDefault(int(err.Code)).WithPayload(err)
 		}
@@ -63,7 +63,7 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionVersionHandler = encryption.VersionHandlerFunc(func(params encryption.VersionParams, session *models.Principal) middleware.Responder {
-		resp, err := GetVersionResponse(session, params)
+		resp, err := getVersionResponse(session, params)
 		if err != nil {
 			return encryption.NewVersionDefault(int(err.Code)).WithPayload(err)
 		}
@@ -71,10 +71,10 @@ func registerEncryptionStatusHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetStatusResponse(session *models.Principal, params encryption.StatusParams) (*models.EncryptionStatusResponse, *models.Error) {
+func getStatusResponse(session *models.Principal, params encryption.StatusParams) (*models.EncryptionStatusResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -101,10 +101,10 @@ func encryptionStatus(ctx context.Context, kesClient KESClientI) (*models.Encryp
 // 	return kmsEndpoints
 // }
 
-func GetMetricsResponse(session *models.Principal, params encryption.MetricsParams) (*models.EncryptionMetricsResponse, *models.Error) {
+func getMetricsResponse(session *models.Principal, params encryption.MetricsParams) (*models.EncryptionMetricsResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -158,10 +158,10 @@ func parseHistogram(histogram map[time.Duration]uint64) (records []*models.Encry
 	return records
 }
 
-func GetAPIsResponse(session *models.Principal, params encryption.APIsParams) (*models.EncryptionAPIsResponse, *models.Error) {
+func getAPIsResponse(session *models.Principal, params encryption.APIsParams) (*models.EncryptionAPIsResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -190,10 +190,10 @@ func parseApis(apis []kes.API) (data []*models.EncryptionAPI) {
 	return data
 }
 
-func GetVersionResponse(session *models.Principal, params encryption.VersionParams) (*models.EncryptionVersionResponse, *models.Error) {
+func getVersionResponse(session *models.Principal, params encryption.VersionParams) (*models.EncryptionVersionResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -212,7 +212,7 @@ func getVersion(ctx context.Context, kesClient KESClientI) (*models.EncryptionVe
 
 func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	api.EncryptionCreateKeyHandler = encryption.CreateKeyHandlerFunc(func(params encryption.CreateKeyParams, session *models.Principal) middleware.Responder {
-		err := GetCreateKeyResponse(session, params)
+		err := getCreateKeyResponse(session, params)
 		if err != nil {
 			return encryption.NewCreateKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -220,7 +220,7 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionImportKeyHandler = encryption.ImportKeyHandlerFunc(func(params encryption.ImportKeyParams, session *models.Principal) middleware.Responder {
-		err := GetImportKeyResponse(session, params)
+		err := getImportKeyResponse(session, params)
 		if err != nil {
 			return encryption.NewImportKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -228,7 +228,7 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListKeysHandler = encryption.ListKeysHandlerFunc(func(params encryption.ListKeysParams, session *models.Principal) middleware.Responder {
-		resp, err := GetListKeysResponse(session, params)
+		resp, err := getListKeysResponse(session, params)
 		if err != nil {
 			return encryption.NewListKeysDefault(int(err.Code)).WithPayload(err)
 		}
@@ -236,7 +236,7 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDescribeKeyHandler = encryption.DescribeKeyHandlerFunc(func(params encryption.DescribeKeyParams, session *models.Principal) middleware.Responder {
-		resp, err := GetDescribeKeyResponse(session, params)
+		resp, err := getDescribeKeyResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribeKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -244,7 +244,7 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDeleteKeyHandler = encryption.DeleteKeyHandlerFunc(func(params encryption.DeleteKeyParams, session *models.Principal) middleware.Responder {
-		err := GetDeleteKeyResponse(session, params)
+		err := getDeleteKeyResponse(session, params)
 		if err != nil {
 			return encryption.NewDeleteKeyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -252,10 +252,10 @@ func registerEncryptionKeyHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetCreateKeyResponse(session *models.Principal, params encryption.CreateKeyParams) *models.Error {
+func getCreateKeyResponse(session *models.Principal, params encryption.CreateKeyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -269,10 +269,10 @@ func createKey(ctx context.Context, key string, kesClient KESClientI) *models.Er
 	return nil
 }
 
-func GetImportKeyResponse(session *models.Principal, params encryption.ImportKeyParams) *models.Error {
+func getImportKeyResponse(session *models.Principal, params encryption.ImportKeyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -291,10 +291,10 @@ func importKey(ctx context.Context, key string, bytes []byte, kesClient KESClien
 	return nil
 }
 
-func GetListKeysResponse(session *models.Principal, params encryption.ListKeysParams) (*models.EncryptionListKeysResponse, *models.Error) {
+func getListKeysResponse(session *models.Principal, params encryption.ListKeysParams) (*models.EncryptionListKeysResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -332,10 +332,10 @@ func parseKeys(results []kes.KeyInfo) (data []*models.EncryptionKeyInfo) {
 	return data
 }
 
-func GetDescribeKeyResponse(session *models.Principal, params encryption.DescribeKeyParams) (*models.EncryptionDescribeKeyResponse, *models.Error) {
+func getDescribeKeyResponse(session *models.Principal, params encryption.DescribeKeyParams) (*models.EncryptionDescribeKeyResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -356,10 +356,10 @@ func describeKey(ctx context.Context, key string, kesClient KESClientI) (*models
 	}, nil
 }
 
-func GetDeleteKeyResponse(session *models.Principal, params encryption.DeleteKeyParams) *models.Error {
+func getDeleteKeyResponse(session *models.Principal, params encryption.DeleteKeyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -375,7 +375,7 @@ func deleteKey(ctx context.Context, key string, kesClient KESClientI) *models.Er
 
 func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	api.EncryptionSetPolicyHandler = encryption.SetPolicyHandlerFunc(func(params encryption.SetPolicyParams, session *models.Principal) middleware.Responder {
-		err := GetSetPolicyResponse(session, params)
+		err := getSetPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewSetPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -383,7 +383,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionAssignPolicyHandler = encryption.AssignPolicyHandlerFunc(func(params encryption.AssignPolicyParams, session *models.Principal) middleware.Responder {
-		err := GetAssignPolicyResponse(session, params)
+		err := getAssignPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewAssignPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -391,7 +391,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDescribePolicyHandler = encryption.DescribePolicyHandlerFunc(func(params encryption.DescribePolicyParams, session *models.Principal) middleware.Responder {
-		resp, err := GetDescribePolicyResponse(session, params)
+		resp, err := getDescribePolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribePolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -399,7 +399,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionGetPolicyHandler = encryption.GetPolicyHandlerFunc(func(params encryption.GetPolicyParams, session *models.Principal) middleware.Responder {
-		resp, err := GetGetPolicyResponse(session, params)
+		resp, err := getGetPolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewGetPolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -407,7 +407,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListPoliciesHandler = encryption.ListPoliciesHandlerFunc(func(params encryption.ListPoliciesParams, session *models.Principal) middleware.Responder {
-		resp, err := GetListPoliciesResponse(session, params)
+		resp, err := getListPoliciesResponse(session, params)
 		if err != nil {
 			return encryption.NewListPoliciesDefault(int(err.Code)).WithPayload(err)
 		}
@@ -415,7 +415,7 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDeletePolicyHandler = encryption.DeletePolicyHandlerFunc(func(params encryption.DeletePolicyParams, session *models.Principal) middleware.Responder {
-		err := GetDeletePolicyResponse(session, params)
+		err := getDeletePolicyResponse(session, params)
 		if err != nil {
 			return encryption.NewDeletePolicyDefault(int(err.Code)).WithPayload(err)
 		}
@@ -423,10 +423,10 @@ func registerEncryptionPolicyHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetSetPolicyResponse(session *models.Principal, params encryption.SetPolicyParams) *models.Error {
+func getSetPolicyResponse(session *models.Principal, params encryption.SetPolicyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -448,10 +448,10 @@ func setPolicy(ctx context.Context, name string, content []byte, kesClient KESCl
 	return nil
 }
 
-func GetAssignPolicyResponse(session *models.Principal, params encryption.AssignPolicyParams) *models.Error {
+func getAssignPolicyResponse(session *models.Principal, params encryption.AssignPolicyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -465,10 +465,10 @@ func assignPolicy(ctx context.Context, policy, identity string, kesClient KESCli
 	return nil
 }
 
-func GetDescribePolicyResponse(session *models.Principal, params encryption.DescribePolicyParams) (*models.EncryptionDescribePolicyResponse, *models.Error) {
+func getDescribePolicyResponse(session *models.Principal, params encryption.DescribePolicyParams) (*models.EncryptionDescribePolicyResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -487,10 +487,10 @@ func describePolicy(ctx context.Context, policy string, kesClient KESClientI) (*
 	}, nil
 }
 
-func GetGetPolicyResponse(session *models.Principal, params encryption.GetPolicyParams) (*models.EncryptionGetPolicyResponse, *models.Error) {
+func getGetPolicyResponse(session *models.Principal, params encryption.GetPolicyParams) (*models.EncryptionGetPolicyResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -508,10 +508,10 @@ func getPolicy(ctx context.Context, policy string, kesClient KESClientI) (*model
 	}, nil
 }
 
-func GetListPoliciesResponse(session *models.Principal, params encryption.ListPoliciesParams) (*models.EncryptionListPoliciesResponse, *models.Error) {
+func getListPoliciesResponse(session *models.Principal, params encryption.ListPoliciesParams) (*models.EncryptionListPoliciesResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -549,10 +549,10 @@ func parsePolicies(results []kes.PolicyInfo) (data []*models.EncryptionPolicyInf
 	return data
 }
 
-func GetDeletePolicyResponse(session *models.Principal, params encryption.DeletePolicyParams) *models.Error {
+func getDeletePolicyResponse(session *models.Principal, params encryption.DeletePolicyParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}
@@ -568,7 +568,7 @@ func deletePolicy(ctx context.Context, policy string, kesClient KESClientI) *mod
 
 func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	api.EncryptionDescribeIdentityHandler = encryption.DescribeIdentityHandlerFunc(func(params encryption.DescribeIdentityParams, session *models.Principal) middleware.Responder {
-		resp, err := GetDescribeIdentityResponse(session, params)
+		resp, err := getDescribeIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribeIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -576,7 +576,7 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionDescribeSelfIdentityHandler = encryption.DescribeSelfIdentityHandlerFunc(func(params encryption.DescribeSelfIdentityParams, session *models.Principal) middleware.Responder {
-		resp, err := GetDescribeSelfIdentityResponse(session, params)
+		resp, err := getDescribeSelfIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDescribeSelfIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -584,14 +584,14 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 
 	api.EncryptionListIdentitiesHandler = encryption.ListIdentitiesHandlerFunc(func(params encryption.ListIdentitiesParams, session *models.Principal) middleware.Responder {
-		resp, err := GetListIdentitiesResponse(session, params)
+		resp, err := getListIdentitiesResponse(session, params)
 		if err != nil {
 			return encryption.NewListIdentitiesDefault(int(err.Code)).WithPayload(err)
 		}
 		return encryption.NewListIdentitiesOK().WithPayload(resp)
 	})
 	api.EncryptionDeleteIdentityHandler = encryption.DeleteIdentityHandlerFunc(func(params encryption.DeleteIdentityParams, session *models.Principal) middleware.Responder {
-		err := GetDeleteIdentityResponse(session, params)
+		err := getDeleteIdentityResponse(session, params)
 		if err != nil {
 			return encryption.NewDeleteIdentityDefault(int(err.Code)).WithPayload(err)
 		}
@@ -599,10 +599,10 @@ func registerEncryptionIdentityHandlers(api *operations.KesAPI) {
 	})
 }
 
-func GetDescribeIdentityResponse(session *models.Principal, params encryption.DescribeIdentityParams) (*models.EncryptionDescribeIdentityResponse, *models.Error) {
+func getDescribeIdentityResponse(session *models.Principal, params encryption.DescribeIdentityParams) (*models.EncryptionDescribeIdentityResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -623,10 +623,10 @@ func describeIdentity(ctx context.Context, identity string, kesClient KESClientI
 	}, nil
 }
 
-func GetDescribeSelfIdentityResponse(session *models.Principal, params encryption.DescribeSelfIdentityParams) (*models.EncryptionDescribeSelfIdentityResponse, *models.Error) {
+func getDescribeSelfIdentityResponse(session *models.Principal, params encryption.DescribeSelfIdentityParams) (*models.EncryptionDescribeSelfIdentityResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -650,10 +650,10 @@ func describeSelfIdentity(ctx context.Context, kesClient KESClientI) (*models.En
 	}, nil
 }
 
-func GetListIdentitiesResponse(session *models.Principal, params encryption.ListIdentitiesParams) (*models.EncryptionListIdentitiesResponse, *models.Error) {
+func getListIdentitiesResponse(session *models.Principal, params encryption.ListIdentitiesParams) (*models.EncryptionListIdentitiesResponse, *models.Error) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -693,10 +693,10 @@ func parseIdentities(results []kes.IdentityInfo) (data []*models.EncryptionIdent
 	return data
 }
 
-func GetDeleteIdentityResponse(session *models.Principal, params encryption.DeleteIdentityParams) *models.Error {
+func getDeleteIdentityResponse(session *models.Principal, params encryption.DeleteIdentityParams) *models.Error {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	kesClient, err := NewKESClient(session)
+	kesClient, err := newKESClient(session)
 	if err != nil {
 		return newDefaultAPIError(err)
 	}

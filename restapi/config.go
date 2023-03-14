@@ -85,7 +85,7 @@ func GetTLSPort() int {
 	return port
 }
 
-// If GetTLSRedirect is set to true, then only allow HTTPS requests. Default is true.
+// GetTLSRedirect if set to true, then only allow HTTPS requests. Default is true.
 func GetTLSRedirect() string {
 	return strings.ToLower(getEnv(ConsoleSecureTLSRedirect, TLSRedirect))
 }

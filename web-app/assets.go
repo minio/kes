@@ -21,6 +21,7 @@ import "embed"
 //go:embed build/*
 var fs embed.FS
 
+// GetStaticAssets returns the static assets for the UI.
 func GetStaticAssets() embed.FS {
 	return fs
 }

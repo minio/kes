@@ -129,6 +129,7 @@ func MkdirAllIgnorePerm(path string) error {
 	return err
 }
 
+// NewConfigDirFromCtx - returns a new config directory from the given context.
 func NewConfigDirFromCtx(cmd *flag.FlagSet, option string, getDefaultDir func() string) (*ConfigDir, bool, error) {
 	var dir string
 	var dirSet bool
@@ -203,6 +204,7 @@ func LoadX509KeyPair(certFile, keyFile string) (tls.Certificate, error) {
 	return tls.X509KeyPair(certPEMBlock, keyPEMBlock)
 }
 
+// GetTLSConfig - returns the TLS configuration for the console server.
 func GetTLSConfig() (x509Certs []*x509.Certificate, manager *xcerts.Manager, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -282,6 +284,7 @@ func GetTLSConfig() (x509Certs []*x509.Certificate, manager *xcerts.Manager, err
 	return x509Certs, manager, nil
 }
 
+// GetAllCertificatesAndCAs returns all the certificates and CAs
 func GetAllCertificatesAndCAs() (*x509.CertPool, []*x509.Certificate, *xcerts.Manager, error) {
 	// load all CAs from ~/.console/certs/CAs
 	rootCAs, err := xcerts.GetRootCAs(GlobalCertsCADir.Get())

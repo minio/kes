@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	SubPath = "CONSOLE_SUBPATH"
+	subPathConsole = "CONSOLE_SUBPATH"
 )
 
 var (
@@ -247,7 +247,7 @@ func replaceBaseInIndex(indexPageBytes []byte, basePath string) []byte {
 
 func getSubPath() string {
 	subPathOnce.Do(func() {
-		subPath = parseSubPath(env.Get(SubPath, ""))
+		subPath = parseSubPath(env.Get(subPathConsole, ""))
 	})
 	return subPath
 }
@@ -290,14 +290,14 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
-	next := AuthenticationMiddleware(handler)
+	next := authenticationMiddleware(handler)
 	next = FileServerMiddleware(next)
 	return next
 }
 
-func AuthenticationMiddleware(next http.Handler) http.Handler {
+func authenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenCookie, _ := r.Cookie(CookieName)
+		tokenCookie, _ := r.Cookie(cookieName)
 		var token string
 		if tokenCookie != nil {
 			token = tokenCookie.Value

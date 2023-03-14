@@ -51,7 +51,7 @@ func registerLoginHandlers(api *operations.KesAPI) {
 			return authApi.NewLoginDefault(int(err.Code)).WithPayload(err)
 		}
 		return middleware.ResponderFunc(func(w http.ResponseWriter, p runtime.Producer) {
-			cookie := NewSessionCookieForConsole(loginResponse.SessionID)
+			cookie := newSessionCookieForConsole(loginResponse.SessionID)
 			http.SetCookie(w, &cookie)
 			authApi.NewLoginNoContent().WriteResponse(w, p)
 		})
@@ -59,7 +59,7 @@ func registerLoginHandlers(api *operations.KesAPI) {
 
 	api.AuthLogoutHandler = authApi.LogoutHandlerFunc(func(params authApi.LogoutParams, session *models.Principal) middleware.Responder {
 		return middleware.ResponderFunc(func(w http.ResponseWriter, p runtime.Producer) {
-			cookie := RemoveSessionCookie()
+			cookie := removeSessionCookie()
 			http.SetCookie(w, &cookie)
 			authApi.NewLogoutOK().WriteResponse(w, p)
 		})
