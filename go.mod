@@ -28,8 +28,10 @@ require (
 	github.com/muesli/termenv v0.11.1-0.20220204035834-5ac8409525e0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.39.0
+	github.com/secure-io/sio-go v0.3.1
 	github.com/spf13/pflag v1.0.5
 	github.com/tinylib/msgp v1.1.8
+	github.com/xdg-go/pbkdf2 v1.0.0
 	golang.org/x/crypto v0.6.0
 	golang.org/x/net v0.7.0
 	golang.org/x/sys v0.5.0

@@ -104,7 +104,11 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 		if err != nil {
 			return nil, invalidSession
 		}
-		content := strings.Split(string(data), "||")
+		plaintext, err := decrypt(data)
+		if err != nil {
+			return nil, invalidSession
+		}
+		content := strings.Split(string(plaintext), "||")
 		if len(content) != 3 {
 			return nil, invalidSession
 		}
