@@ -120,7 +120,7 @@ func newKESClient(session *models.Principal) (*kes.Client, error) {
 		return nil, err
 	}
 	addr := DefaultServer
-	if env, ok := os.LookupEnv("CONSOLE_KES_SERVER"); ok {
+	if env, ok := os.LookupEnv("KES_SERVER"); ok {
 		addr = env
 	}
 	return kes.NewClientWithConfig(addr, &tls.Config{

@@ -14,16 +14,15 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme } from "@mui/material";
-import { createStyles, withStyles } from "@mui/styles";
+import { Grid } from "@mui/material";
 import {
   AddIcon,
   Button,
+  DataTable,
+  Grid as GridMDS,
+  PageHeader,
   RefreshIcon,
   Tooltip,
-  Grid as GridMDS,
-  DataTable,
-  PageHeader,
 } from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,13 +36,7 @@ import { ROUTES } from "../../valid-routes";
 
 const DeleteKMSModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) => createStyles({});
-
-interface IPoliciesProps {
-  classes: any;
-}
-
-const ListPolicies = ({ classes }: IPoliciesProps) => {
+const ListPolicies = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<string>("");
@@ -130,7 +123,7 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      <PageHeader label="Key Management Service Policies" />
+      <PageHeader label="Policies" />
       <PageLayout>
         <Grid container spacing={1}>
           <Grid
@@ -145,23 +138,11 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
               },
             }}
           >
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <SearchBox
               onChange={setFilter}
               placeholder="Search Policies with pattern"
               value={filter}
             />
-            {/* </SecureComponent> */}
-
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Refresh"}>
               <Button
                 id={"refresh-policies"}
@@ -170,13 +151,6 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
                 onClick={() => setLoading(true)}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
-
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_SET_POLICY]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Create Policy"}>
               <Button
                 id={"create-policy"}
@@ -186,14 +160,8 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
                 onClick={() => navigate(ROUTES.ENCRYPTION_POLICIES_ADD)}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_POLICIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <GridMDS item xs={12}>
               <DataTable
                 itemActions={tableActions}
@@ -216,7 +184,6 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
                 idField={"name"}
               />
             </GridMDS>
-            {/* </SecureComponent> */}
           </Grid>
         </Grid>
       </PageLayout>
@@ -224,4 +191,4 @@ const ListPolicies = ({ classes }: IPoliciesProps) => {
   );
 };
 
-export default withStyles(styles)(ListPolicies);
+export default ListPolicies;

@@ -14,11 +14,17 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme } from "@mui/material";
-import { DataTable, Grid as GridMDS, PageHeader, Tooltip } from "mds";
-
-import { createStyles, withStyles } from "@mui/styles";
-import { AddIcon, Button, RefreshIcon, UploadIcon } from "mds";
+import { Grid } from "@mui/material";
+import {
+  AddIcon,
+  Button,
+  DataTable,
+  Grid as GridMDS,
+  PageHeader,
+  RefreshIcon,
+  Tooltip,
+  UploadIcon,
+} from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
@@ -31,13 +37,7 @@ import { ROUTES } from "../../valid-routes";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) => createStyles({});
-
-interface IKeysProps {
-  classes: any;
-}
-
-const ListKeys = ({ classes }: IKeysProps) => {
+const ListKeys = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
@@ -120,7 +120,7 @@ const ListKeys = ({ classes }: IKeysProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      <PageHeader label="Key Management Service Keys" />
+      <PageHeader label="Keys" />
       <PageLayout>
         <Grid container spacing={1}>
           <Grid
@@ -135,23 +135,11 @@ const ListKeys = ({ classes }: IKeysProps) => {
               },
             }}
           >
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <SearchBox
               onChange={setFilter}
               placeholder="Search Keys with pattern"
               value={filter}
             />
-            {/* </SecureComponent> */}
-
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Refresh"}>
               <Button
                 id={"refresh-keys"}
@@ -160,12 +148,6 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 onClick={() => setLoading(true)}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_IMPORT_KEY]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Import Key"}>
               <Button
                 id={"import-key"}
@@ -176,12 +158,6 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 }}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_CREATE_KEY]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Create Key"}>
               <Button
                 id={"create-key"}
@@ -191,14 +167,8 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 onClick={() => navigate(ROUTES.ENCRYPTION_KEYS_ADD)}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_KEYS]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <GridMDS item xs={12}>
               <DataTable
                 itemActions={tableActions}
@@ -221,7 +191,6 @@ const ListKeys = ({ classes }: IKeysProps) => {
                 idField={"name"}
               />
             </GridMDS>
-            {/* </SecureComponent> */}
           </Grid>
         </Grid>
       </PageLayout>
@@ -229,4 +198,4 @@ const ListKeys = ({ classes }: IKeysProps) => {
   );
 };
 
-export default withStyles(styles)(ListKeys);
+export default ListKeys;

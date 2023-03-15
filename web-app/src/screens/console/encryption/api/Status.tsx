@@ -15,9 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React, { Fragment, useEffect, useState } from "react";
-import { Theme } from "@mui/material/styles";
-import createStyles from "@mui/styles/createStyles";
-import withStyles from "@mui/styles/withStyles";
 import { Box, Grid } from "@mui/material";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
@@ -35,8 +32,6 @@ import LabelWithIcon from "../../common/LabelWithIcon";
 
 import SupportedEndpoints from "./SupportedEndpoints";
 import Metrics from "./Metrics";
-
-const styles = (theme: Theme) => createStyles({});
 
 const Status = () => {
   const dispatch = useAppDispatch();
@@ -163,8 +158,7 @@ const Status = () => {
 
   return (
     <Fragment>
-      <PageHeader label="Key Management Service" />
-
+      <PageHeader label="Status" />
       <PageLayout>
         <Tabs
           value={curTab}
@@ -183,15 +177,15 @@ const Status = () => {
             aria-controls="simple-tabpanel-0"
           /> */}
           <Tab
-            label="APIs"
+            label="Metrics"
             id="simple-tab-1"
             aria-controls="simple-tabpanel-1"
+            onClick={() => {}}
           />
           <Tab
-            label="Metrics"
+            label="APIs"
             id="simple-tab-2"
             aria-controls="simple-tabpanel-2"
-            onClick={() => {}}
           />
         </Tabs>
 
@@ -218,7 +212,7 @@ const Status = () => {
               padding: "43px",
             }}
           >
-            <SupportedEndpoints />
+            <Metrics />
           </Box>
         </TabPanel>
         <TabPanel index={1} value={curTab}>
@@ -231,9 +225,10 @@ const Status = () => {
               padding: "43px",
             }}
           >
-            <Metrics />
+            <SupportedEndpoints />
           </Box>
         </TabPanel>
+
         {false && (
           <TabPanel index={1} value={curTab}>
             <Box
@@ -254,4 +249,4 @@ const Status = () => {
   );
 };
 
-export default withStyles(styles)(Status);
+export default Status;

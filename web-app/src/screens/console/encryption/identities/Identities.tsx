@@ -14,15 +14,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Grid, Theme } from "@mui/material";
-import { createStyles, withStyles } from "@mui/styles";
+import { Grid } from "@mui/material";
 import {
   Button,
-  RefreshIcon,
   DataTable,
-  Tooltip,
   Grid as GridMDS,
   PageHeader,
+  RefreshIcon,
+  Tooltip,
 } from "mds";
 import React, { useEffect, useState } from "react";
 import { useAppDispatch } from "../../../../app/hooks";
@@ -34,13 +33,7 @@ import SearchBox from "../../common/SearchBox";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
-const styles = (theme: Theme) => createStyles({});
-
-interface IIdentitiesProps {
-  classes: any;
-}
-
-const ListIdentities = ({ classes }: IIdentitiesProps) => {
+const ListIdentities = () => {
   const dispatch = useAppDispatch();
   const [filter, setFilter] = useState<string>("");
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
@@ -119,7 +112,7 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      <PageHeader label="Key Management Service Identities" />
+      <PageHeader label="Identities" />
       <PageLayout>
         <Grid container spacing={1}>
           <Grid
@@ -134,22 +127,11 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
               },
             }}
           >
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <SearchBox
               onChange={setFilter}
               placeholder="Search Identities with pattern"
               value={filter}
             />
-            {/* </SecureComponent> */}
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <Tooltip placement="bottom" tooltip={"Refresh"}>
               <Button
                 id={"refresh-identities"}
@@ -158,14 +140,8 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
                 onClick={() => setLoading(true)}
               />
             </Tooltip>
-            {/* </SecureComponent> */}
           </Grid>
           <Grid item xs={12}>
-            {/* <SecureComponent
-              scopes={[IAM_SCOPES.KMS_LIST_IDENTITIES]}
-              resource={CONSOLE_UI_RESOURCE}
-              errorProps={{ disabled: true }}
-            > */}
             <GridMDS item xs={12}>
               <DataTable
                 itemActions={tableActions}
@@ -188,7 +164,6 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
                 idField="identity"
               />
             </GridMDS>
-            {/* </SecureComponent> */}
           </Grid>
         </Grid>
       </PageLayout>
@@ -196,4 +171,4 @@ const ListIdentities = ({ classes }: IIdentitiesProps) => {
   );
 };
 
-export default withStyles(styles)(ListIdentities);
+export default ListIdentities;

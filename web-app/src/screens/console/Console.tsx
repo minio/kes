@@ -16,11 +16,8 @@
 
 import React, { Fragment, Suspense, useEffect, useState } from "react";
 import { Theme } from "@mui/material/styles";
-import createStyles from "@mui/styles/createStyles";
-import withStyles from "@mui/styles/withStyles";
 import CssBaseline from "@mui/material/CssBaseline";
 import Snackbar from "@mui/material/Snackbar";
-//   import { ErrorResponseHandler } from "../../common/types";
 import Menu from "./menu/Menu";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -38,48 +35,46 @@ import Policies from "./encryption/policies/Policies";
 import AddPolicy from "./encryption/policies/AddPolicy";
 import PolicyDetails from "./encryption/policies/PolicyDetails";
 import Identities from "./encryption/identities/Identities";
+import makeStyles from "@mui/styles/makeStyles/makeStyles";
+import { snackBarCommon } from "./common/styleLibrary";
 
-const styles = (theme: Theme) =>
-  createStyles({
-    root: {
-      display: "flex",
-      "& .MuiPaper-root.MuiSnackbarContent-root": {
-        borderRadius: "0px 0px 5px 5px",
-        boxShadow: "none",
-      },
+const useStyles = makeStyles((theme: Theme) => ({
+  root: {
+    display: "flex",
+    "& .MuiPaper-root.MuiSnackbarContent-root": {
+      borderRadius: "0px 0px 5px 5px",
+      boxShadow: "none",
     },
-    content: {
-      flexGrow: 1,
-      height: "100vh",
-      overflow: "auto",
-      position: "relative",
+  },
+  content: {
+    flexGrow: 1,
+    height: "100vh",
+    overflow: "auto",
+    position: "relative",
+  },
+  warningBar: {
+    background: theme.palette.primary.main,
+    color: "white",
+    heigh: "60px",
+    widht: "100%",
+    lineHeight: "60px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    "& button": {
+      marginLeft: 8,
     },
-    warningBar: {
-      background: theme.palette.primary.main,
-      color: "white",
-      heigh: "60px",
-      widht: "100%",
-      lineHeight: "60px",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      "& button": {
-        marginLeft: 8,
-      },
-    },
-    progress: {
-      height: "3px",
-      backgroundColor: "#eaeaea",
-    },
-    // ...snackBarCommon,
-  });
+  },
+  progress: {
+    height: "3px",
+    backgroundColor: "#eaeaea",
+  },
+  ...snackBarCommon,
+}));
 
-interface IConsoleProps {
-  classes: any;
-}
-
-const Console = ({ classes }: IConsoleProps) => {
+const Console = () => {
   const dispatch = useAppDispatch();
+  const classes = useStyles();
   // const sidebarOpen = useAppSelector((state) => state.system.sidebarOpen);
   // const session = useAppSelector((state) => state.console.session);
   const snackBar = useAppSelector((state) => state.system.snackBar);
@@ -196,9 +191,6 @@ const Console = ({ classes }: IConsoleProps) => {
               }}
             />
           </div>
-          {/* <Suspense fallback={<LoadingComponent />}>
-                <ObjectManager />
-              </Suspense> */}
           <Routes>
             {consoleRoutes.map((route: any) => (
               <Route
@@ -214,9 +206,8 @@ const Console = ({ classes }: IConsoleProps) => {
           </Routes>
         </main>
       </div>
-      {/* ) : null} */}
     </Fragment>
   );
 };
 
-export default withStyles(styles)(Console);
+export default Console;
