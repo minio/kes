@@ -1079,9 +1079,12 @@ func edgeListKey(config *EdgeRouterConfig) API {
 			hasWritten bool
 			encoder    = json.NewEncoder(w)
 		)
-		for iterator.Next() {
-			name := iterator.Name()
-			if ok, _ := path.Match(pattern, name); !ok || name == "" {
+		for {
+			name, ok := iterator.Next()
+			if !ok {
+				break
+			}
+			if ok, _ = path.Match(pattern, name); !ok || name == "" {
 				continue
 			}
 			if !hasWritten {

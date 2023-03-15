@@ -78,9 +78,8 @@ var _ kms.Conn = (*Conn)(nil) // compiler check
 // Connect establishes and returns a Conn to a Fortanix SDKMS server
 // using the given config.
 func Connect(ctx context.Context, config *Config) (*Conn, error) {
-	if config == nil {
-	}
 	if config.Endpoint == "" {
+		return nil, errors.New("fortanix: endpoint is empty")
 	}
 
 	var tlsConfig *tls.Config

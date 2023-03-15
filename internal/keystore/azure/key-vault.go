@@ -310,7 +310,7 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 
 // ConnectWithCredentials tries to establish a connection to a Azure KeyVault
 // instance using Azure client credentials.
-func ConnectWithCredentials(ctx context.Context, endpoint string, creds Credentials) (*Conn, error) {
+func ConnectWithCredentials(_ context.Context, endpoint string, creds Credentials) (*Conn, error) {
 	const Scope = "https://vault.azure.net"
 
 	c := auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
@@ -330,7 +330,7 @@ func ConnectWithCredentials(ctx context.Context, endpoint string, creds Credenti
 
 // ConnectWithIdentity tries to establish a connection to a Azure KeyVault
 // instance using an Azure managed identity.
-func ConnectWithIdentity(ctx context.Context, endpoint string, msi ManagedIdentity) (*Conn, error) {
+func ConnectWithIdentity(_ context.Context, endpoint string, msi ManagedIdentity) (*Conn, error) {
 	const Scope = "https://vault.azure.net"
 
 	c := auth.NewMSIConfig()

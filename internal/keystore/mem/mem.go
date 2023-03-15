@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Store is an in-memory key-value store. Its zero value is
@@ -20,12 +20,12 @@ type Store struct {
 	store map[string][]byte
 }
 
-var _ kms.Conn = (*Store)(nil)
+var _ kv.Store[string, []byte] = (*Store)(nil)
 
 // Status returns the state of the in-memory key store which is
 // always healthy.
-func (s *Store) Status(_ context.Context) (kms.State, error) {
-	return kms.State{
+func (s *Store) Status(_ context.Context) (kv.State, error) {
+	return kv.State{
 		Latency: 0,
 	}, nil
 }
@@ -45,6 +45,13 @@ func (s *Store) Create(_ context.Context, name string, value []byte) error {
 	}
 	s.store[name] = value
 	return nil
+}
+
+// Set adds the given key to the store if and only if
+// no entry for the given name exists. If an entry already
+// exists it returns kes.ErrKeyExists.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
 }
 
 // Delete removes the key with the given value, if it exists.
@@ -70,7 +77,7 @@ func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 }
 
 // List returns a new iterator over the metadata of all stored keys.
-func (s *Store) List(ctx context.Context) (kms.Iter, error) {
+func (s *Store) List(context.Context) (kv.Iter[string], error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -85,20 +92,17 @@ func (s *Store) List(ctx context.Context) (kms.Iter, error) {
 
 type iterator struct {
 	values []string
-	last   string
 }
 
-var _ kms.Iter = (*iterator)(nil)
+var _ kv.Iter[string] = (*iterator)(nil)
 
-func (i *iterator) Next() bool {
+func (i *iterator) Next() (string, bool) {
 	if len(i.values) > 0 {
-		i.last = i.values[0]
+		v := i.values[0]
 		i.values = i.values[1:]
-		return true
+		return v, true
 	}
-	return false
+	return "", false
 }
-
-func (i *iterator) Name() string { return i.last }
 
 func (*iterator) Close() error { return nil }

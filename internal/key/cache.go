@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Typed errors that are returned to the client.
@@ -108,7 +108,7 @@ type cacheEntry struct {
 }
 
 // Status returns the current state of the Store.
-func (c *Cache) Status(ctx context.Context) (kms.State, error) { return c.Store.Status(ctx) }
+func (c *Cache) Status(ctx context.Context) (kv.State, error) { return c.Store.Status(ctx) }
 
 // Create stors the givem key at the Store if and
 // only if no entry with the given name exists.
@@ -161,7 +161,7 @@ func (c *Cache) Delete(ctx context.Context, name string) error {
 }
 
 // List returns a new Iterator over the Store.
-func (c *Cache) List(ctx context.Context) (kms.Iter, error) {
+func (c *Cache) List(ctx context.Context) (kv.Iter[string], error) {
 	i, err := c.Store.List(ctx)
 	if err != nil {
 		return nil, errListKey
