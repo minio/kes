@@ -468,6 +468,8 @@ definitions:
         type: string
       clientKey:
         type: string
+      apiKey:
+        type: string
       insecure:
         type: boolean
   error:

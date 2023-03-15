@@ -34,6 +34,9 @@ import (
 // swagger:model principal
 type Principal struct {
 
+	// api key
+	APIKey string `json:"apiKey,omitempty"`
+
 	// client certificate
 	ClientCertificate string `json:"clientCertificate,omitempty"`
 

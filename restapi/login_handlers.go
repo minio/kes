@@ -70,6 +70,10 @@ func registerLoginHandlers(api *operations.KesAPI) {
 func getLoginResponse(params authApi.LoginParams) (*models.LoginResponse, *models.Error) {
 	insecure := params.HTTPRequest.FormValue("insecure")
 	certBuf, err := getCertificateContent(params)
+	apiKey := ""
+	if params.APIKey != nil {
+		apiKey = *params.APIKey
+	}
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -81,7 +85,7 @@ func getLoginResponse(params authApi.LoginParams) (*models.LoginResponse, *model
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
-	session := fmt.Sprintf("%s||%s||%s", certBuf, keyBuf, insecure)
+	session := fmt.Sprintf("%s||%s||%s||%s", apiKey, certBuf, keyBuf, insecure)
 	cipherText, err := encrypt([]byte(session))
 	if err != nil {
 		return nil, newDefaultAPIError(err)

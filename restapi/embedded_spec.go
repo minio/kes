@@ -1153,6 +1153,9 @@ func init() {
     "principal": {
       "type": "object",
       "properties": {
+        "apiKey": {
+          "type": "string"
+        },
         "clientCertificate": {
           "type": "string"
         },
@@ -2320,6 +2323,9 @@ func init() {
     "principal": {
       "type": "object",
       "properties": {
+        "apiKey": {
+          "type": "string"
+        },
         "clientCertificate": {
           "type": "string"
         },

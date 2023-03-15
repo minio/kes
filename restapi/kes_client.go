@@ -3,6 +3,7 @@ package restapi
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"os"
 
 	"github.com/minio/kes-go"
@@ -115,7 +116,7 @@ func (k KESClient) deleteIdentity(ctx context.Context, name string) error {
 
 func newKESClient(session *models.Principal) (*kes.Client, error) {
 	const DefaultServer = "https://127.0.0.1:7373"
-	cert, err := tls.X509KeyPair([]byte(session.ClientCertificate), []byte(session.ClientKey))
+	cert, err := getKESCertificate(session)
 	if err != nil {
 		return nil, err
 	}
@@ -127,4 +128,18 @@ func newKESClient(session *models.Principal) (*kes.Client, error) {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: session.Insecure,
 	}), nil
+}
+
+func getKESCertificate(session *models.Principal) (tls.Certificate, error) {
+	if session.APIKey != "" {
+		if session.ClientCertificate != "" || session.ClientKey != "" {
+			return tls.Certificate{}, errors.New("cannot use both API key and client certificate and key")
+		}
+		key, err := kes.ParseAPIKey(session.APIKey)
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+		return kes.GenerateCertificate(key)
+	}
+	return tls.X509KeyPair([]byte(session.ClientCertificate), []byte(session.ClientKey))
 }

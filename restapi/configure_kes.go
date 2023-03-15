@@ -109,21 +109,24 @@ func configureAPI(api *operations.KesAPI) http.Handler {
 			return nil, invalidSession
 		}
 		content := strings.Split(string(plaintext), "||")
-		if len(content) != 3 {
+		if len(content) != 4 {
 			return nil, invalidSession
 		}
-		clientCertificate := content[0]
-		clientKey := content[1]
-		insecure := content[2]
-		_, err = tls.X509KeyPair([]byte(clientCertificate), []byte(clientKey))
-		if err != nil {
-			return nil, invalidSession
-		}
-		return &models.Principal{
+		apiKey := content[0]
+		clientCertificate := content[1]
+		clientKey := content[2]
+		insecure := content[3]
+		session := &models.Principal{
+			APIKey:            apiKey,
 			ClientCertificate: clientCertificate,
 			ClientKey:         clientKey,
 			Insecure:          insecure == "true",
-		}, nil
+		}
+		_, err = getKESCertificate(session)
+		if err != nil {
+			return nil, invalidSession
+		}
+		return session, nil
 	}
 
 	// Set your custom authorizer if needed. Default one is security.Authorized()
