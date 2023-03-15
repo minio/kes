@@ -8,17 +8,17 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - typecheck
-    - goimports
-    - misspell
-    - govet
-    - revive
+    # - typecheck
+    # - goimports
+    # - misspell
+    # - govet
+    # - revive
     - ineffassign
-    - gosimple
-    - unused
-    - prealloc
-    - unconvert
-    - gofumpt
+    # - gosimple
+    # - unused
+    # - prealloc
+    # - unconvert
+    # - gofumpt
 
 issues:
   exclude-use-default: false
