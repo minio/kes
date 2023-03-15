@@ -21,7 +21,6 @@ import (
 	"github.com/minio/kes/internal/keystore/gemalto"
 	"github.com/minio/kes/internal/keystore/generic"
 	kesstore "github.com/minio/kes/internal/keystore/kes"
-	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/keystore/vault"
 	"github.com/minio/kes/kms"
 	"gopkg.in/yaml.v3"
@@ -324,12 +323,6 @@ type KMSConfig interface {
 
 	fromYAML(yml *serverConfigYAML)
 }
-
-type memConfig struct{}
-
-func (*memConfig) Connect(context.Context) (kms.Conn, error) { return new(mem.Store), nil }
-func (*memConfig) toYAML(*serverConfigYAML)                  {}
-func (*memConfig) fromYAML(*serverConfigYAML)                {}
 
 // FSConfig is a structure containing the configuration
 // for a simple filesystem KMS.

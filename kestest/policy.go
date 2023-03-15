@@ -175,7 +175,7 @@ type identitySet struct {
 	roles map[kes.Identity]auth.IdentityInfo
 }
 
-func (i *identitySet) Admin(ctx context.Context) (kes.Identity, error) { return i.admin, nil }
+func (i *identitySet) Admin(context.Context) (kes.Identity, error) { return i.admin, nil }
 
 func (i *identitySet) SetAdmin(context.Context, kes.Identity) error {
 	return kes.NewError(http.StatusNotImplemented, "cannot set admin identity")

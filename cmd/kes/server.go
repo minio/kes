@@ -199,7 +199,7 @@ func startServer(path string, sConfig serverConfig) {
 		}
 	}
 
-	vault, err := fs.Open(path, log.Default())
+	vault, err := fs.Open(path)
 	if err != nil {
 		cli.Fatalf("failed to initialize vault: %v", err)
 	}
