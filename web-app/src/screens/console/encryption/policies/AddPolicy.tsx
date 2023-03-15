@@ -52,7 +52,7 @@ const AddPolicy = () => {
     event.preventDefault();
     let data = JSON.parse(policyDefinition);
     data["policy"] = policy;
-    invokeApi("POST", "/api/v1/kms/policies/", data);
+    invokeApi("POST", "/api/v1/encryption/policies/", data);
   };
 
   const validatePolicy = (policy: string) => {

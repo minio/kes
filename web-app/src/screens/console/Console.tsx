@@ -78,9 +78,6 @@ const Console = () => {
   // const sidebarOpen = useAppSelector((state) => state.system.sidebarOpen);
   // const session = useAppSelector((state) => state.console.session);
   const snackBar = useAppSelector((state) => state.system.snackBar);
-  // const snackBarMessage = useSelector(
-  //   (state: AppState) => state.system.snackBar
-  // );
   // const loadingProgress = useSelector(
   //   (state: AppState) => state.system.loadingProgress
   // );
@@ -161,9 +158,7 @@ const Console = () => {
       return;
     }
     // Open SnackBar
-    if (snackBar.type !== "error") {
-      setOpenSnackbar(true);
-    }
+    setOpenSnackbar(true);
   }, [snackBar]);
 
   return (
@@ -181,7 +176,7 @@ const Console = () => {
               onClose={() => {
                 closeSnackBar();
               }}
-              autoHideDuration={snackBar.type === "error" ? 10000 : 5000}
+              autoHideDuration={5000}
               message={snackBar.message}
               className={classes.snackBarExternal}
               ContentProps={{

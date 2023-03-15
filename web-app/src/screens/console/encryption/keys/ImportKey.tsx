@@ -49,7 +49,7 @@ const ImportKey = () => {
   const importRecord = (event: React.FormEvent) => {
     event.preventDefault();
     let data = JSON.parse(keyContent);
-    invokeApi("POST", `/api/v1/kms/keys/${keyName}/import`, data);
+    invokeApi("POST", `/api/v1/encryption/keys/${keyName}/import`, data);
   };
 
   const resetForm = () => {

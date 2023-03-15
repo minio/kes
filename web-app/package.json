@@ -2,7 +2,7 @@
   "name": "web-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": ".",
+  "homepage": "",
   "dependencies": {
     "@emotion/react": "^11.10.5",
     "@emotion/styled": "^11.10.5",
@@ -55,7 +55,10 @@
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "rules": {
+      "react/jsx-no-target-blank": "off"
+    }
   },
   "browserslist": {
     "production": [
@@ -68,5 +71,6 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "main": "index.tsx"
 }

@@ -117,7 +117,7 @@ const ListPolicies = () => {
           deleteOpen={deleteOpen}
           withWarning={false}
           selectedItem={selectedPolicy}
-          endpoint={"/api/v1/kms/policies/"}
+          endpoint={"/api/v1/encryption/policies/"}
           element={"Policy"}
           label={"Delete Policy"}
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}

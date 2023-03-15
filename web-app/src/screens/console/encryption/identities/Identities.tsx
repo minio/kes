@@ -106,7 +106,7 @@ const ListIdentities = () => {
           deleteOpen={deleteOpen}
           withWarning={false}
           selectedItem={selectedIdentity}
-          endpoint={"/api/v1/kms/identities/"}
+          endpoint={"/api/v1/encryption/identities/"}
           element={"Identity"}
           label={"Delete Identity"}
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
