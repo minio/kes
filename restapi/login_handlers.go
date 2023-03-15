@@ -78,6 +78,9 @@ func getLoginResponse(params authApi.LoginParams) (*models.LoginResponse, *model
 		return nil, newDefaultAPIError(err)
 	}
 	_, err = tls.X509KeyPair(certBuf, keyBuf)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
 	session := fmt.Sprintf("%s||%s||%s", certBuf, keyBuf, insecure)
 	cipherText, err := encrypt([]byte(session))
 	if err != nil {

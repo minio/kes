@@ -42,8 +42,8 @@ const (
 	cookieName         = "kes-ui-token"
 	aesGcm             = 0x00
 	c20p1305           = 0x01
-	KESPBKDFPassphrase = "KES_PBKDF_PASSPHRASE"
-	KESPBKDFSalt       = "KES_PBKDF_SALT"
+	kesPBKDFPassphrase = "KES_PBKDF_PASSPHRASE"
+	kesPBKDFSalt       = "KES_PBKDF_SALT"
 	letters            = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
 )
 
@@ -67,11 +67,11 @@ func randomCharString(n int) string {
 }
 
 func getPBKDFPassphrase() string {
-	return env.Get(KESPBKDFPassphrase, defaultPBKDFPassphrase)
+	return env.Get(kesPBKDFPassphrase, defaultPBKDFPassphrase)
 }
 
 func getPBKDFSalt() string {
-	return env.Get(KESPBKDFSalt, defaultPBKDFSalt)
+	return env.Get(kesPBKDFSalt, defaultPBKDFSalt)
 }
 
 var derivedKey = func() []byte {
