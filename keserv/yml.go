@@ -11,8 +11,6 @@ import (
 )
 
 type serverConfigYAML struct {
-	Version string `yaml:"version"`
-
 	Addr Env[string] `yaml:"address,omitempty"`
 
 	Admin struct {
@@ -195,10 +193,7 @@ type serverConfigYAML struct {
 }
 
 func serverConfigToYAML(config *ServerConfig) *serverConfigYAML {
-	const Version = "v1"
-
 	yml := new(serverConfigYAML)
-	yml.Version = Version
 	yml.Addr = config.Addr
 	yml.Admin.Identity = config.Admin
 
@@ -339,8 +334,6 @@ func yamlToServerConfig(yml *serverConfigYAML) *ServerConfig {
 		config.KMS = new(KeyVaultConfig)
 	case yml.KeyStore.Gemalto.KeySecure.Endpoint.Value != "":
 		config.KMS = new(KeySecureConfig)
-	default:
-		config.KMS = new(memConfig)
 	}
 	config.KMS.fromYAML(yml)
 	return config

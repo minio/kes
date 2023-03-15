@@ -10,14 +10,14 @@ import (
 	"log"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Store is a key store that reads/writes
 // keys from/to a KMS via a kms.Conn.
 type Store struct {
 	// Conn is the connection to the KMS.
-	Conn kms.Conn
+	Conn kv.Store[string, []byte]
 
 	// ErrorLog is an optional Logger for
 	// errors that may occur when reading
@@ -30,7 +30,7 @@ type Store struct {
 //
 // Status returns kms.Unreachable when it
 // fails to reach the KMS.
-func (s *Store) Status(ctx context.Context) (kms.State, error) { return s.Conn.Status(ctx) }
+func (s *Store) Status(ctx context.Context) (kv.State, error) { return s.Conn.Status(ctx) }
 
 // Create creates a new entry with the the
 // given key if and only if no entry for the
@@ -91,7 +91,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 //
 // The returned Iter stops fetching entries
 // from the KMS once ctx.Done() returns.
-func (s *Store) List(ctx context.Context) (kms.Iter, error) {
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	iter, err := s.Conn.List(ctx)
 	if err != nil {
 		logln(s.ErrorLog, err)

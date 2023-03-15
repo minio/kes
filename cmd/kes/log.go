@@ -87,7 +87,7 @@ func logCmd(args []string) {
 				cli.Fatal(err)
 			}
 		} else {
-			printAuditLog(ctx, stream)
+			printAuditLog(stream)
 		}
 	case errorFlag:
 		stream, err := client.ErrorLog(ctx)
@@ -104,7 +104,7 @@ func logCmd(args []string) {
 				cli.Fatal(err)
 			}
 		} else {
-			printErrorLog(ctx, stream)
+			printErrorLog(stream)
 		}
 	default:
 		cmd.Usage()
@@ -112,7 +112,7 @@ func logCmd(args []string) {
 	}
 }
 
-func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
+func printAuditLog(stream *kes.AuditStream) {
 	var (
 		statStyleFail    = tui.NewStyle().Foreground(tui.Color("#ff0000")).Width(5)
 		statStyleSuccess = tui.NewStyle().Foreground(tui.Color("#00ff00")).Width(5)
@@ -175,7 +175,7 @@ func printAuditLog(ctx context.Context, stream *kes.AuditStream) {
 	}
 }
 
-func printErrorLog(ctx context.Context, stream *kes.ErrorStream) {
+func printErrorLog(stream *kes.ErrorStream) {
 	for stream.Next() {
 		fmt.Println(stream.Event().Message)
 	}

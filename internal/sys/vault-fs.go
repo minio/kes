@@ -36,12 +36,12 @@ type vaultFS struct {
 	rootKey key.Key
 }
 
-func (v *vaultFS) Seal(ctx context.Context) error {
+func (v *vaultFS) Seal(context.Context) error {
 	v.rootKey = key.Key{}
 	return nil
 }
 
-func (v *vaultFS) Unseal(ctx context.Context, unsealKeys ...UnsealKey) error {
+func (v *vaultFS) Unseal(_ context.Context, unsealKeys ...UnsealKey) error {
 	file, err := os.Open(filepath.Join(v.rootDir, ".unseal"))
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (v *vaultFS) Unseal(ctx context.Context, unsealKeys ...UnsealKey) error {
 	if err = stanza.UnmarshalBinary(buffer.Bytes()); err != nil {
 		return err
 	}
-	rootKeyBytes, err := UnsealFromEnvironment().Unseal(&stanza)
+	rootKeyBytes, err := UnsealFromEnvironment().Unseal(&stanza, unsealKeys...)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (v *vaultFS) Unseal(ctx context.Context, unsealKeys ...UnsealKey) error {
 	return nil
 }
 
-func (v *vaultFS) Admin(ctx context.Context) (kes.Identity, error) {
+func (v *vaultFS) Admin(context.Context) (kes.Identity, error) {
 	return v.rootKey.CreatedBy(), nil
 }
 
@@ -153,7 +153,7 @@ func (v *vaultFS) CreateEnclave(ctx context.Context, name string, admin kes.Iden
 	return info, nil
 }
 
-func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error) {
+func (v *vaultFS) GetEnclave(_ context.Context, name string) (*Enclave, error) {
 	if err := valid(name); err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (v *vaultFS) GetEnclave(ctx context.Context, name string) (*Enclave, error)
 	return NewEnclave(keyFS, secretFS, policyFS, identityFS), nil
 }
 
-func (v *vaultFS) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo, error) {
+func (v *vaultFS) GetEnclaveInfo(_ context.Context, name string) (EnclaveInfo, error) {
 	if err := valid(name); err != nil {
 		return EnclaveInfo{}, err
 	}
@@ -220,7 +220,7 @@ func (v *vaultFS) GetEnclaveInfo(ctx context.Context, name string) (EnclaveInfo,
 	return info, nil
 }
 
-func (v *vaultFS) DeleteEnclave(ctx context.Context, name string) error {
+func (v *vaultFS) DeleteEnclave(_ context.Context, name string) error {
 	if err := valid(name); err != nil {
 		return err
 	}

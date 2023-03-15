@@ -54,10 +54,6 @@ var roundtripServerConfigTests = []ServerConfig{
 	{
 		Addr:  Env[string]{Value: "0.0.0.0:7373"},
 		Admin: Env[kes.Identity]{Value: "disabled"},
-	},
-	{
-		Addr:  Env[string]{Value: "0.0.0.0:7373"},
-		Admin: Env[kes.Identity]{Value: "disabled"},
 		TLS: TLSConfig{
 			Password:    Env[string]{Value: "horse battery staple"},
 			PrivateKey:  Env[string]{Value: "/tmp/private.key"},

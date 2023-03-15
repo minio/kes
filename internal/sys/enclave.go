@@ -147,7 +147,7 @@ func (e *Enclave) RLocker() sync.Locker { return e.lock.RLocker() }
 // due to a network error - it returns a
 // StoreState with StoreUnreachable and no
 // error.
-func (e *Enclave) Status(ctx context.Context) (kms.State, error) { return kms.State{}, nil }
+func (e *Enclave) Status(context.Context) (kms.State, error) { return kms.State{}, nil }
 
 // CreateKey stores the given key if and only if no entry with
 // the given name exists.

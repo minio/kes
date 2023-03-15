@@ -112,7 +112,7 @@ func (s *envSealer) Seal(plaintext []byte) (*Stanza, []UnsealKey, error) {
 
 type envUnsealer struct{}
 
-func (envUnsealer) Unseal(stanza *Stanza, keys ...UnsealKey) ([]byte, error) {
+func (envUnsealer) Unseal(stanza *Stanza, _ ...UnsealKey) ([]byte, error) {
 	type Body struct {
 		Name       string
 		Ciphertext []byte
@@ -120,8 +120,6 @@ func (envUnsealer) Unseal(stanza *Stanza, keys ...UnsealKey) ([]byte, error) {
 
 	if stanza.Type != envUnsealerType {
 		return nil, fmt.Errorf("sys: incompatible stanza '%s'", stanza.Type)
-	}
-	if len(keys) != 0 {
 	}
 
 	var body Body

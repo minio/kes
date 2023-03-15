@@ -25,6 +25,7 @@ import (
 
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/edge"
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cli"
@@ -35,7 +36,6 @@ import (
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/keserv"
 )
 
 type gatewayConfig struct {
@@ -80,7 +80,7 @@ func startGateway(cliConfig gatewayConfig) {
 	cli.Println(buffer.String())
 
 	server := https.NewServer(&https.Config{
-		Addr:      config.Addr.Value,
+		Addr:      config.Addr,
 		Handler:   api.NewEdgeRouter(gwConfig),
 		TLSConfig: tlsConfig,
 	})
@@ -115,7 +115,7 @@ func startGateway(cliConfig gatewayConfig) {
 					continue
 				}
 				err = server.Update(&https.Config{
-					Addr:      config.Addr.Value,
+					Addr:      config.Addr,
 					Handler:   api.NewEdgeRouter(gwConfig),
 					TLSConfig: tlsConfig,
 				})
@@ -159,56 +159,49 @@ func startGateway(cliConfig gatewayConfig) {
 	}
 }
 
-func description(config *keserv.ServerConfig) (kind string, endpoint []string, err error) {
-	if config.KMS == nil {
+func description(config *edge.ServerConfig) (kind string, endpoint []string, err error) {
+	if config.KeyStore == nil {
 		return "", nil, errors.New("no KMS backend specified")
 	}
 
-	switch kms := config.KMS.(type) {
-	case *keserv.FSConfig:
+	switch kms := config.KeyStore.(type) {
+	case *edge.FSKeyStore:
 		kind = "Filesystem"
-		if abs, err := filepath.Abs(kms.Dir.Value); err == nil {
+		if abs, err := filepath.Abs(kms.Path); err == nil {
 			endpoint = []string{abs}
 		} else {
-			endpoint = []string{kms.Dir.Value}
+			endpoint = []string{kms.Path}
 		}
-	case *keserv.KESConfig:
+	case *edge.KESKeyStore:
 		kind = "KES"
-		endpoint = make([]string, 0, len(kms.Endpoints))
-		for _, e := range kms.Endpoints {
-			endpoint = append(endpoint, e.Value)
-		}
-	case *keserv.KMSPluginConfig:
-		kind = "Plugin"
-		endpoint = []string{kms.Endpoint.Value}
-	case *keserv.VaultConfig:
+		endpoint = kms.Endpoints
+	case *edge.VaultKeyStore:
 		kind = "Hashicorp Vault"
-		endpoint = []string{kms.Endpoint.Value}
-	case *keserv.FortanixConfig:
+		endpoint = []string{kms.Endpoint}
+	case *edge.FortanixKeyStore:
 		kind = "Fortanix SDKMS"
-		endpoint = []string{kms.Endpoint.Value}
-	case *keserv.SecretsManagerConfig:
+		endpoint = []string{kms.Endpoint}
+	case *edge.AWSSecretsManagerKeyStore:
 		kind = "AWS SecretsManager"
-		endpoint = []string{kms.Endpoint.Value}
-	case *keserv.KeySecureConfig:
+		endpoint = []string{kms.Endpoint}
+	case *edge.KeySecureKeyStore:
 		kind = "Gemalto KeySecure"
-		endpoint = []string{kms.Endpoint.Value}
-	case *keserv.SecretManagerConfig:
+		endpoint = []string{kms.Endpoint}
+	case *edge.GCPSecretManagerKeyStore:
 		kind = "GCP SecretManager"
-		endpoint = []string{"Project: " + kms.ProjectID.Value}
-	case *keserv.KeyVaultConfig:
+		endpoint = []string{"Project: " + kms.ProjectID}
+	case *edge.AzureKeyVaultKeyStore:
 		kind = "Azure KeyVault"
-		endpoint = []string{kms.Endpoint.Value}
+		endpoint = []string{kms.Endpoint}
 	default:
-		kind = "In-Memory"
-		endpoint = []string{"non-persistent"}
+		return "", nil, fmt.Errorf("unknown KMS backend %T", kms)
 	}
 	return kind, endpoint, nil
 }
 
 // policySetFromConfig returns an in-memory PolicySet
 // from the given ServerConfig.
-func policySetFromConfig(config *keserv.ServerConfig) (auth.PolicySet, error) {
+func policySetFromConfig(config *edge.ServerConfig) (auth.PolicySet, error) {
 	policies := &policySet{
 		policies: make(map[string]*auth.Policy),
 	}
@@ -221,7 +214,7 @@ func policySetFromConfig(config *keserv.ServerConfig) (auth.PolicySet, error) {
 			Allow:     policy.Allow,
 			Deny:      policy.Deny,
 			CreatedAt: time.Now().UTC(),
-			CreatedBy: config.Admin.Value,
+			CreatedBy: config.Admin,
 		}
 	}
 	return policies, nil
@@ -296,34 +289,34 @@ func (i *policyIterator) Close() error { return nil }
 
 // identitySetFromConfig returns an in-memory IdentitySet
 // from the given ServerConfig.
-func identitySetFromConfig(config *keserv.ServerConfig) (auth.IdentitySet, error) {
+func identitySetFromConfig(config *edge.ServerConfig) (auth.IdentitySet, error) {
 	identities := &identitySet{
-		admin:     config.Admin.Value,
+		admin:     config.Admin,
 		createdAt: time.Now().UTC(),
 		roles:     map[kes.Identity]auth.IdentityInfo{},
 	}
 
 	for name, policy := range config.Policies {
 		for _, id := range policy.Identities {
-			if id.Value.IsUnknown() {
+			if id.IsUnknown() {
 				continue
 			}
 
-			if id.Value == config.Admin.Value {
-				return nil, fmt.Errorf("identity %q is already an admin identity", id.Value)
+			if id == config.Admin {
+				return nil, fmt.Errorf("identity %q is already an admin identity", id)
 			}
-			if _, ok := identities.roles[id.Value]; ok {
-				return nil, fmt.Errorf("identity %q is already assigned", id.Value)
+			if _, ok := identities.roles[id]; ok {
+				return nil, fmt.Errorf("identity %q is already assigned", id)
 			}
 			for _, proxyID := range config.TLS.Proxies {
-				if id.Value == proxyID.Value {
-					return nil, fmt.Errorf("identity %q is already a TLS proxy identity", id.Value)
+				if id == proxyID {
+					return nil, fmt.Errorf("identity %q is already a TLS proxy identity", id)
 				}
 			}
-			identities.roles[id.Value] = auth.IdentityInfo{
+			identities.roles[id] = auth.IdentityInfo{
 				Policy:    name,
 				CreatedAt: time.Now().UTC(),
-				CreatedBy: config.Admin.Value,
+				CreatedBy: config.Admin,
 			}
 		}
 	}
@@ -340,7 +333,7 @@ type identitySet struct {
 
 var _ auth.IdentitySet = (*identitySet)(nil) // compiler check
 
-func (i *identitySet) Admin(ctx context.Context) (kes.Identity, error) { return i.admin, nil }
+func (i *identitySet) Admin(context.Context) (kes.Identity, error) { return i.admin, nil }
 
 func (i *identitySet) SetAdmin(context.Context, kes.Identity) error {
 	return kes.NewError(http.StatusNotImplemented, "cannot set admin identity")
@@ -419,53 +412,53 @@ func (i *identityIterator) Identity() kes.Identity { return i.current }
 
 func (i *identityIterator) Close() error { return nil }
 
-func loadGatewayConfig(gConfig gatewayConfig) (*keserv.ServerConfig, error) {
-	config, err := keserv.ReadServerConfig(gConfig.ConfigFile)
+func loadGatewayConfig(gConfig gatewayConfig) (*edge.ServerConfig, error) {
+	file, err := os.Open(gConfig.ConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	config, err := edge.ReadServerConfigYAML(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
 	if gConfig.Address != "" {
-		config.Addr.Value = gConfig.Address
+		config.Addr = gConfig.Address
 	}
 	if gConfig.PrivateKey != "" {
-		config.TLS.PrivateKey.Value = gConfig.PrivateKey
+		config.TLS.PrivateKey = gConfig.PrivateKey
 	}
 	if gConfig.Certificate != "" {
-		config.TLS.Certificate.Value = gConfig.Certificate
+		config.TLS.Certificate = gConfig.Certificate
 	}
 
 	// Set config defaults
-	if config.Addr.Value == "" {
-		config.Addr.Value = "0.0.0.0:7373"
+	if config.Addr == "" {
+		config.Addr = "0.0.0.0:7373"
 	}
-	if config.Cache.Expiry.Value == 0 {
-		config.Cache.Expiry.Value = 5 * time.Minute
+	if config.Cache.Expiry == 0 {
+		config.Cache.Expiry = 5 * time.Minute
 	}
-	if config.Cache.ExpiryUnused.Value == 0 {
-		config.Cache.ExpiryUnused.Value = 30 * time.Second
-	}
-	if config.Log.Error.Value == "" {
-		config.Log.Error.Value = "on"
-	}
-	if config.Log.Audit.Value == "" {
-		config.Log.Audit.Value = "off"
+	if config.Cache.ExpiryUnused == 0 {
+		config.Cache.ExpiryUnused = 30 * time.Second
 	}
 
 	// Verify config
-	if config.Admin.Value.IsUnknown() {
+	if config.Admin.IsUnknown() {
 		return nil, errors.New("no admin identity specified")
 	}
-	if config.TLS.PrivateKey.Value == "" {
+	if config.TLS.PrivateKey == "" {
 		return nil, errors.New("no TLS private key specified")
 	}
-	if config.TLS.Certificate.Value == "" {
+	if config.TLS.Certificate == "" {
 		return nil, errors.New("no TLS certificate specified")
 	}
 	return config, nil
 }
 
-func newTLSConfig(config *keserv.ServerConfig, auth string) (*tls.Config, error) {
-	certificate, err := https.CertificateFromFile(config.TLS.Certificate.Value, config.TLS.PrivateKey.Value, config.TLS.Password.Value)
+func newTLSConfig(config *edge.ServerConfig, auth string) (*tls.Config, error) {
+	certificate, err := https.CertificateFromFile(config.TLS.Certificate, config.TLS.PrivateKey, config.TLS.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read TLS certificate: %v", err)
 	}
@@ -479,8 +472,8 @@ func newTLSConfig(config *keserv.ServerConfig, auth string) (*tls.Config, error)
 	}
 
 	var rootCAs *x509.CertPool
-	if config.TLS.CAPath.Value != "" {
-		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath.Value)
+	if config.TLS.CAPath != "" {
+		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
 		}
@@ -507,29 +500,23 @@ func newTLSConfig(config *keserv.ServerConfig, auth string) (*tls.Config, error)
 	}, nil
 }
 
-func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfig *tls.Config) (*api.EdgeRouterConfig, error) {
+func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig *tls.Config) (*api.EdgeRouterConfig, error) {
 	rConfig := &api.EdgeRouterConfig{}
-	switch strings.ToLower(config.Log.Error.Value) {
-	case "on":
-		rConfig.ErrorLog = log.New(os.Stderr, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
-	case "off":
-		rConfig.ErrorLog = log.New(ioutil.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
-	default:
-		return nil, fmt.Errorf("invalid error log configuration '%s'", config.Log.Error.Value)
-	}
 
-	switch strings.ToLower(config.Log.Audit.Value) {
-	case "on":
+	if config.Log.Error {
+		rConfig.ErrorLog = log.New(os.Stderr, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+	} else {
+		rConfig.ErrorLog = log.New(ioutil.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+	}
+	if config.Log.Audit {
 		rConfig.AuditLog = log.New(os.Stdout, "", 0)
-	case "off":
+	} else {
 		rConfig.AuditLog = log.New(ioutil.Discard, "", 0)
-	default:
-		return nil, fmt.Errorf("invalid audit log configuration '%s'", config.Log.Audit.Value)
 	}
 
 	if len(config.TLS.Proxies) != 0 {
 		rConfig.Proxy = &auth.TLSProxy{
-			CertHeader: http.CanonicalHeaderKey(config.TLS.ForwardCertHeader.Value),
+			CertHeader: http.CanonicalHeaderKey(config.TLS.ForwardCertHeader),
 		}
 		if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
 			rConfig.Proxy.VerifyOptions = &x509.VerifyOptions{
@@ -537,8 +524,8 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 			}
 		}
 		for _, identity := range config.TLS.Proxies {
-			if !identity.Value.IsUnknown() {
-				rConfig.Proxy.Add(identity.Value)
+			if !identity.IsUnknown() {
+				rConfig.Proxy.Add(identity)
 			}
 		}
 	}
@@ -554,8 +541,8 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 			return nil, fmt.Errorf("ambiguous API configuration for '%s'", k)
 		}
 		rConfig.APIConfig[k] = api.Config{
-			Timeout:          v.Timeout.Value,
-			InsecureSkipAuth: v.InsecureSkipAuth.Value,
+			Timeout:          v.Timeout,
+			InsecureSkipAuth: v.InsecureSkipAuth,
 		}
 	}
 
@@ -569,15 +556,15 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 		return nil, err
 	}
 
-	conn, err := config.KMS.Connect(ctx)
+	conn, err := config.KeyStore.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	store := key.Store{Conn: conn}
 	rConfig.Keys = key.NewCache(store, &key.CacheConfig{
-		Expiry:        config.Cache.Expiry.Value,
-		ExpiryUnused:  config.Cache.ExpiryUnused.Value,
-		ExpiryOffline: config.Cache.ExpiryOffline.Value,
+		Expiry:        config.Cache.Expiry,
+		ExpiryUnused:  config.Cache.ExpiryUnused,
+		ExpiryOffline: config.Cache.ExpiryOffline,
 	})
 
 	for _, k := range config.Keys {
@@ -588,12 +575,12 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 			algorithm = kes.XCHACHA20_POLY1305
 		}
 
-		key, err := key.Random(algorithm, config.Admin.Value)
+		key, err := key.Random(algorithm, config.Admin)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name.Value, err)
+			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
-		if err = store.Create(ctx, k.Name.Value, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
-			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name.Value, err)
+		if err = store.Create(ctx, k.Name, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
+			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
 	}
 
@@ -603,8 +590,8 @@ func newGatewayConfig(ctx context.Context, config *keserv.ServerConfig, tlsConfi
 	return rConfig, nil
 }
 
-func gatewayMessage(config *keserv.ServerConfig, tlsConfig *tls.Config, mlock bool) (*cli.Buffer, error) {
-	ip, port := serverAddr(config.Addr.Value)
+func gatewayMessage(config *edge.ServerConfig, tlsConfig *tls.Config, mlock bool) (*cli.Buffer, error) {
+	ip, port := serverAddr(config.Addr)
 	ifaceIPs := listeningOnV4(ip)
 	if len(ifaceIPs) == 0 {
 		return nil, errors.New("failed to listen on network interfaces")
@@ -637,8 +624,8 @@ func gatewayMessage(config *keserv.ServerConfig, tlsConfig *tls.Config, mlock bo
 		buffer.Sprintf("%-12s", " ").Sprintf("https://%s:%s\n", ifaceIP, port)
 	}
 	buffer.Sprintln()
-	if r, err := hex.DecodeString(config.Admin.Value.String()); err == nil && len(r) == sha256.Size {
-		buffer.Stylef(item, "%-12s", "Admin").Sprintln(config.Admin.Value)
+	if r, err := hex.DecodeString(config.Admin.String()); err == nil && len(r) == sha256.Size {
+		buffer.Stylef(item, "%-12s", "Admin").Sprintln(config.Admin)
 	} else {
 		buffer.Stylef(item, "%-12s", "Admin").Sprintf("%-22s", "_").Styleln(faint, "[ disabled ]")
 	}

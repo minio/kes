@@ -14,7 +14,6 @@ import (
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kes/internal/yml"
 	"gopkg.in/yaml.v3"
@@ -171,7 +170,7 @@ func Init(path string, init *InitConfig, seal *SealConfig) (*sys.Vault, []sys.Un
 
 // Open returns a new Vault that reads its initial and seal configuration
 // from config files within the given path.
-func Open(path string, errorLog *log.Logger) (*sys.Vault, error) {
+func Open(path string) (*sys.Vault, error) {
 	stanzaBytes, err := os.ReadFile(filepath.Join(path, ".unseal"))
 	if err != nil {
 		return nil, err
@@ -198,10 +197,7 @@ func initFS(path string) error {
 		}
 		return err
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		return err
-	}
-	return nil
+	return os.MkdirAll(path, 0o755)
 }
 
 func initSeal(path string, key key.Key, sealer sys.Sealer) ([]sys.UnsealKey, error) {
