@@ -12,4 +12,4 @@ test-prettier:
 	./check-prettier.sh
 
 prettify:
-	yarn prettier --write . --loglevel warn
+	yarn prettier --write ./src --loglevel warn

@@ -37,7 +37,8 @@ const Login = () => {
       promoHeader={<Fragment>KES</Fragment>}
       promoInfo={
         <Fragment>
-          KES is a cloud-native distributed key management and encryption server designed to secure modern applications at scale.
+          KES is a cloud-native distributed key management and encryption server
+          designed to secure modern applications at scale.
         </Fragment>
       }
       logoProps={{
