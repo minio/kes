@@ -18,7 +18,6 @@ package restapi
 
 import (
 	"bytes"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -69,19 +68,24 @@ func registerLoginHandlers(api *operations.KesAPI) {
 // getLoginResponse performs login() and serializes it to the handler's output
 func getLoginResponse(params authApi.LoginParams) (*models.LoginResponse, *models.Error) {
 	insecure := params.HTTPRequest.FormValue("insecure")
-	certBuf, err := getCertificateContent(params)
 	apiKey := ""
 	if params.APIKey != nil {
 		apiKey = *params.APIKey
 	}
+	certBuf, err := getCertificateContent(params, apiKey)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
-	keyBuf, err := getKeyContent(params)
+	keyBuf, err := getKeyContent(params, apiKey)
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
-	_, err = tls.X509KeyPair(certBuf, keyBuf)
+	_, err = getKESCertificate(&models.Principal{
+		APIKey:            apiKey,
+		ClientCertificate: string(certBuf),
+		ClientKey:         string(keyBuf),
+		Insecure:          insecure == "true",
+	})
 	if err != nil {
 		return nil, newDefaultAPIError(err)
 	}
@@ -97,7 +101,10 @@ func getLoginResponse(params authApi.LoginParams) (*models.LoginResponse, *model
 	return loginResponse, nil
 }
 
-func getCertificateContent(params authApi.LoginParams) ([]byte, error) {
+func getCertificateContent(params authApi.LoginParams, apiKey string) ([]byte, error) {
+	if apiKey != "" {
+		return []byte(""), nil
+	}
 	certFile, _, err := params.HTTPRequest.FormFile("cert")
 	if err != nil {
 		return nil, err
@@ -115,7 +122,10 @@ func getCertificateContent(params authApi.LoginParams) ([]byte, error) {
 	return https.FilterPEM(certBuf, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
 }
 
-func getKeyContent(params authApi.LoginParams) ([]byte, error) {
+func getKeyContent(params authApi.LoginParams, apiKey string) ([]byte, error) {
+	if apiKey != "" {
+		return []byte(""), nil
+	}
 	password := params.HTTPRequest.FormValue("password")
 	keyFile, _, err := params.HTTPRequest.FormFile("key")
 	if err != nil {

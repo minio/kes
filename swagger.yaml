@@ -55,11 +55,9 @@ paths:
           type: string
         - name: cert
           in: formData
-          required: true
           type: file
         - name: key
           in: formData
-          required: true
           type: file
       responses:
         204:

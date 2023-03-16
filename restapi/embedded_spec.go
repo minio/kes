@@ -653,14 +653,12 @@ func init() {
           {
             "type": "file",
             "name": "cert",
-            "in": "formData",
-            "required": true
+            "in": "formData"
           },
           {
             "type": "file",
             "name": "key",
-            "in": "formData",
-            "required": true
+            "in": "formData"
           }
         ],
         "responses": {
@@ -1823,14 +1821,12 @@ func init() {
           {
             "type": "file",
             "name": "cert",
-            "in": "formData",
-            "required": true
+            "in": "formData"
           },
           {
             "type": "file",
             "name": "key",
-            "in": "formData",
-            "required": true
+            "in": "formData"
           }
         ],
         "responses": {

@@ -62,7 +62,6 @@ type LoginParams struct {
 	*/
 	APIKey *string
 	/*
-	  Required: true
 	  In: formData
 	*/
 	Cert io.ReadCloser
@@ -71,7 +70,6 @@ type LoginParams struct {
 	*/
 	Insecure *string
 	/*
-	  Required: true
 	  In: formData
 	*/
 	Key io.ReadCloser
@@ -105,10 +103,11 @@ func (o *LoginParams) BindRequest(r *http.Request, route *middleware.MatchedRout
 	}
 
 	cert, certHeader, err := r.FormFile("cert")
-	if err != nil {
+	if err != nil && err != http.ErrMissingFile {
 		res = append(res, errors.New(400, "reading file %q failed: %v", "cert", err))
+	} else if err == http.ErrMissingFile {
+		// no-op for missing but optional file parameter
 	} else if err := o.bindCert(cert, certHeader); err != nil {
-		// Required: true
 		res = append(res, err)
 	} else {
 		o.Cert = &runtime.File{Data: cert, Header: certHeader}
@@ -120,10 +119,11 @@ func (o *LoginParams) BindRequest(r *http.Request, route *middleware.MatchedRout
 	}
 
 	key, keyHeader, err := r.FormFile("key")
-	if err != nil {
+	if err != nil && err != http.ErrMissingFile {
 		res = append(res, errors.New(400, "reading file %q failed: %v", "key", err))
+	} else if err == http.ErrMissingFile {
+		// no-op for missing but optional file parameter
 	} else if err := o.bindKey(key, keyHeader); err != nil {
-		// Required: true
 		res = append(res, err)
 	} else {
 		o.Key = &runtime.File{Data: key, Header: keyHeader}
