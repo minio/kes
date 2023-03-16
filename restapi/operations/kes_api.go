@@ -73,6 +73,9 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 		EncryptionCreateKeyHandler: encryption.CreateKeyHandlerFunc(func(params encryption.CreateKeyParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.CreateKey has not yet been implemented")
 		}),
+		EncryptionCreateSecretHandler: encryption.CreateSecretHandlerFunc(func(params encryption.CreateSecretParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.CreateSecret has not yet been implemented")
+		}),
 		EncryptionDeleteIdentityHandler: encryption.DeleteIdentityHandlerFunc(func(params encryption.DeleteIdentityParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.DeleteIdentity has not yet been implemented")
 		}),
@@ -82,6 +85,9 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 		EncryptionDeletePolicyHandler: encryption.DeletePolicyHandlerFunc(func(params encryption.DeletePolicyParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.DeletePolicy has not yet been implemented")
 		}),
+		EncryptionDeleteSecretHandler: encryption.DeleteSecretHandlerFunc(func(params encryption.DeleteSecretParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DeleteSecret has not yet been implemented")
+		}),
 		EncryptionDescribeIdentityHandler: encryption.DescribeIdentityHandlerFunc(func(params encryption.DescribeIdentityParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.DescribeIdentity has not yet been implemented")
 		}),
@@ -90,6 +96,9 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 		}),
 		EncryptionDescribePolicyHandler: encryption.DescribePolicyHandlerFunc(func(params encryption.DescribePolicyParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.DescribePolicy has not yet been implemented")
+		}),
+		EncryptionDescribeSecretHandler: encryption.DescribeSecretHandlerFunc(func(params encryption.DescribeSecretParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.DescribeSecret has not yet been implemented")
 		}),
 		EncryptionDescribeSelfIdentityHandler: encryption.DescribeSelfIdentityHandlerFunc(func(params encryption.DescribeSelfIdentityParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.DescribeSelfIdentity has not yet been implemented")
@@ -108,6 +117,9 @@ func NewKesAPI(spec *loads.Document) *KesAPI {
 		}),
 		EncryptionListPoliciesHandler: encryption.ListPoliciesHandlerFunc(func(params encryption.ListPoliciesParams, principal *models.Principal) middleware.Responder {
 			return middleware.NotImplemented("operation encryption.ListPolicies has not yet been implemented")
+		}),
+		EncryptionListSecretsHandler: encryption.ListSecretsHandlerFunc(func(params encryption.ListSecretsParams, principal *models.Principal) middleware.Responder {
+			return middleware.NotImplemented("operation encryption.ListSecrets has not yet been implemented")
 		}),
 		AuthLoginHandler: auth.LoginHandlerFunc(func(params auth.LoginParams) middleware.Responder {
 			return middleware.NotImplemented("operation auth.Login has not yet been implemented")
@@ -191,18 +203,24 @@ type KesAPI struct {
 	EncryptionAssignPolicyHandler encryption.AssignPolicyHandler
 	// EncryptionCreateKeyHandler sets the operation handler for the create key operation
 	EncryptionCreateKeyHandler encryption.CreateKeyHandler
+	// EncryptionCreateSecretHandler sets the operation handler for the create secret operation
+	EncryptionCreateSecretHandler encryption.CreateSecretHandler
 	// EncryptionDeleteIdentityHandler sets the operation handler for the delete identity operation
 	EncryptionDeleteIdentityHandler encryption.DeleteIdentityHandler
 	// EncryptionDeleteKeyHandler sets the operation handler for the delete key operation
 	EncryptionDeleteKeyHandler encryption.DeleteKeyHandler
 	// EncryptionDeletePolicyHandler sets the operation handler for the delete policy operation
 	EncryptionDeletePolicyHandler encryption.DeletePolicyHandler
+	// EncryptionDeleteSecretHandler sets the operation handler for the delete secret operation
+	EncryptionDeleteSecretHandler encryption.DeleteSecretHandler
 	// EncryptionDescribeIdentityHandler sets the operation handler for the describe identity operation
 	EncryptionDescribeIdentityHandler encryption.DescribeIdentityHandler
 	// EncryptionDescribeKeyHandler sets the operation handler for the describe key operation
 	EncryptionDescribeKeyHandler encryption.DescribeKeyHandler
 	// EncryptionDescribePolicyHandler sets the operation handler for the describe policy operation
 	EncryptionDescribePolicyHandler encryption.DescribePolicyHandler
+	// EncryptionDescribeSecretHandler sets the operation handler for the describe secret operation
+	EncryptionDescribeSecretHandler encryption.DescribeSecretHandler
 	// EncryptionDescribeSelfIdentityHandler sets the operation handler for the describe self identity operation
 	EncryptionDescribeSelfIdentityHandler encryption.DescribeSelfIdentityHandler
 	// EncryptionGetPolicyHandler sets the operation handler for the get policy operation
@@ -215,6 +233,8 @@ type KesAPI struct {
 	EncryptionListKeysHandler encryption.ListKeysHandler
 	// EncryptionListPoliciesHandler sets the operation handler for the list policies operation
 	EncryptionListPoliciesHandler encryption.ListPoliciesHandler
+	// EncryptionListSecretsHandler sets the operation handler for the list secrets operation
+	EncryptionListSecretsHandler encryption.ListSecretsHandler
 	// AuthLoginHandler sets the operation handler for the login operation
 	AuthLoginHandler auth.LoginHandler
 	// AuthLoginDetailHandler sets the operation handler for the login detail operation
@@ -324,6 +344,9 @@ func (o *KesAPI) Validate() error {
 	if o.EncryptionCreateKeyHandler == nil {
 		unregistered = append(unregistered, "encryption.CreateKeyHandler")
 	}
+	if o.EncryptionCreateSecretHandler == nil {
+		unregistered = append(unregistered, "encryption.CreateSecretHandler")
+	}
 	if o.EncryptionDeleteIdentityHandler == nil {
 		unregistered = append(unregistered, "encryption.DeleteIdentityHandler")
 	}
@@ -333,6 +356,9 @@ func (o *KesAPI) Validate() error {
 	if o.EncryptionDeletePolicyHandler == nil {
 		unregistered = append(unregistered, "encryption.DeletePolicyHandler")
 	}
+	if o.EncryptionDeleteSecretHandler == nil {
+		unregistered = append(unregistered, "encryption.DeleteSecretHandler")
+	}
 	if o.EncryptionDescribeIdentityHandler == nil {
 		unregistered = append(unregistered, "encryption.DescribeIdentityHandler")
 	}
@@ -341,6 +367,9 @@ func (o *KesAPI) Validate() error {
 	}
 	if o.EncryptionDescribePolicyHandler == nil {
 		unregistered = append(unregistered, "encryption.DescribePolicyHandler")
+	}
+	if o.EncryptionDescribeSecretHandler == nil {
+		unregistered = append(unregistered, "encryption.DescribeSecretHandler")
 	}
 	if o.EncryptionDescribeSelfIdentityHandler == nil {
 		unregistered = append(unregistered, "encryption.DescribeSelfIdentityHandler")
@@ -359,6 +388,9 @@ func (o *KesAPI) Validate() error {
 	}
 	if o.EncryptionListPoliciesHandler == nil {
 		unregistered = append(unregistered, "encryption.ListPoliciesHandler")
+	}
+	if o.EncryptionListSecretsHandler == nil {
+		unregistered = append(unregistered, "encryption.ListSecretsHandler")
 	}
 	if o.AuthLoginHandler == nil {
 		unregistered = append(unregistered, "auth.LoginHandler")
@@ -496,6 +528,10 @@ func (o *KesAPI) initHandlerCache() {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
 	o.handlers["POST"]["/encryption/keys"] = encryption.NewCreateKey(o.context, o.EncryptionCreateKeyHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/encryption/secrets"] = encryption.NewCreateSecret(o.context, o.EncryptionCreateSecretHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
@@ -508,6 +544,10 @@ func (o *KesAPI) initHandlerCache() {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
 	o.handlers["DELETE"]["/encryption/policies/{name}"] = encryption.NewDeletePolicy(o.context, o.EncryptionDeletePolicyHandler)
+	if o.handlers["DELETE"] == nil {
+		o.handlers["DELETE"] = make(map[string]http.Handler)
+	}
+	o.handlers["DELETE"]["/encryption/secrets/{name}"] = encryption.NewDeleteSecret(o.context, o.EncryptionDeleteSecretHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
@@ -520,6 +560,10 @@ func (o *KesAPI) initHandlerCache() {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
 	o.handlers["GET"]["/encryption/policies/{name}/describe"] = encryption.NewDescribePolicy(o.context, o.EncryptionDescribePolicyHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/encryption/secrets/{name}"] = encryption.NewDescribeSecret(o.context, o.EncryptionDescribeSecretHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
@@ -544,6 +588,10 @@ func (o *KesAPI) initHandlerCache() {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
 	o.handlers["GET"]["/encryption/policies"] = encryption.NewListPolicies(o.context, o.EncryptionListPoliciesHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/encryption/secrets"] = encryption.NewListSecrets(o.context, o.EncryptionListSecretsHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}

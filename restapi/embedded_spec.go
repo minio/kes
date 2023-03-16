@@ -555,6 +555,124 @@ func init() {
         }
       }
     },
+    "/encryption/secrets": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list secrets",
+        "operationId": "ListSecrets",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve secrets",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListSecretsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption create secret",
+        "operationId": "CreateSecret",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionCreateSecretRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/secrets/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe secret",
+        "operationId": "DescribeSecret",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption secret name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionSecretInfo"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete secret",
+        "operationId": "DeleteSecret",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption secret name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/encryption/status": {
       "get": {
         "tags": [
@@ -766,8 +884,20 @@ func init() {
         }
       }
     },
-    "encryptionDeleteKeyRequest": {
-      "type": "object"
+    "encryptionCreateSecretRequest": {
+      "type": "object",
+      "required": [
+        "secret",
+        "value"
+      ],
+      "properties": {
+        "secret": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
     },
     "encryptionDescribeIdentityResponse": {
       "type": "object",
@@ -966,6 +1096,17 @@ func init() {
         }
       }
     },
+    "encryptionListSecretsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionSecretInfo"
+          }
+        }
+      }
+    },
     "encryptionMetricsResponse": {
       "type": "object",
       "required": [
@@ -1041,6 +1182,26 @@ func init() {
           "type": "string"
         },
         "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionSecretInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "secretType": {
+          "type": "string"
+        },
+        "updatedAt": {
           "type": "string"
         }
       }
@@ -1723,6 +1884,124 @@ func init() {
         }
       }
     },
+    "/encryption/secrets": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption list secrets",
+        "operationId": "ListSecrets",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "pattern to retrieve secrets",
+            "name": "pattern",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionListSecretsResponse"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption create secret",
+        "operationId": "CreateSecret",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/encryptionCreateSecretRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/encryption/secrets/{name}": {
+      "get": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption describe secret",
+        "operationId": "DescribeSecret",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption secret name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/encryptionSecretInfo"
+            }
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Encryption"
+        ],
+        "summary": "Encryption delete secret",
+        "operationId": "DeleteSecret",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Encryption secret name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A successful response."
+          },
+          "default": {
+            "description": "Generic error response.",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
     "/encryption/status": {
       "get": {
         "tags": [
@@ -1934,8 +2213,20 @@ func init() {
         }
       }
     },
-    "encryptionDeleteKeyRequest": {
-      "type": "object"
+    "encryptionCreateSecretRequest": {
+      "type": "object",
+      "required": [
+        "secret",
+        "value"
+      ],
+      "properties": {
+        "secret": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
     },
     "encryptionDescribeIdentityResponse": {
       "type": "object",
@@ -2134,6 +2425,17 @@ func init() {
         }
       }
     },
+    "encryptionListSecretsResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/encryptionSecretInfo"
+          }
+        }
+      }
+    },
     "encryptionMetricsResponse": {
       "type": "object",
       "required": [
@@ -2209,6 +2511,26 @@ func init() {
           "type": "string"
         },
         "name": {
+          "type": "string"
+        }
+      }
+    },
+    "encryptionSecretInfo": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "secretType": {
+          "type": "string"
+        },
+        "updatedAt": {
           "type": "string"
         }
       }

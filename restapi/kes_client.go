@@ -31,6 +31,10 @@ type KESClientI interface {
 	describeSelfIdentity(ctx context.Context) (*kes.IdentityInfo, *kes.Policy, error)
 	listIdentities(ctx context.Context, pattern string) (*kes.IdentityIterator, error)
 	deleteIdentity(ctx context.Context, name string) error
+	describeSecret(ctx context.Context, name string) (*kes.SecretInfo, error)
+	createSecret(ctx context.Context, name, value string) error
+	deleteSecret(ctx context.Context, name string) error
+	listSecrets(ctx context.Context, pattern string) (*kes.SecretIter, error)
 }
 
 // KESClient is a wrapper around the KES client
@@ -112,6 +116,22 @@ func (k KESClient) describeSelfIdentity(ctx context.Context) (*kes.IdentityInfo,
 
 func (k KESClient) deleteIdentity(ctx context.Context, name string) error {
 	return k.Client.DeleteIdentity(ctx, kes.Identity(name))
+}
+
+func (k KESClient) describeSecret(ctx context.Context, name string) (*kes.SecretInfo, error) {
+	return k.Client.DescribeSecret(ctx, name)
+}
+
+func (k KESClient) createSecret(ctx context.Context, name, value string) error {
+	return k.Client.CreateSecret(ctx, name, []byte(value), nil)
+}
+
+func (k KESClient) deleteSecret(ctx context.Context, name string) error {
+	return k.Client.DeleteSecret(ctx, name)
+}
+
+func (k KESClient) listSecrets(ctx context.Context, pattern string) (*kes.SecretIter, error) {
+	return k.Client.ListSecrets(ctx, pattern)
 }
 
 func newKESClient(session *models.Principal) (*kes.Client, error) {

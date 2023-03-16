@@ -35,6 +35,7 @@ func registerEncryptionHandlers(api *operations.KesAPI) {
 	registerEncryptionKeyHandlers(api)
 	registerEncryptionPolicyHandlers(api)
 	registerEncryptionIdentityHandlers(api)
+	registerEncryptionSecretHandlers(api)
 }
 
 func registerEncryptionStatusHandlers(api *operations.KesAPI) {
@@ -705,6 +706,141 @@ func getDeleteIdentityResponse(session *models.Principal, params encryption.Dele
 
 func deleteIdentity(ctx context.Context, identity string, kesClient KESClientI) *models.Error {
 	if err := kesClient.deleteIdentity(ctx, identity); err != nil {
+		return newDefaultAPIError(err)
+	}
+	return nil
+}
+
+func registerEncryptionSecretHandlers(api *operations.KesAPI) {
+	api.EncryptionCreateSecretHandler = encryption.CreateSecretHandlerFunc(func(params encryption.CreateSecretParams, session *models.Principal) middleware.Responder {
+		err := getCreateSecretResponse(session, params)
+		if err != nil {
+			return encryption.NewCreateSecretDefault(int(err.Code)).WithPayload(err)
+		}
+		return encryption.NewCreateSecretCreated()
+	})
+
+	api.EncryptionListSecretsHandler = encryption.ListSecretsHandlerFunc(func(params encryption.ListSecretsParams, session *models.Principal) middleware.Responder {
+		resp, err := getListSecretsResponse(session, params)
+		if err != nil {
+			return encryption.NewListSecretsDefault(int(err.Code)).WithPayload(err)
+		}
+		return encryption.NewListSecretsOK().WithPayload(resp)
+	})
+
+	api.EncryptionDescribeSecretHandler = encryption.DescribeSecretHandlerFunc(func(params encryption.DescribeSecretParams, session *models.Principal) middleware.Responder {
+		resp, err := getDescribeSecretResponse(session, params)
+		if err != nil {
+			return encryption.NewDescribeSecretDefault(int(err.Code)).WithPayload(err)
+		}
+		return encryption.NewDescribeSecretOK().WithPayload(resp)
+	})
+
+	api.EncryptionDeleteSecretHandler = encryption.DeleteSecretHandlerFunc(func(params encryption.DeleteSecretParams, session *models.Principal) middleware.Responder {
+		err := getDeleteSecretResponse(session, params)
+		if err != nil {
+			return encryption.NewDeleteSecretDefault(int(err.Code)).WithPayload(err)
+		}
+		return encryption.NewDeleteSecretOK()
+	})
+}
+
+func getCreateSecretResponse(session *models.Principal, params encryption.CreateSecretParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := newKESClient(session)
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return createSecret(ctx, *params.Body.Secret, *params.Body.Value, KESClient{Client: kesClient})
+}
+
+func createSecret(ctx context.Context, secret, value string, kesClient KESClientI) *models.Error {
+	if err := kesClient.createSecret(ctx, secret, value); err != nil {
+		return newDefaultAPIError(err)
+	}
+	return nil
+}
+
+func getListSecretsResponse(session *models.Principal, params encryption.ListSecretsParams) (*models.EncryptionListSecretsResponse, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := newKESClient(session)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	pattern := ""
+	if params.Pattern != nil {
+		pattern = *params.Pattern
+	}
+	return listSecrets(ctx, pattern, KESClient{Client: kesClient})
+}
+
+func listSecrets(ctx context.Context, pattern string, kesClient KESClientI) (*models.EncryptionListSecretsResponse, *models.Error) {
+	iterator, err := kesClient.listSecrets(ctx, pattern)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+
+	secrets, err := iterator.Values(0)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	if err = iterator.Close(); err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionListSecretsResponse{Results: parseSecrets(secrets)}, nil
+}
+
+func parseSecrets(results []kes.SecretInfo) (data []*models.EncryptionSecretInfo) {
+	for _, secret := range results {
+		data = append(data, &models.EncryptionSecretInfo{
+			CreatedAt:  secret.CreatedAt.String(),
+			UpdatedAt:  secret.ModTime.String(),
+			CreatedBy:  secret.CreatedBy.String(),
+			Name:       secret.Name,
+			SecretType: secret.Type.String(),
+		})
+	}
+	return data
+}
+
+func getDescribeSecretResponse(session *models.Principal, params encryption.DescribeSecretParams) (*models.EncryptionSecretInfo, *models.Error) {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := newKESClient(session)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return describeSecret(ctx, params.Name, KESClient{Client: kesClient})
+}
+
+func describeSecret(ctx context.Context, secret string, kesClient KESClientI) (*models.EncryptionSecretInfo, *models.Error) {
+	s, err := kesClient.describeSecret(ctx, secret)
+	if err != nil {
+		return nil, newDefaultAPIError(err)
+	}
+	return &models.EncryptionSecretInfo{
+		CreatedAt:  s.CreatedAt.String(),
+		UpdatedAt:  s.ModTime.String(),
+		CreatedBy:  s.CreatedBy.String(),
+		Name:       s.Name,
+		SecretType: s.Type.String(),
+	}, nil
+}
+
+func getDeleteSecretResponse(session *models.Principal, params encryption.DeleteSecretParams) *models.Error {
+	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
+	defer cancel()
+	kesClient, err := newKESClient(session)
+	if err != nil {
+		return newDefaultAPIError(err)
+	}
+	return deleteSecret(ctx, params.Name, KESClient{Client: kesClient})
+}
+
+func deleteSecret(ctx context.Context, secret string, kesClient KESClientI) *models.Error {
+	if err := kesClient.deleteSecret(ctx, secret); err != nil {
 		return newDefaultAPIError(err)
 	}
 	return nil
