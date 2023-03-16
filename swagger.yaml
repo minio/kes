@@ -456,6 +456,84 @@ paths:
             $ref: "#/definitions/error"
       tags:
         - Encryption
+  /encryption/secrets:
+    post:
+      summary: Encryption create secret
+      operationId: CreateSecret
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/encryptionCreateSecretRequest"
+      responses:
+        201:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    get:
+      summary: Encryption list secrets
+      operationId: ListSecrets
+      parameters:
+        - name: pattern
+          description: pattern to retrieve secrets
+          in: query
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionListSecretsResponse"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  /encryption/secrets/{name}:
+    get:
+      summary: Encryption describe secret
+      operationId: DescribeSecret
+      parameters:
+        - name: name
+          description: Encryption secret name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+          schema:
+            $ref: "#/definitions/encryptionSecretInfo"
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+    delete:
+      summary: Encryption delete secret
+      operationId: DeleteSecret
+      parameters:
+        - name: name
+          description: Encryption secret name
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: A successful response.
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/error"
+      tags:
+        - Encryption
+  
 
 definitions:
   # Structure that holds the `Bearer {TOKEN}` present on authenticated requests
@@ -564,8 +642,6 @@ definitions:
     properties:
       bytes:
         type: string
-  encryptionDeleteKeyRequest:
-    type: object
   encryptionListKeysResponse:
     type: object
     properties:
@@ -767,4 +843,34 @@ definitions:
     type: object
     properties:
       version:
+        type: string
+  encryptionCreateSecretRequest:
+    type: object
+    required:
+      - secret
+      - value
+    properties:
+      secret:
+        type: string
+      value:
+        type: string
+  encryptionListSecretsResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          $ref: "#/definitions/encryptionSecretInfo"
+  encryptionSecretInfo:
+    type: object
+    properties:
+      name:
+        type: string
+      secretType:
+        type: string
+      createdAt:
+        type: string
+      updatedAt:
+        type: string
+      createdBy:
         type: string

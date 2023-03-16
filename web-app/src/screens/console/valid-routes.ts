@@ -34,6 +34,8 @@ export const ROUTES = {
   ENCRYPTION_POLICIES_ADD: "/encryption/add-policy",
   ENCRYPTION_POLICY_DETAILS: "/encryption/policies/:policyName",
   ENCRYPTION_IDENTITIES: "/encryption/identities",
+  ENCRYPTION_SECRETS: "/encryption/secrets",
+  ENCRYPTION_SECRETS_ADD: "/encryption/add-secret/",
 };
 
 export const validRoutes = () => {
@@ -72,6 +74,15 @@ export const validRoutes = () => {
       component: NavLink,
       icon: IdentitiesIcon,
       to: ROUTES.ENCRYPTION_IDENTITIES,
+      children: [],
+    },
+    {
+      group: "Encryption",
+      name: "Secrets",
+      id: "encryption-secret",
+      component: NavLink,
+      icon: KeysIcon,
+      to: ROUTES.ENCRYPTION_SECRETS,
       children: [],
     },
   ];

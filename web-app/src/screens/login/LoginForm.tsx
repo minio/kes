@@ -20,7 +20,6 @@ import { Button } from "mds";
 import {
   Checkbox,
   FormControlLabel,
-  InputAdornment,
   LinearProgress,
   MenuItem,
   Select,
@@ -30,7 +29,6 @@ import makeStyles from "@mui/styles/makeStyles";
 import { Theme } from "@mui/material/styles";
 import createStyles from "@mui/styles/createStyles";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { LoginField } from "./LoginField";
 import {
   setApiKey,
   setFileCertToUpload,

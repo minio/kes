@@ -35,6 +35,8 @@ import Policies from "./encryption/policies/Policies";
 import AddPolicy from "./encryption/policies/AddPolicy";
 import PolicyDetails from "./encryption/policies/PolicyDetails";
 import Identities from "./encryption/identities/Identities";
+import Secrets from "./encryption/secrets/Secrets";
+import AddSecret from "./encryption/secrets/AddSecret";
 import makeStyles from "@mui/styles/makeStyles/makeStyles";
 import { snackBarCommon } from "./common/styleLibrary";
 
@@ -144,6 +146,14 @@ const Console = () => {
     {
       component: Identities,
       path: ROUTES.ENCRYPTION_IDENTITIES,
+    },
+    {
+      component: Secrets,
+      path: ROUTES.ENCRYPTION_SECRETS,
+    },
+    {
+      component: AddSecret,
+      path: ROUTES.ENCRYPTION_SECRETS_ADD,
     },
   ];
 
