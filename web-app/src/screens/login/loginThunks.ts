@@ -37,6 +37,7 @@ export const doLoginAsync = createAsyncThunk(
   "login/doLoginAsync",
   async (_, { getState, rejectWithValue, dispatch }) => {
     const state = getState() as RootState;
+    const apiKey = state.login.apiKey;
     const insecure = state.login.insecure;
     const password = state.login.password;
     const fileCertToUpload = state.login.fileCertToUpload;
@@ -49,6 +50,7 @@ export const doLoginAsync = createAsyncThunk(
     if (fileKeyToUpload) {
       formData.append("key", fileKeyToUpload, "client.key");
     }
+    formData.append("apiKey", apiKey);
     formData.append("password", password);
     formData.append("insecure", insecure.toString());
 

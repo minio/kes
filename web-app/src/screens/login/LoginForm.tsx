@@ -15,21 +15,24 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import Grid from "@mui/material/Grid";
-import React, { Fragment, useRef } from "react";
-import { Button, UploadIcon } from "mds";
+import React, { Fragment, useState } from "react";
+import { Button } from "mds";
 import {
   Checkbox,
   FormControlLabel,
   InputAdornment,
   LinearProgress,
+  MenuItem,
+  Select,
+  SelectChangeEvent,
 } from "@mui/material";
-import { LockFilledIcon } from "mds";
 import makeStyles from "@mui/styles/makeStyles";
 import { Theme } from "@mui/material/styles";
 import createStyles from "@mui/styles/createStyles";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { LoginField } from "./LoginField";
 import {
+  setApiKey,
   setFileCertToUpload,
   setFileKeyToUpload,
   setInsecure,
@@ -37,6 +40,8 @@ import {
   setPassword,
 } from "./loginSlice";
 import { doLoginAsync } from "./loginThunks";
+import APIKeyForm from "./APIKeyForm";
+import FilesForm from "./FilesForm";
 
 const useStyles = makeStyles((theme: Theme) =>
   createStyles({
@@ -72,19 +77,20 @@ const LoginForm = () => {
   const dispatch = useAppDispatch();
   const classes = useStyles();
 
+  const [loginStrategy, setLoginStrategy] = useState("apiKey");
+
   const password = useAppSelector((state) => state.login.password);
   const loginSending = useAppSelector((state) => state.login.loginSending);
   const insecure = useAppSelector((state) => state.login.insecure);
   const isEncrypted = useAppSelector((state) => state.login.isEncrypted);
+
   const fileCertToUpload = useAppSelector(
     (state) => state.login.fileCertToUpload
   );
   const fileKeyToUpload = useAppSelector(
     (state) => state.login.fileKeyToUpload
   );
-
-  const fileCert = useRef<HTMLInputElement>(null);
-  const fileKey = useRef<HTMLInputElement>(null);
+  const apiKey = useAppSelector((state) => state.login.apiKey);
 
   const formSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -92,7 +98,13 @@ const LoginForm = () => {
   };
 
   const disableLogin = () => {
-    if (fileCertToUpload === null || fileKeyToUpload === null) {
+    if (loginStrategy === "apiKey" && !apiKey) {
+      return true;
+    }
+    if (
+      loginStrategy !== "apiKey" &&
+      (fileCertToUpload === null || fileKeyToUpload === null)
+    ) {
       return true;
     }
     if (isEncrypted && !password) {
@@ -101,40 +113,15 @@ const LoginForm = () => {
     return false;
   };
 
-  const handleFileCert = (e: any) => {
-    if (
-      e === null ||
-      e === undefined ||
-      e.target.files === null ||
-      e.target.files === undefined
-    ) {
-      return;
-    }
-    e.preventDefault();
-    const [fileToUpload] = e.target.files;
-    const blobFile = new Blob([fileToUpload], { type: fileToUpload.type });
-    e.target.value = "";
-    dispatch(setFileCertToUpload(blobFile));
-  };
-
-  const handleFileKey = (e: any) => {
-    if (
-      e === null ||
-      e === undefined ||
-      e.target.files === null ||
-      e.target.files === undefined
-    ) {
-      return;
-    }
-    e.preventDefault();
-    const [fileToUpload] = e.target.files;
-    const blobFile = new Blob([fileToUpload], { type: fileToUpload.type });
-    e.target.value = "";
-    dispatch(setFileKeyToUpload(blobFile));
+  const changeLoginStrategy = (e: SelectChangeEvent<string>) => {
+    dispatch(setFileCertToUpload(null));
+    dispatch(setFileKeyToUpload(null));
+    dispatch(setApiKey(""));
+    setLoginStrategy(e.target.value);
   };
 
   return (
-    <React.Fragment>
+    <Fragment>
       <form className={classes.form} noValidate onSubmit={formSubmit}>
         <Grid item xs={12}>
           <FormControlLabel
@@ -160,84 +147,7 @@ const LoginForm = () => {
           />
         </Grid>
         <br />
-        <Grid item xs={12}>
-          <Fragment>
-            <input
-              type="file"
-              onChange={handleFileCert}
-              style={{ display: "none" }}
-              ref={fileCert}
-            />
-            <Button
-              id={"upload-cert"}
-              onClick={(e) => {
-                e.preventDefault();
-                if (fileCert && fileCert.current) {
-                  fileCert.current.click();
-                }
-              }}
-              icon={<UploadIcon />}
-              label={`Upload KES Client Certificate${
-                fileCertToUpload ? ` (${fileCertToUpload.size})` : ""
-              }`}
-              variant={"regular"}
-              fullWidth
-            />
-          </Fragment>
-        </Grid>
-        <br />
-        <Grid item xs={12}>
-          <Fragment>
-            <input
-              type="file"
-              onChange={handleFileKey}
-              style={{ display: "none" }}
-              ref={fileKey}
-            />
-            <Button
-              id={"upload-key"}
-              onClick={(e) => {
-                e.preventDefault();
-                if (fileKey && fileKey.current) {
-                  fileKey.current.click();
-                }
-              }}
-              icon={<UploadIcon />}
-              label={`Upload KES Client Key${
-                fileKeyToUpload ? ` (${fileKeyToUpload.size})` : ""
-              }`}
-              variant={"regular"}
-              fullWidth
-            />
-          </Fragment>
-        </Grid>
-        {isEncrypted && (
-          <Grid item xs={12}>
-            <br />
-            <LoginField
-              fullWidth
-              value={password}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                dispatch(setPassword(e.target.value))
-              }
-              name="secretKey"
-              type="password"
-              id="secretKey"
-              autoComplete="current-password"
-              disabled={loginSending}
-              placeholder={"Password"}
-              variant={"outlined"}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LockFilledIcon />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-        )}
-
+        {loginStrategy === "apiKey" ? <APIKeyForm /> : <FilesForm />}
         <Grid item xs={12} className={classes.submitContainer}>
           <Button
             type="submit"
@@ -250,11 +160,27 @@ const LoginForm = () => {
             fullWidth
           />
         </Grid>
+        <br />
+        <Select
+          id="login-select-strategy"
+          name="login-select-strategy"
+          value={loginStrategy}
+          onChange={changeLoginStrategy}
+          sx={{
+            width: "100%",
+            height: "38px",
+            fontSize: "14px",
+            borderRadius: "4px",
+          }}
+        >
+          <MenuItem value={"apiKey"}>{"API Key"}</MenuItem>
+          <MenuItem value={"files"}>{"Client Files"}</MenuItem>
+        </Select>
         <Grid item xs={12} className={classes.linearPredef}>
           {loginSending && <LinearProgress />}
         </Grid>
       </form>
-    </React.Fragment>
+    </Fragment>
   );
 };
 
