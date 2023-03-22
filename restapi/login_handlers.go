@@ -37,7 +37,7 @@ import (
 
 func registerLoginHandlers(api *operations.KesAPI) {
 	api.AuthLoginDetailHandler = authApi.LoginDetailHandlerFunc(func(params authApi.LoginDetailParams) middleware.Responder {
-		loginDetails, err := getLoginDetailsResponse(params)
+		loginDetails, err := getLoginDetailsResponse()
 		if err != nil {
 			return authApi.NewLoginDetailDefault(int(err.Code)).WithPayload(err)
 		}
@@ -174,7 +174,7 @@ func decodePrivateKey(pemBlock []byte) (*pem.Block, error) {
 	return nil, ErrNoPrivateKey
 }
 
-func getLoginDetailsResponse(params authApi.LoginDetailParams) (*models.LoginDetails, *models.Error) {
+func getLoginDetailsResponse() (*models.LoginDetails, *models.Error) {
 	loginStrategy := models.LoginDetailsLoginStrategyForm
 	var redirectRules []*models.RedirectRule
 

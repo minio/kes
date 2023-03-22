@@ -82,7 +82,7 @@ func getStatusResponse(session *models.Principal, params encryption.StatusParams
 	return encryptionStatus(ctx, KESClient{Client: kesClient})
 }
 
-func encryptionStatus(ctx context.Context, kesClient KESClientI) (*models.EncryptionStatusResponse, *models.Error) {
+func encryptionStatus(_ context.Context, _ KESClientI) (*models.EncryptionStatusResponse, *models.Error) {
 	// st, err := kesClient.Status(ctx)
 	// if err != nil {
 	// 	return nil, newDefaultAPIError(err)

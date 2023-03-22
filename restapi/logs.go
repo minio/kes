@@ -18,7 +18,6 @@
 package restapi
 
 import (
-	"context"
 	"errors"
 	"log"
 	"os"
@@ -39,14 +38,10 @@ func logError(msg string, data ...interface{}) {
 	errorLog.Printf(msg+"\n", data...)
 }
 
-func logIf(ctx context.Context, err error, errKind ...interface{}) {
-}
-
 // globally changeable logger styles
 var (
 	LogInfo  = logInfo
 	LogError = logError
-	LogIf    = logIf
 )
 
 // Context captures all command line flags values
