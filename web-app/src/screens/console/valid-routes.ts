@@ -18,6 +18,7 @@ import { IMenuItem } from "./menu/types";
 import { NavLink } from "react-router-dom";
 import StatusIcon from "./encryption/api/StatusIcon";
 import KeysIcon from "./encryption/keys/KeysIcon";
+import SecretsIcon from "./encryption/secrets/SecretsIcon";
 import PoliciesIcon from "./encryption/policies/PoliciesIcon";
 import IdentitiesIcon from "./encryption/identities/IdentitiesIcon";
 
@@ -81,7 +82,7 @@ export const validRoutes = () => {
       name: "Secrets",
       id: "encryption-secret",
       component: NavLink,
-      icon: KeysIcon,
+      icon: SecretsIcon,
       to: ROUTES.ENCRYPTION_SECRETS,
       children: [],
     },
