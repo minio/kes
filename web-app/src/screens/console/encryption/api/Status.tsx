@@ -20,13 +20,17 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-import PageLayout from "../../common/PageLayout";
 
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import { TabPanel } from "../../common/TabPanel";
-import SectionTitle from "../../common/SectionTitle";
-import { DisabledIcon, EnabledIcon, PageHeader } from "mds";
+import {
+  DisabledIcon,
+  EnabledIcon,
+  PageHeader,
+  PageLayout,
+  SectionTitle,
+} from "mds";
 import LabelValuePair from "../../common/LabelValuePair";
 import LabelWithIcon from "../../common/LabelWithIcon";
 

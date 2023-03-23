@@ -20,6 +20,7 @@ import {
   DataTable,
   Grid as GridMDS,
   PageHeader,
+  PageLayout,
   RefreshIcon,
   Tooltip,
 } from "mds";
@@ -28,7 +29,6 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
-import PageLayout from "../../common/PageLayout";
 import SearchBox from "../../common/SearchBox";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));

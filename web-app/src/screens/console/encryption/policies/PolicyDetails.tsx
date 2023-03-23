@@ -25,6 +25,8 @@ import {
   TrashIcon,
   RefreshIcon,
   DataTable,
+  PageLayout,
+  SectionTitle,
 } from "mds";
 import { Theme } from "@mui/material/styles";
 import createStyles from "@mui/styles/createStyles";
@@ -42,10 +44,8 @@ import useApi from "../../../../common/hooks/useApi";
 import { EncryptionPolicy } from "../types";
 import api from "../../../../common/api";
 import { ROUTES } from "../../valid-routes";
-import PageLayout from "../../common/PageLayout";
 import ScreenTitle from "../../common/ScreenTitle";
 import VerticalTabs from "../../common/VerticalTabs";
-import SectionTitle from "../../common/SectionTitle";
 import PolicyDetailsPanel from "./PolicyDetailsPanel";
 import SearchBox from "../../common/SearchBox";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";

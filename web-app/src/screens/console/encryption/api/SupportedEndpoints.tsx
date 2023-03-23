@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import { Box, Grid } from "@mui/material";
-import { EnabledIcon } from "mds";
+import { EnabledIcon, SectionTitle } from "mds";
 import React, { Fragment, useEffect, useState } from "react";
 import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
@@ -23,7 +23,6 @@ import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import LabelValuePair from "../../common/LabelValuePair";
 import LabelWithIcon from "../../common/LabelWithIcon";
-import SectionTitle from "../../common/SectionTitle";
 
 const SupportedEndpoints = () => {
   const dispatch = useAppDispatch();

@@ -21,8 +21,7 @@ import { useAppDispatch } from "../../../app/hooks";
 import { ErrorResponseHandler } from "../../../common/api/types";
 import { setErrorSnackMessage } from "../../../systemSlice";
 import useApi from "../../../common/hooks/useApi";
-import { ConfirmDeleteIcon, Grid } from "mds";
-import InputBoxWrapper from "../common/InputBoxWrapper";
+import { ConfirmDeleteIcon, Grid, InputBox } from "mds";
 import ConfirmDialog from "../common/ConfirmDialog";
 import WarningMessage from "../WarningMessage";
 
@@ -83,7 +82,7 @@ const DeleteModal = ({
           )}
           To continue please type <b>{selectedItem}</b> in the box.
           <Grid item xs={12}>
-            <InputBoxWrapper
+            <InputBox
               id="retype-key"
               name="retype-key"
               onChange={(event: React.ChangeEvent<HTMLInputElement>) => {

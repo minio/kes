@@ -18,17 +18,23 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, BackLink, Button, PageHeader } from "mds";
+import {
+  AddAccessRuleIcon,
+  BackLink,
+  Button,
+  FormLayout,
+  HelpBox,
+  HelpIcon,
+  InputBox,
+  PageHeader,
+  PageLayout,
+} from "mds";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import FormLayout from "../../common/FormLayout";
-import PageLayout from "../../common/PageLayout";
-import HelpBox from "../../common/Helpbox";
-import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 const AddSecret = () => {
   const dispatch = useAppDispatch();
@@ -89,10 +95,11 @@ const AddSecret = () => {
           <FormLayout
             title={"Create Secret"}
             icon={<AddAccessRuleIcon />}
-            helpbox={
+            helpBox={
               <HelpBox
-                helpText={"Encryption Secret"}
-                contents={["Create a new secret in KES."]}
+                iconComponent={<HelpIcon />}
+                title={"Encryption Secret"}
+                help={<Fragment>Create a new secret in KES.</Fragment>}
               />
             }
           >
@@ -105,7 +112,7 @@ const AddSecret = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  <InputBox
                     id="secret-name"
                     name="secret-name"
                     label="Secret Name"
@@ -121,7 +128,7 @@ const AddSecret = () => {
                 <br />
                 <br />
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  <InputBox
                     id="secret-value"
                     name="secret-value"
                     label="Secret Value"

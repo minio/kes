@@ -18,17 +18,23 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, BackLink, Button, PageHeader } from "mds";
+import {
+  AddAccessRuleIcon,
+  BackLink,
+  Button,
+  HelpBox,
+  PageHeader,
+  HelpIcon,
+  FormLayout,
+  InputBox,
+  PageLayout,
+} from "mds";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import FormLayout from "../../common/FormLayout";
-import PageLayout from "../../common/PageLayout";
-import HelpBox from "../../common/Helpbox";
-import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 const AddKey = () => {
   const dispatch = useAppDispatch();
@@ -74,10 +80,13 @@ const AddKey = () => {
           <FormLayout
             title={"Create Key"}
             icon={<AddAccessRuleIcon />}
-            helpbox={
+            helpBox={
               <HelpBox
-                helpText={"Encryption Key"}
-                contents={["Create a new cryptographic key in KES."]}
+                iconComponent={<HelpIcon />}
+                title={"Encryption Key"}
+                help={
+                  <Fragment>Create a new cryptographic key in KES.</Fragment>
+                }
               />
             }
           >
@@ -90,7 +99,7 @@ const AddKey = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  <InputBox
                     id="key-name"
                     name="key-name"
                     label="Key Name"

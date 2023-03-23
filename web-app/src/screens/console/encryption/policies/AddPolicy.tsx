@@ -18,7 +18,17 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, Button, PageHeader, BackLink } from "mds";
+import {
+  AddAccessRuleIcon,
+  Button,
+  PageHeader,
+  BackLink,
+  HelpBox,
+  HelpIcon,
+  FormLayout,
+  InputBox,
+  PageLayout,
+} from "mds";
 // import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
@@ -26,11 +36,7 @@ import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import PageLayout from "../../common/PageLayout";
-import FormLayout from "../../common/FormLayout";
-import HelpBox from "../../common/Helpbox";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
-import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 export const emptyContent = '{\n    "allow": [],\n    "deny": []\n}';
 
@@ -78,10 +84,11 @@ const AddPolicy = () => {
           <FormLayout
             title={"Create Policy"}
             icon={<AddAccessRuleIcon />}
-            helpbox={
+            helpBox={
               <HelpBox
-                helpText={"Encryption Policy"}
-                contents={["Create a new policy in KES."]}
+                iconComponent={<HelpIcon />}
+                title={"Encryption Policy"}
+                help={<Fragment>Create a new policy in KES.</Fragment>}
               />
             }
           >
@@ -94,7 +101,7 @@ const AddPolicy = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  <InputBox
                     id="policy"
                     name="policy"
                     label="Policy Name"

@@ -18,18 +18,24 @@ import React, { Fragment, useState } from "react";
 import { Box } from "@mui/material";
 
 import Grid from "@mui/material/Grid";
-import { AddAccessRuleIcon, BackLink, Button, PageHeader } from "mds";
+import {
+  AddAccessRuleIcon,
+  BackLink,
+  Button,
+  FormLayout,
+  HelpBox,
+  HelpIcon,
+  InputBox,
+  PageHeader,
+  PageLayout,
+} from "mds";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
-import PageLayout from "../../common/PageLayout";
-import FormLayout from "../../common/FormLayout";
-import HelpBox from "../../common/Helpbox";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
-import InputBoxWrapper from "../../common/InputBoxWrapper";
 
 export const emptyContent = '{\n    "bytes": ""\n}';
 
@@ -80,10 +86,11 @@ const ImportKey = () => {
           <FormLayout
             title={"Import Key"}
             icon={<AddAccessRuleIcon />}
-            helpbox={
+            helpBox={
               <HelpBox
-                helpText={"Encryption Key"}
-                contents={["Import a cryptographic key in KES."]}
+                iconComponent={<HelpIcon />}
+                title={"Encryption Key"}
+                help={<Fragment>Import a cryptographic key in KES.</Fragment>}
               />
             }
           >
@@ -96,7 +103,7 @@ const ImportKey = () => {
             >
               <Grid container item spacing={1}>
                 <Grid item xs={12}>
-                  <InputBoxWrapper
+                  <InputBox
                     id="key-name"
                     name="key-name"
                     label="Key Name"
