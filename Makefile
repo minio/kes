@@ -24,3 +24,6 @@ swagger-gen:
 assets:
 	@(if [ -f "${NVM_DIR}/nvm.sh" ]; then \. "${NVM_DIR}/nvm.sh" && nvm install && nvm use && npm install -g yarn ; fi &&\
 	  cd web-app; yarn install --prefer-offline; make build-static; cd ..)
+
+integration-tests:
+	./integration-tests.sh
