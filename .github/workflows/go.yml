@@ -76,33 +76,32 @@ jobs:
       run: |
          go build ./...
          go vet ./...
-  # integration-tests:
-  #   name: Integration tests
-  #   needs:
-  #     - ui-assets
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - name: Set up Go
-  #     uses: actions/setup-go@v3
-  #     with:
-  #       go-version: 1.20.2
-  #       check-latest: true
-  #     id: go
-  #   - name: Check out code
-  #     uses: actions/checkout@v3
-  #   - uses: actions/cache@v3
-  #     id: assets-cache
-  #     name: Assets Cache
-  #     with:
-  #       path: |
-  #         ./web-app/build/
-  #       key: ${{ runner.os }}-assets-${{ github.run_id }}
-  #   - name: Run Integration Tests
-  #     env:
-  #       GO111MODULE: on
-  #     run: |
-  #        make integration-tests
-
+  integration-tests:
+    name: Integration tests
+    needs:
+      - ui-assets
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.20.2
+        check-latest: true
+      id: go
+    - name: Check out code
+      uses: actions/checkout@v3
+    - uses: actions/cache@v3
+      id: assets-cache
+      name: Assets Cache
+      with:
+        path: |
+          ./web-app/build/
+        key: ${{ runner.os }}-assets-${{ github.run_id }}
+    - name: Run Integration Tests
+      env:
+        GO111MODULE: on
+      run: |
+         make integration-tests
   lint:
     name: Lint
     runs-on: ubuntu-latest
