@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/minio/kes/restapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -31,17 +32,21 @@ type PoliciesTestSuite struct {
 	assert     *assert.Assertions
 	testPolicy string
 	token      string
+	server     *restapi.Server
 }
 
 func (suite *PoliciesTestSuite) SetupSuite() {
 	suite.assert = assert.New(suite.T())
 	suite.testPolicy = "test-policy"
+	suite.server, _ = initKESServer()
+	suite.assert.NotNil(suite.server)
 }
 
 func (suite *PoliciesTestSuite) SetupTest() {
 }
 
 func (suite *PoliciesTestSuite) TearDownSuite() {
+	suite.server.Shutdown()
 }
 
 func (suite *PoliciesTestSuite) TearDownTest() {

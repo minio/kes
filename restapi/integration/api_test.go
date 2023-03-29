@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/minio/kes/restapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -28,16 +29,20 @@ type APITestSuite struct {
 	suite.Suite
 	assert *assert.Assertions
 	token  string
+	server *restapi.Server
 }
 
 func (suite *APITestSuite) SetupSuite() {
 	suite.assert = assert.New(suite.T())
+	suite.server, _ = initKESServer()
+	suite.assert.NotNil(suite.server)
 }
 
 func (suite *APITestSuite) SetupTest() {
 }
 
 func (suite *APITestSuite) TearDownSuite() {
+	suite.server.Shutdown()
 }
 
 func (suite *APITestSuite) TearDownTest() {
@@ -48,11 +53,18 @@ func (suite *APITestSuite) TestAPI() {
 	suite.token, err = login()
 	suite.assert.NoError(err)
 	suite.getAPIs()
+	suite.getVersion()
 	suite.getMetrics()
 }
 
 func (suite *APITestSuite) getAPIs() {
 	res, err := makeRequest(nil, "GET", "http://localhost:9393/api/v1/encryption/apis", suite.token)
+	suite.assert.NoError(err)
+	suite.assert.Equal(http.StatusOK, res.StatusCode)
+}
+
+func (suite *APITestSuite) getVersion() {
+	res, err := makeRequest(nil, "GET", "http://localhost:9393/api/v1/encryption/version", suite.token)
 	suite.assert.NoError(err)
 	suite.assert.Equal(http.StatusOK, res.StatusCode)
 }

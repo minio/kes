@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/minio/kes/restapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -30,17 +31,21 @@ type KeysTestSuite struct {
 	assert  *assert.Assertions
 	testKey string
 	token   string
+	server  *restapi.Server
 }
 
 func (suite *KeysTestSuite) SetupSuite() {
 	suite.assert = assert.New(suite.T())
 	suite.testKey = "test-key"
+	suite.server, _ = initKESServer()
+	suite.assert.NotNil(suite.server)
 }
 
 func (suite *KeysTestSuite) SetupTest() {
 }
 
 func (suite *KeysTestSuite) TearDownSuite() {
+	suite.server.Shutdown()
 }
 
 func (suite *KeysTestSuite) TearDownTest() {
@@ -51,6 +56,7 @@ func (suite *KeysTestSuite) TestKeys() {
 	suite.token, err = login()
 	suite.assert.NoError(err)
 	suite.createKey()
+	suite.describeKey()
 	suite.listKeys()
 	suite.deleteKey()
 }
@@ -60,6 +66,13 @@ func (suite *KeysTestSuite) createKey() {
 	res, err := makeRequest(data, "POST", "http://localhost:9393/api/v1/encryption/keys", suite.token)
 	suite.assert.NoError(err)
 	suite.assert.Equal(http.StatusCreated, res.StatusCode)
+}
+
+func (suite *KeysTestSuite) describeKey() {
+	url := fmt.Sprintf("http://localhost:9393/api/v1/encryption/keys/%s", suite.testKey)
+	res, err := makeRequest(nil, "GET", url, suite.token)
+	suite.assert.NoError(err)
+	suite.assert.Equal(http.StatusOK, res.StatusCode)
 }
 
 func (suite *KeysTestSuite) listKeys() {

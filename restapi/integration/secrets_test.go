@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/minio/kes/restapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -31,18 +32,22 @@ type SecretsTestSuite struct {
 	testSecret string
 	testValue  string
 	token      string
+	server     *restapi.Server
 }
 
 func (suite *SecretsTestSuite) SetupSuite() {
 	suite.assert = assert.New(suite.T())
 	suite.testSecret = "test-secret"
 	suite.testValue = "test-value"
+	suite.server, _ = initKESServer()
+	suite.assert.NotNil(suite.server)
 }
 
 func (suite *SecretsTestSuite) SetupTest() {
 }
 
 func (suite *SecretsTestSuite) TearDownSuite() {
+	suite.server.Shutdown()
 }
 
 func (suite *SecretsTestSuite) TearDownTest() {

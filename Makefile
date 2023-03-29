@@ -27,3 +27,6 @@ assets:
 
 integration-tests:
 	./integration-tests.sh
+
+get-coverage:
+	./get-coverage.sh

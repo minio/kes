@@ -49,12 +49,9 @@ echo "        - /v1/identity/delete/*" >> ./init.yml
 ./kes init --config init.yml ./data --force
 ./kes server ./data --auth=off &
 KES_PID=$!
-./kes ui &
-KES_UI_PID=$!
 
-go test ./restapi/integration/...
+go test ./restapi/integration/... -coverpkg=./restapi -coverprofile=integration-coverage.out
 
 rm kes admin.key admin.crt client.key client.crt private.key public.crt init.yml
 
 kill -9 $KES_PID
-kill -9 $KES_UI_PID

@@ -10,6 +10,10 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/go-openapi/loads"
+	"github.com/minio/kes/restapi"
+	"github.com/minio/kes/restapi/operations"
 )
 
 var (
@@ -89,4 +93,33 @@ func makeRequest(data map[string]interface{}, method, url, token string) (*http.
 	request.Header.Add("Cookie", fmt.Sprintf("%s=%s", cookieName, token))
 	request.Header.Add("Content-Type", "application/json")
 	return client.Do(request)
+}
+
+func initKESServer() (*restapi.Server, error) {
+	swaggerSpec, err := loads.Embedded(restapi.SwaggerJSON, restapi.FlatSwaggerJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	noLog := func(string, ...interface{}) {}
+
+	api := operations.NewKesAPI(swaggerSpec)
+
+	restapi.LogInfo = noLog
+	restapi.LogError = noLog
+	api.Logger = noLog
+
+	server := restapi.NewServer(api)
+	server.ConfigureAPI()
+
+	server.Host = "0.0.0.0"
+	server.Port = 9393
+	restapi.Port = "9393"
+	restapi.Hostname = "0.0.0.0"
+
+	go func() {
+		server.Serve()
+	}()
+
+	return server, nil
 }
