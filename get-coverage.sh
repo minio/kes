@@ -4,7 +4,6 @@ cd gocovmerge
 go mod tidy
 go install
 cd ..
-ls
 find ./ -name "*coverage.out" | xargs gocovmerge > final.out
 go tool cover -func=final.out | grep total > tmp
 result=`cat tmp | awk 'END {print $3}'`
