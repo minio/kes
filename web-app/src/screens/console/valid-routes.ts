@@ -16,11 +16,7 @@
 
 import { IMenuItem } from "./menu/types";
 import { NavLink } from "react-router-dom";
-import StatusIcon from "./encryption/api/StatusIcon";
-import KeysIcon from "./encryption/keys/KeysIcon";
-import SecretsIcon from "./encryption/secrets/SecretsIcon";
-import PoliciesIcon from "./encryption/policies/PoliciesIcon";
-import IdentitiesIcon from "./encryption/identities/IdentitiesIcon";
+import { IdentitiesMenuIcon, KeysMenuIcon, PoliciesMenuIcon, SecretsMenuIcon, StatusMenuIcon } from "mds";
 
 export const ROUTES = {
   ENCRYPTION: "/encryption",
@@ -46,7 +42,7 @@ export const validRoutes = () => {
       name: "Status",
       id: "encryption-status",
       component: NavLink,
-      icon: StatusIcon,
+      icon: StatusMenuIcon,
       to: ROUTES.ENCRYPTION_STATUS,
       children: [],
     },
@@ -55,7 +51,7 @@ export const validRoutes = () => {
       name: "Keys",
       id: "encryption-keys",
       component: NavLink,
-      icon: KeysIcon,
+      icon: KeysMenuIcon,
       to: ROUTES.ENCRYPTION_KEYS,
       children: [],
     },
@@ -64,7 +60,7 @@ export const validRoutes = () => {
       name: "Policies",
       id: "encryption-policies",
       component: NavLink,
-      icon: PoliciesIcon,
+      icon: PoliciesMenuIcon,
       to: ROUTES.ENCRYPTION_POLICIES,
       children: [],
     },
@@ -73,7 +69,7 @@ export const validRoutes = () => {
       name: "Identities",
       id: "encryption-identities",
       component: NavLink,
-      icon: IdentitiesIcon,
+      icon: IdentitiesMenuIcon,
       to: ROUTES.ENCRYPTION_IDENTITIES,
       children: [],
     },
@@ -82,7 +78,7 @@ export const validRoutes = () => {
       name: "Secrets",
       id: "encryption-secret",
       component: NavLink,
-      icon: SecretsIcon,
+      icon: SecretsMenuIcon,
       to: ROUTES.ENCRYPTION_SECRETS,
       children: [],
     },

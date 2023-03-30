@@ -26,7 +26,7 @@
     "@types/recharts": "^1.8.24",
     "kbar": "^0.1.0-beta.39",
     "local-storage-fallback": "^4.1.2",
-    "mds": "https://github.com/minio/mds.git#v0.3.2",
+    "mds": "https://github.com/minio/mds.git#v0.3.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-redux": "^8.0.5",
