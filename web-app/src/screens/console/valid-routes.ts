@@ -16,7 +16,13 @@
 
 import { IMenuItem } from "./menu/types";
 import { NavLink } from "react-router-dom";
-import { IdentitiesMenuIcon, KeysMenuIcon, PoliciesMenuIcon, SecretsMenuIcon, StatusMenuIcon } from "mds";
+import {
+  IdentitiesMenuIcon,
+  KeysMenuIcon,
+  PoliciesMenuIcon,
+  SecretsMenuIcon,
+  StatusMenuIcon,
+} from "mds";
 
 export const ROUTES = {
   ENCRYPTION: "/encryption",
