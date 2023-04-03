@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"path"
+	"time"
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
@@ -85,16 +87,32 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Conn{
+
+	conn := &Conn{
 		client: client,
 		config: c,
-	}, nil
+	}
+	if _, err = conn.Status(ctx); err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
 // Status returns the current state of the GCP SecretManager instance.
 // In particular, whether it is reachable and the network latency.
 func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	return kms.Dial(ctx, c.config.Endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.Endpoint, nil)
+	if err != nil {
+		return kms.State{}, err
+	}
+
+	start := time.Now()
+	if _, err = http.DefaultClient.Do(req); err != nil {
+		return kms.State{}, &kms.Unreachable{Err: err}
+	}
+	return kms.State{
+		Latency: time.Since(start),
+	}, nil
 }
 
 // Create stores the given key-value pair at GCP secret manager
