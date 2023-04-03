@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -82,13 +84,15 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = kms.Dial(ctx, config.Addr); err != nil {
-		return nil, err
-	}
-	return &Conn{
+
+	c := &Conn{
 		config: *config,
 		client: secretsmanager.New(session),
-	}, nil
+	}
+	if _, err = c.Status(ctx); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // Conn is a connection to an AWS SecretsManager.
@@ -102,7 +106,18 @@ var _ kms.Conn = (*Conn)(nil)
 // Status returns the current state of the AWS SecretsManager instance.
 // In particular, whether it is reachable and the network latency.
 func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	return kms.Dial(ctx, c.config.Addr)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.client.Endpoint, nil)
+	if err != nil {
+		return kms.State{}, err
+	}
+
+	start := time.Now()
+	if _, err = http.DefaultClient.Do(req); err != nil {
+		return kms.State{}, &kms.Unreachable{Err: err}
+	}
+	return kms.State{
+		Latency: time.Since(start),
+	}, nil
 }
 
 // Create stores the given key-value pair at the AWS SecretsManager

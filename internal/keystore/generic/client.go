@@ -62,13 +62,9 @@ type Conn struct {
 
 // Connect connects to the KMS plugin using the
 // given configuration.
-func Connect(ctx context.Context, config *Config) (*Conn, error) {
+func Connect(_ context.Context, config *Config) (*Conn, error) {
 	if config == nil || config.Endpoint == "" {
 		return nil, errors.New("generic: endpoint is empty")
-	}
-	_, err := kms.Dial(ctx, config.Endpoint)
-	if err != nil {
-		return nil, err
 	}
 
 	tlsConfig := &tls.Config{
@@ -115,9 +111,7 @@ var _ kms.Conn = (*Conn)(nil)
 
 // Status returns the current state of the generic KeyStore instance.
 // In particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	return kms.Dial(ctx, c.config.Endpoint)
-}
+func (c *Conn) Status(context.Context) (kms.State, error) { return kms.State{}, nil }
 
 // Create creates the given key-value pair at the generic KeyStore if
 // and only if the given key does not exist. If such an entry already

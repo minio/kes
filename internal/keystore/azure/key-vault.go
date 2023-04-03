@@ -47,7 +47,18 @@ var _ kms.Conn = (*Conn)(nil)
 // Status returns the current state of the Azure KeyVault instance.
 // In particular, whether it is reachable and the network latency.
 func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	return kms.Dial(ctx, c.endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.client.Endpoint, nil)
+	if err != nil {
+		return kms.State{}, err
+	}
+
+	start := time.Now()
+	if _, err = http.DefaultClient.Do(req); err != nil {
+		return kms.State{}, &kms.Unreachable{Err: err}
+	}
+	return kms.State{
+		Latency: time.Since(start),
+	}, nil
 }
 
 // Create creates the given key-value pair as KeyVault secret.
