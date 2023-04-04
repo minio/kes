@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/url"
 	"time"
 )
 
@@ -196,57 +195,3 @@ func (e *Unavailable) Error() string {
 // Unwrap returns the Unavailable's underlying error,
 // if any.
 func (e *Unavailable) Unwrap() error { return e.Err }
-
-// Dial dials the given addr and returns a new State
-// describing the established connection.
-//
-// If Dial fails to establish a connection due to a network
-// error, it returns an error of type Unreachable.
-func Dial(ctx context.Context, addr string) (State, error) {
-	const (
-		HTTPS       = "https://"
-		DefaultPort = "443"
-	)
-
-	URL, err := url.Parse(addr)
-	if err != nil {
-		return State{}, err
-	}
-	if URL.Hostname() == "" {
-		// If the URL does not contain a hostname
-		// the raw endpoint does not contain a
-		// scheme. For example: localhost:443
-		// instead of https://localhost:443.
-		//
-		// In this case, we prepend the
-		// https:// scheme to obtain the
-		// hostname and port later on.
-		URL, err = url.Parse(HTTPS + addr)
-		if err != nil {
-			return State{}, err
-		}
-	}
-
-	var (
-		host = URL.Hostname()
-		port = URL.Port()
-	)
-	if port == "" {
-		port = DefaultPort
-	}
-
-	var (
-		d     net.Dialer
-		start = time.Now()
-	)
-	c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
-	latency := time.Since(start)
-	if err != nil {
-		return State{}, &Unreachable{Err: err}
-	}
-	defer c.Close()
-
-	return State{
-		Latency: latency,
-	}, nil
-}

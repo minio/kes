@@ -113,7 +113,18 @@ func Connect(ctx context.Context, config *Config) (c *Conn, err error) {
 // Status returns the current state of the Gemalto KeySecure instance.
 // In particular, whether it is reachable and the network latency.
 func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	return kms.Dial(ctx, c.config.Endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.Endpoint, nil)
+	if err != nil {
+		return kms.State{}, err
+	}
+
+	start := time.Now()
+	if _, err = http.DefaultClient.Do(req); err != nil {
+		return kms.State{}, &kms.Unreachable{Err: err}
+	}
+	return kms.State{
+		Latency: time.Since(start),
+	}, nil
 }
 
 // Create creates the given key-value pair at Gemalto if and only
