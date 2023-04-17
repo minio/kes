@@ -33,6 +33,6 @@ export const deleteCookie = (name: string) => {
 };
 
 export const clearSession = () => {
-  storage.removeItem("token");
-  deleteCookie("token");
+  storage.removeItem("kes-ui-token");
+  deleteCookie("kes-ui-token");
 };
