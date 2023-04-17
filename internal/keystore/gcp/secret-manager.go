@@ -41,6 +41,9 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 	var options []option.ClientOption
 	if c.Endpoint != "" {
 		options = append(options, option.WithEndpoint(c.Endpoint))
+	} else {
+		const DefaultEndpoint = "https://secretmanager.googleapis.com" // From the GCP SDK
+		c.Endpoint = DefaultEndpoint
 	}
 	// We only pass credentials to the GCP client if they
 	// are not empty. When running inside GCP, e.g. on app engine,
