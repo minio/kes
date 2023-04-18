@@ -704,4 +704,4 @@ func (i *iter) Next() (string, bool) {
 	return "", false
 }
 
-func (i *iter) Close() error { return i.Close() }
+func (i *iter) Close() error { return i.iter.Close() }
