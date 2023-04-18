@@ -345,7 +345,7 @@ Examples:
 
 func infoIdentityCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, infoIdentityCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, infoIdentityCmdUsage) }
 
 	var (
 		jsonFlag           bool

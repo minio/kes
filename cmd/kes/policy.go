@@ -38,7 +38,7 @@ Options:
 
 func policyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, policyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, policyCmdUsage) }
 
 	subCmds := commands{
 		"create": createPolicyCmd,
@@ -84,7 +84,7 @@ Examples:
 
 func createPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, createPolicyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, createPolicyCmdUsage) }
 
 	var (
 		insecureSkipVerify bool
@@ -147,7 +147,7 @@ Examples:
 
 func assignPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, assignPolicyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, assignPolicyCmdUsage) }
 
 	var (
 		insecureSkipVerify bool
@@ -207,7 +207,7 @@ Examples:
 
 func lsPolicyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, lsPolicyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, lsPolicyCmdUsage) }
 
 	var (
 		jsonFlag           bool

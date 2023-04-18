@@ -228,9 +228,8 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 		case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted":
 			time.Sleep(Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond)
 			continue
-		default:
-			break
 		}
+		break
 	}
 	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
 		return nil
@@ -308,7 +307,7 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 						err = context.Canceled
 					}
 					iterator.SetErr(err)
-					break
+					return
 				}
 			}
 			if nextLink == "" {

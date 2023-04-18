@@ -39,7 +39,7 @@ func (fw *flushWriter) WriteHeader(status int) { fw.w.WriteHeader(status) }
 func (fw *flushWriter) Header() http.Header { return fw.w.Header() }
 
 func (fw *flushWriter) Write(p []byte) (int, error) {
-	n, err := fw.Write(p)
+	n, err := fw.w.Write(p)
 	if fw.f != nil && err == nil {
 		fw.f.Flush()
 	}
