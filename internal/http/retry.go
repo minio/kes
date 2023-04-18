@@ -247,7 +247,7 @@ func isTemporary(err error) bool {
 		return false
 	}
 	if netErr, ok := err.(net.Error); ok { // *url.Error implements net.Error
-		if netErr.Timeout() || netErr.Temporary() {
+		if netErr.Timeout() {
 			return true
 		}
 

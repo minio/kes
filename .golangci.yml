@@ -5,12 +5,16 @@ linters-settings:
   misspell:
     locale: US
 
+  staticcheck:
+    checks: ["all", "-SA1019"]
+
 linters:
   disable-all: true
   enable:
     - typecheck
     - goimports
     - misspell
+    - staticcheck
     - govet
     - revive
     - ineffassign

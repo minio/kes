@@ -15,11 +15,11 @@ import (
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/kms"
 	"google.golang.org/api/option"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 )
 
 // Conn is a connection to a GCP SecretManager.
@@ -141,7 +141,7 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		if grpc.Code(err) == codes.AlreadyExists {
+		if status.Code(err) == codes.AlreadyExists {
 			return kes.ErrKeyExists
 		}
 		return fmt.Errorf("gcp: failed to create '%s': %v", name, err)
@@ -171,7 +171,7 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
-		if grpc.Code(err) == codes.NotFound {
+		if status.Code(err) == codes.NotFound {
 			return nil, kes.ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("gcp: failed to read '%s': %v", name, err)
@@ -195,7 +195,7 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		if grpc.Code(err) == codes.NotFound {
+		if status.Code(err) == codes.NotFound {
 			return kes.ErrKeyNotFound
 		}
 		return fmt.Errorf("gcp: failed to delete '%s': %v", name, err)

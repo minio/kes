@@ -465,7 +465,7 @@ Examples:
 
 func encryptKeyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, encryptKeyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, encryptKeyCmdUsage) }
 
 	var (
 		insecureSkipVerify bool
@@ -527,7 +527,7 @@ Examples:
 
 func decryptKeyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, decryptKeyCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, decryptKeyCmdUsage) }
 
 	var (
 		insecureSkipVerify bool
