@@ -30,4 +30,4 @@ jobs:
         uses: goreleaser/goreleaser-action@v3
         with:
           version: latest
-          args: release --skip-publish --skip-sign --rm-dist --snapshot
+          args: release --skip-publish --skip-sign --clean --snapshot --skip-before
