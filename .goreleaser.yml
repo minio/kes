@@ -11,6 +11,7 @@ before:
   hooks:
     - go mod tidy
     - sh -c 'git diff --quiet || (echo "Repo contains modified files. Run git checkout" && exit 1)'
+    - sh -c "[[ {{ .Tag }} ==  {{ replace .CommitDate ":" "-" }} ]] || (echo Invalid release tag. Run git tag -a {{ replace .CommitDate ":" "-" }} && exit 1)"
 
 builds:
   -
