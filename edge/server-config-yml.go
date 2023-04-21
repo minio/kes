@@ -304,7 +304,7 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 		},
 		Log: &LogConfig{
 			Error: strings.TrimSpace(strings.ToLower(y.Log.Error.Value)) != "off", // default is "on" behavior
-			Audit: strings.TrimSpace(strings.ToLower(y.Log.Audit.Value)) != "on",  // default is "off" behavior
+			Audit: strings.TrimSpace(strings.ToLower(y.Log.Audit.Value)) == "on",  // default is "off" behavior
 		},
 		KeyStore: keystore,
 	}
