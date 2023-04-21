@@ -58,26 +58,41 @@ tls:
 # Only customize the APIs if there is a real need.
 # 
 # Disabling authentication for an API must be carefully evaluated.
-# One example, when authentication may be justified monitoring via
-# the /v1/metrics API. It is possible that providing identities
-# to auto-scaling monitoring instances may not be feasable in certain
-# environments. However, in general it is better to use API keys or
-# TLS client certificates if possible.
+# One example, when disabling authentication may be justified, would
+# be the liveness and readiness probes in a Kubernetes environment.
 #
 # When authentication is disabled, the particular API can be
 # accessed by any client that can send HTTPS requests to the
 # KES server.
+#
+# When disabling authentication for any API, the KES server will
+# change its TLS handshake behavior. By default, KES requires that
+# a client sends a client certificate during the handshake or KES
+# aborts the handshake. This means that a client can only send an
+# HTTP request to KES when it provides a certificate during the
+# handshake. This is no longer the case when authentication is 
+# disabled for at least one API. Clients should be able to call
+# the API even without a certificate. Hence, KES can no longer
+# require a certificate during the TLS handshake but instead has
+# to check the certificate when executing the API handler. 
+# 
+# Now, these two behaviors have slightly different semantics:
+# By default, KES does not accept connections from clients without
+# a TLS certificate. When disabling authentication for one API, KES
+# has to accept connections from any client for all APIs. However,
+# the API handlers that still require authentication will reject
+# requests from clients without a certificate. Instead of a TLS
+# error these clients will receive an HTTP error.
+#
 # Currently, authentication can only be disabled for the
 # following APIs:
+#   - /v1/ready
 #   - /v1/status
 #   - /v1/metrics
 #   - /v1/api
 #
 api:
-  /v1/metrics:
-    skip_auth: false
-    timeout:   15s
-  /v1/status:
+  /v1/ready:
     skip_auth: false
     timeout:   15s
     

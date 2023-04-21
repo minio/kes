@@ -116,6 +116,7 @@ func NewEdgeRouter(config *EdgeRouterConfig) *Router {
 	}
 
 	r.api = append(r.api, edgeVersion(config))
+	r.api = append(r.api, edgeReady(config))
 	r.api = append(r.api, edgeStatus(config))
 	r.api = append(r.api, edgeMetrics(config))
 	r.api = append(r.api, edgeListAPI(r, config))

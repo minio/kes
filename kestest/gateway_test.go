@@ -27,6 +27,7 @@ var gatewayAPIs = map[string]struct {
 	Timeout time.Duration
 }{
 	"/version":    {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/ready":   {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/status":  {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/metrics": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/api":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},

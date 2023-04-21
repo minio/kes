@@ -482,8 +482,24 @@ func newTLSConfig(config *edge.ServerConfig, auth string) (*tls.Config, error) {
 	switch strings.ToLower(auth) {
 	case "", "on":
 		clientAuth = tls.RequireAndVerifyClientCert
+		if config.API != nil {
+			for _, api := range config.API.Paths {
+				if api.InsecureSkipAuth {
+					clientAuth = tls.VerifyClientCertIfGiven
+					break
+				}
+			}
+		}
 	case "off":
 		clientAuth = tls.RequireAnyClientCert
+		if config.API != nil {
+			for _, api := range config.API.Paths {
+				if api.InsecureSkipAuth {
+					clientAuth = tls.RequestClientCert
+					break
+				}
+			}
+		}
 	default:
 		return nil, fmt.Errorf("invalid option for --auth: %s", auth)
 	}
