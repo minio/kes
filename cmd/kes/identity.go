@@ -78,25 +78,28 @@ func identityCmd(args []string) {
 }
 
 const newIdentityCmdUsage = `Usage:
-    kes identity new [options] <subject>
+    kes identity new [options] [<subject>]
 
 Options:
-    --key <PATH>             Path to private key. (default: ./private.key) 
-    --cert <PATH>            Path to certificate. (default: ./public.crt)
-    -f, --force              Overwrite an existing private key and/or certificate.
+    --key <PATH>             Optional path for the private key. 
+    --cert <PATH>            Optional path for the certificate.
 
-    --ip <IP>                Add <IP> as subject alternative name. (SAN)
-    --dns <DOMAIN>           Add <DOMAIN> as subject alternative name. (SAN)
+    --ip <IP>                Add <IP> as subject alternative name (SAN). Requires
+                             the --key and --cert flags. 
+    --dns <DOMAIN>           Add <DOMAIN> as subject alternative name (SAN).
+                             Requires the --key and --cert flags.
     --expiry <DURATION>      Duration until the certificate expires. (default: 720h)
-    --encrypt                Encrypt the private key with a password.
+                             Requires the --key and --cert flags.
+    --encrypt                Encrypt the private key with a password. Requires
+                             the --key and --cert flags. 
+    -f, --force              Overwrite an existing private key and/or certificate.
 
     -h, --help               Print command line options.
 
 Examples:
-    $ kes identity new Client-1
-    $ kes identity new --ip "192.168.0.182" --ip "10.0.0.92" Client-1
-    $ kes identity new --key client1.key --cert client1.crt --encrypt Client-1
-    $ kes identity new --key client1.key --cert client1.crt --encrypt Client-1 --expiry 8760h
+    $ kes identity new
+    $ kes identity new --ip "192.168.0.182" --ip "10.0.0.92" localhost
+    $ kes identity new --key server.key --cert server.crt --encrypt --expiry 8760h kes-server.local
 `
 
 func newIdentityCmd(args []string) {
@@ -167,12 +170,13 @@ func newIdentityCmd(args []string) {
 			name := cmd.Arg(0)
 			options = append(options, func(cert *x509.Certificate) { cert.Subject.CommonName = name })
 		}
-		if expiry > 0 {
-			options = append(options, func(cert *x509.Certificate) {
-				now := time.Now()
-				cert.NotBefore, cert.NotAfter = now, now.Add(expiry)
-			})
+		if expiry == 0 {
+			expiry = 720 * time.Hour
 		}
+		options = append(options, func(cert *x509.Certificate) {
+			now := time.Now()
+			cert.NotBefore, cert.NotAfter = now, now.Add(expiry)
+		})
 		cert, err := kes.GenerateCertificate(key, options...)
 		if err != nil {
 			cli.Fatalf("failed to generate certificate: %v", err)
