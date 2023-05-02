@@ -624,7 +624,7 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, [
 	switch {
 	case s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "":
 		creds := azure.Credentials{
-			TenantID: s.Endpoint,
+			TenantID: s.TenantID,
 			ClientID: s.ClientID,
 			Secret:   s.ClientSecret,
 		}
