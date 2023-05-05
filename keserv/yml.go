@@ -69,6 +69,7 @@ type serverConfigYAML struct {
 		KES struct {
 			Endpoint []Env[string] `yaml:"endpoint,omitempty"`
 			Enclave  Env[string]   `yaml:"enclave,omitempty"`
+			APIKey   Env[string]   `yaml:"api_key,omitempty"`
 			TLS      struct {
 				Certificate Env[string] `yaml:"cert,omitempty"`
 				PrivateKey  Env[string] `yaml:"key,omitempty"`
