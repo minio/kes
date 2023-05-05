@@ -7,6 +7,7 @@
 package kestest
 
 import (
+	"context"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -24,7 +25,7 @@ import (
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
@@ -107,7 +108,7 @@ func (g *Gateway) start() {
 
 	auditLog.Add(metrics.AuditEventCounter())
 	errorLog.Add(metrics.ErrorEventCounter())
-	store := key.NewCache(key.Store{Conn: &mem.Store{}}, &key.CacheConfig{
+	store := keystore.NewCache(context.Background(), &mem.Store{}, &keystore.CacheConfig{
 		Expiry:       30 * time.Second,
 		ExpiryUnused: 5 * time.Second,
 	})

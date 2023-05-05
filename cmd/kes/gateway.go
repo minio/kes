@@ -33,6 +33,7 @@ import (
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
@@ -578,8 +579,7 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 	if err != nil {
 		return nil, err
 	}
-	store := key.Store{Conn: conn}
-	rConfig.Keys = key.NewCache(store, &key.CacheConfig{
+	rConfig.Keys = keystore.NewCache(ctx, conn, &keystore.CacheConfig{
 		Expiry:        config.Cache.Expiry,
 		ExpiryUnused:  config.Cache.ExpiryUnused,
 		ExpiryOffline: config.Cache.ExpiryOffline,
@@ -597,7 +597,7 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
-		if err = store.Create(ctx, k.Name, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
+		if err = rConfig.Keys.Create(ctx, k.Name, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
 			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
 	}
