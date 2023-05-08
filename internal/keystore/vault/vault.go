@@ -24,18 +24,18 @@ import (
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
-// Conn is a connection to a Hashicorp Vault server.
-type Conn struct {
+// Store is a Hashicorp Vault secret store.
+type Store struct {
 	client *client
 	config *Config
 }
 
 // Connect connects to a Hashicorp Vault server with
 // the given configuration.
-func Connect(ctx context.Context, c *Config) (*Conn, error) {
+func Connect(ctx context.Context, c *Config) (*Store, error) {
 	c = c.Clone()
 
 	if c.Engine == "" {
@@ -133,26 +133,26 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 
 	go client.CheckStatus(ctx, c.StatusPingAfter)
 	go client.RenewToken(ctx, authenticate, ttl, retry)
-	return &Conn{
+	return &Store{
 		config: c,
 		client: client,
 	}, nil
 }
 
-var _ kms.Conn = (*Conn)(nil)
+var _ kv.Store[string, []byte] = (*Store)(nil)
 
 var errSealed = errors.New("vault: key store is sealed")
 
 // Status returns the current state of the Hashicorp Vault instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Conn) Status(ctx context.Context) (kms.State, error) {
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	// This is a workaround for https://github.com/hashicorp/vault/issues/14934
 	// The Vault SDK should not set the X-Vault-Namespace header
 	// for root-only API paths.
 	// Otherwise, Vault may respond with: 404 - unsupported path
 	client, err := s.client.Clone()
 	if err != nil {
-		return kms.State{}, err
+		return kv.State{}, err
 	}
 	client.ClearNamespace()
 
@@ -165,23 +165,23 @@ func (s *Conn) Status(ctx context.Context) (kms.State, error) {
 	if err == nil {
 		switch {
 		case !health.Initialized:
-			return kms.State{}, &kms.Unavailable{Err: errors.New("vault: not initialized")}
+			return kv.State{}, &kv.Unavailable{Err: errors.New("vault: not initialized")}
 		case health.Sealed:
-			return kms.State{}, &kms.Unavailable{Err: errSealed}
+			return kv.State{}, &kv.Unavailable{Err: errSealed}
 		default:
-			return kms.State{Latency: time.Since(start)}, nil
+			return kv.State{Latency: time.Since(start)}, nil
 		}
 	}
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
 
 	start = time.Now()
 	req := s.client.Client.NewRequest(http.MethodGet, "")
 	if _, err = s.client.Client.RawRequestWithContext(ctx, req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -189,7 +189,7 @@ func (s *Conn) Status(ctx context.Context) (kms.State, error) {
 // Create creates the given key-value pair at Vault if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
-func (s *Conn) Create(ctx context.Context, name string, value []byte) error {
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	if s.client == nil {
 		return errors.New("vault: no connection to " + s.config.Endpoint)
 	}
@@ -304,9 +304,16 @@ func (s *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
+// Set creates the given key-value pair at Vault if and only
+// if the given key does not exist. If such an entry already exists
+// it returns kes.ErrKeyExists.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (s *Conn) Get(_ context.Context, name string) ([]byte, error) {
+func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 	if s.client.Sealed() {
 		return nil, errSealed
 	}
@@ -355,7 +362,7 @@ func (s *Conn) Get(_ context.Context, name string) ([]byte, error) {
 
 // Delete removes a the value associated with the given key
 // from Vault, if it exists.
-func (s *Conn) Delete(ctx context.Context, name string) error {
+func (s *Store) Delete(ctx context.Context, name string) error {
 	if s.client.Sealed() {
 		return errSealed
 	}
@@ -395,7 +402,7 @@ func (s *Conn) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Conn) List(ctx context.Context) (kms.Iter, error) {
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	if s.client.Sealed() {
 		return nil, errSealed
 	}
@@ -445,7 +452,5 @@ func (s *Conn) List(ctx context.Context) (kms.Iter, error) {
 	if !ok {
 		return nil, fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
 	}
-	return kms.FuseIter(&iterator{
-		values: values,
-	}), nil
+	return &iterator{values: values}, nil
 }

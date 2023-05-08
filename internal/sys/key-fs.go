@@ -15,7 +15,7 @@ import (
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // NewKeyFS returns a new KeyFS that
@@ -125,7 +125,7 @@ func (fs *keyFS) DeleteKey(_ context.Context, name string) error {
 	return err
 }
 
-func (fs *keyFS) ListKeys(ctx context.Context) (kms.Iter, error) {
+func (fs *keyFS) ListKeys(ctx context.Context) (kv.Iter[string], error) {
 	file, err := os.Open(fs.rootDir)
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ type keyIterator struct {
 	err   error
 }
 
-func (i *keyIterator) Next() bool {
+func (i *keyIterator) Next() (string, bool) {
 	const TmpFile = ".key.tmp"
 	if len(i.names) > 0 {
 		if i.names[0] == TmpFile {
@@ -152,36 +152,38 @@ func (i *keyIterator) Next() bool {
 		}
 	}
 	if len(i.names) > 0 {
-		i.next, i.names = i.names[0], i.names[1:]
-		return true
+		v := i.names[0]
+		i.names = i.names[1:]
+		return v, true
 	}
 	if i.err != nil {
-		return false
+		return "", false
 	}
 
 	select {
 	case <-i.ctx.Done():
 		i.err = i.ctx.Err()
-		return false
+		return "", false
 	default:
 	}
 
 	const N = 250
 	i.names, i.err = i.dir.Readdirnames(N)
 	if i.err != nil && i.err != io.EOF {
-		return false
+		return "", false
 	}
 	if len(i.names) == 0 && i.err == io.EOF {
-		return false
+		return "", false
 	}
 	if i.names[0] == TmpFile {
 		i.names = i.names[1:]
 	}
 	if len(i.names) > 0 {
-		i.next, i.names = i.names[0], i.names[1:]
-		return true
+		v := i.names[0]
+		i.names = i.names[1:]
+		return v, true
 	}
-	return false
+	return "", false
 }
 
 func (i *keyIterator) Name() string { return i.next }

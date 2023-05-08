@@ -25,9 +25,7 @@ var _ kv.Store[string, []byte] = (*Store)(nil)
 // Status returns the state of the in-memory key store which is
 // always healthy.
 func (s *Store) Status(_ context.Context) (kv.State, error) {
-	return kv.State{
-		Latency: 0,
-	}, nil
+	return kv.State{Latency: 0}, nil
 }
 
 // Create adds the given key to the store if and only if

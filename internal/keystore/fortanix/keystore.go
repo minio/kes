@@ -22,14 +22,13 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // APIKey is a Fortanix API key for authenticating to
@@ -67,17 +66,17 @@ type Config struct {
 	CAPath string
 }
 
-// Conn is a connection to a Fortanix SDKMS server.
-type Conn struct {
+// Store is a Fortanix SDKMS secret store.
+type Store struct {
 	config Config
 	client xhttp.Retry
 }
 
-var _ kms.Conn = (*Conn)(nil) // compiler check
+var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
-// Connect establishes and returns a Conn to a Fortanix SDKMS server
+// Connect establishes and returns a Store to a Fortanix SDKMS server
 // using the given config.
-func Connect(ctx context.Context, config *Config) (*Conn, error) {
+func Connect(ctx context.Context, config *Config) (*Store, error) {
 	if config.Endpoint == "" {
 		return nil, errors.New("fortanix: endpoint is empty")
 	}
@@ -177,7 +176,7 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 		}
 		return nil, fmt.Errorf("fortanix: failed to authenticate to '%s': %s (%d)", config.Endpoint, resp.Status, resp.StatusCode)
 	}
-	return &Conn{
+	return &Store{
 		config: *config,
 		client: client,
 	}, nil
@@ -185,26 +184,26 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 
 // Status returns the current state of the Fortanix SDKMS instance.
 // In particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.Endpoint, nil)
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kms.State{}, err
+		return kv.State{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: time.Since(start),
 	}, nil
 }
 
-// Create stors the given key at the Fortanix SDKMS if and only
+// Create stores the given key at the Fortanix SDKMS if and only
 // if no entry with the given name exists.
 //
 // If no such entry exists, Create returns kes.ErrKeyExists.
-func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	type Request struct {
 		Type       string   `json:"obj_type"`
 		Name       string   `json:"name"`
@@ -222,7 +221,7 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	request, err := json.Marshal(Request{
 		Type:       Type,
 		Name:       name,
-		GroupID:    c.config.GroupID,
+		GroupID:    s.config.GroupID,
 		Operations: []string{OpExport, OpAppManageable},
 		Value:      base64.StdEncoding.EncodeToString(value), // Fortanix expects base64-encoded values and will not accept raw strings
 		Enabled:    true,
@@ -231,15 +230,15 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 		return err
 	}
 
-	url := endpoint(c.config.Endpoint, "/crypto/v1/keys")
+	url := endpoint(s.config.Endpoint, "/crypto/v1/keys")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		return fmt.Errorf("fortanix: failed to create key '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", c.config.APIKey.String())
+	req.Header.Set("Authorization", s.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
@@ -259,10 +258,18 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
+// Set stores the given key at the Fortanix SDKMS if and only
+// if no entry with the given name exists.
+//
+// If no such entry exists, Create returns kes.ErrKeyExists.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Delete deletes the key associated with the given name
 // from the Fortanix SDKMS. It may not return an error if no
 // entry for the given name exists.
-func (c *Conn) Delete(ctx context.Context, name string) error {
+func (s *Store) Delete(ctx context.Context, name string) error {
 	// In order to detele a key, we need to fetch its key ID first.
 	// Fortanix SDKMS API does not provide a way to delete a key
 	// using just its name.
@@ -276,15 +283,15 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
 
-	url := endpoint(c.config.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(s.config.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		return fmt.Errorf("fortanix: failed to delete '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", c.config.APIKey.String())
+	req.Header.Set("Authorization", s.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -311,14 +318,14 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 	}
 
 	// Now, we can delete the key using its key ID.
-	url = endpoint(c.config.Endpoint, "/crypto/v1/keys", response.KeyID)
+	url = endpoint(s.config.Endpoint, "/crypto/v1/keys", response.KeyID)
 	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", c.config.APIKey.String())
+	req.Header.Set("Authorization", s.config.APIKey.String())
 
-	resp, err = c.client.Do(req)
+	resp, err = s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -339,7 +346,7 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 // Get returns the key associated with the given name.
 //
 // If there is no such entry, Get returns kes.ErrKeyNotFound.
-func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	type Request struct {
 		Name string `json:"name"`
 	}
@@ -350,15 +357,15 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 		return nil, fmt.Errorf("fortanix: failed to fetch %q: %v", name, err)
 	}
 
-	url := endpoint(c.config.Endpoint, "/crypto/v1/keys/export")
+	url := endpoint(s.config.Endpoint, "/crypto/v1/keys/export")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(request)))
 	if err != nil {
 		return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", c.config.APIKey.String())
+	req.Header.Set("Authorization", s.config.APIKey.String())
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil, err
 	}
@@ -400,37 +407,34 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 // concurrent changes to the Fortanix SDKMS instance - i.e.
 // creates or deletes. Further, it does not provide any
 // ordering guarantees.
-func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
-	var (
-		names = make(chan string, 10)
-		iter  = &iterator{
-			values: names,
-		}
-	)
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+	var cancel context.CancelCauseFunc
+	ctx, cancel = context.WithCancelCause(ctx)
+	values := make(chan string, 10)
 
 	go func() {
-		defer close(names)
+		defer close(values)
 
 		var start string
 		for {
-			reqURL := endpoint(c.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
+			reqURL := endpoint(s.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
 			if start != "" {
 				reqURL += "&start=" + start
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 			if err != nil {
-				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: %v", err))
+				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
 				return
 			}
-			req.Header.Set("Authorization", c.config.APIKey.String())
+			req.Header.Set("Authorization", s.config.APIKey.String())
 
-			resp, err := c.client.Do(req)
+			resp, err := s.client.Do(req)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				iter.SetErr(err)
+				cancel(err)
 				return
 			}
 			if err != nil {
-				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: %v", err))
+				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
 				return
 			}
 
@@ -439,7 +443,7 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			}
 			var keys []Response
 			if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
-				iter.SetErr(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
+				cancel(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
 				return
 			}
 			if len(keys) == 0 {
@@ -447,27 +451,28 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			}
 			for _, k := range keys {
 				select {
-				case names <- k.Name:
+				case values <- k.Name:
 				case <-ctx.Done():
-					iter.SetErr(context.Canceled)
 					return
 				}
 			}
 			start = url.QueryEscape(keys[len(keys)-1].Name)
 		}
 	}()
-	return kms.FuseIter(iter), nil
+	return &iterator{
+		ch:     values,
+		ctx:    ctx,
+		cancel: cancel,
+	}, nil
 }
 
 type iterator struct {
-	values <-chan string
-
-	lock sync.RWMutex
-	last string
-	err  error
+	ch     <-chan string
+	ctx    context.Context
+	cancel context.CancelCauseFunc
 }
 
-var _ kms.Iter = (*iterator)(nil)
+var _ kv.Iter[string] = (*iterator)(nil)
 
 // Next moves the iterator to the next key, if any.
 // This key is available until Next is called again.
@@ -475,44 +480,20 @@ var _ kms.Iter = (*iterator)(nil)
 // It returns true if and only if there is a new key
 // available. If there are no more keys or an error
 // has been encountered, Next returns false.
-func (i *iterator) Next() bool {
-	v, ok := <-i.values
-	if !ok {
-		return false
+func (i *iterator) Next() (string, bool) {
+	select {
+	case v, ok := <-i.ch:
+		return v, ok
+	case <-i.ctx.Done():
+		return "", false
 	}
-
-	i.lock.Lock()
-	defer i.lock.Unlock()
-
-	i.last = v
-	return i.err == nil
-}
-
-// Name returns the name of the current key. Name
-// can be called multiple times an returns the
-// same value until Next is called again.
-func (i *iterator) Name() string {
-	i.lock.RLock()
-	defer i.lock.RUnlock()
-	return i.last
 }
 
 // Err returns the first error, if any, encountered
 // while iterating over the set of keys.
 func (i *iterator) Close() error {
-	i.lock.RLock()
-	defer i.lock.RUnlock()
-	return i.err
-}
-
-// SetErr sets the iteration error to indicate
-// that the iteration failed. Subsequent calls
-// to Next will return false.
-func (i *iterator) SetErr(err error) {
-	i.lock.Lock()
-	defer i.lock.Unlock()
-
-	i.err = err
+	i.cancel(context.Canceled)
+	return context.Cause(i.ctx)
 }
 
 // parseErrorResponse returns an error containing

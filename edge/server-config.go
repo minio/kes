@@ -18,7 +18,6 @@ import (
 	"github.com/minio/kes/internal/keystore/gemalto"
 	kesstore "github.com/minio/kes/internal/keystore/kes"
 	"github.com/minio/kes/internal/keystore/vault"
-	"github.com/minio/kes/kms"
 	"github.com/minio/kes/kv"
 )
 
@@ -242,7 +241,7 @@ type FSKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs in a path on the filesystem.
 func (s *FSKeyStore) Connect(context.Context) (kv.Store[string, []byte], error) {
-	return wrap(fs.NewConn(s.Path))
+	return fs.NewStore(s.Path)
 }
 
 // KESKeyStore is a structure containing the configuration
@@ -278,13 +277,13 @@ type KESKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on a KES server.
 func (s *KESKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return wrap(kesstore.Connect(ctx, &kesstore.Config{
+	return kesstore.Connect(ctx, &kesstore.Config{
 		Endpoints:   s.Endpoints,
 		Enclave:     s.Enclave,
 		Certificate: s.CertificateFile,
 		PrivateKey:  s.PrivateKeyFile,
 		CAPath:      s.CAPath,
-	}))
+	})
 }
 
 // VaultKeyStore is a structure containing the configuration
@@ -417,7 +416,7 @@ func (s *VaultKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], 
 			JWT:    s.Kubernetes.JWT,
 		}
 	}
-	return wrap(vault.Connect(ctx, c))
+	return vault.Connect(ctx, c)
 }
 
 // FortanixKeyStore is a structure containing the
@@ -446,12 +445,12 @@ type FortanixKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on a Fortanix SDKMS server.
 func (s *FortanixKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return wrap(fortanix.Connect(ctx, &fortanix.Config{
+	return fortanix.Connect(ctx, &fortanix.Config{
 		Endpoint: s.Endpoint,
 		GroupID:  s.GroupID,
 		APIKey:   fortanix.APIKey(s.APIKey),
 		CAPath:   s.CAPath,
-	}))
+	})
 }
 
 // KeySecureKeyStore is a structure containing the
@@ -483,14 +482,14 @@ type KeySecureKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on a Gemalto KeySecure instance.
 func (s *KeySecureKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return wrap(gemalto.Connect(ctx, &gemalto.Config{
+	return gemalto.Connect(ctx, &gemalto.Config{
 		Endpoint: s.Endpoint,
 		CAPath:   s.CAPath,
 		Login: gemalto.Credentials{
 			Token:  s.Token,
 			Domain: s.Domain,
 		},
-	}))
+	})
 }
 
 // GCPSecretManagerKeyStore is a structure containing the
@@ -534,7 +533,7 @@ type GCPSecretManagerKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on GCP SecretManager.
 func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return wrap(gcp.Connect(ctx, &gcp.Config{
+	return gcp.Connect(ctx, &gcp.Config{
 		Endpoint:  s.Endpoint,
 		ProjectID: s.ProjectID,
 		Scopes:    s.Scopes,
@@ -544,7 +543,7 @@ func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context) (kv.Store[string
 			KeyID:    s.KeyID,
 			Key:      s.Key,
 		},
-	}))
+	})
 }
 
 // AWSSecretsManagerKeyStore is a structure containing the
@@ -580,7 +579,7 @@ type AWSSecretsManagerKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on AWS SecretsManager.
 func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return wrap(aws.Connect(ctx, &aws.Config{
+	return aws.Connect(ctx, &aws.Config{
 		Addr:     s.Endpoint,
 		Region:   s.Region,
 		KMSKeyID: s.KMSKey,
@@ -589,7 +588,7 @@ func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context) (kv.Store[strin
 			SecretKey:    s.SecretKey,
 			SessionToken: s.SessionToken,
 		},
-	}))
+	})
 }
 
 // AzureKeyVaultKeyStore is a structure containing the
@@ -628,80 +627,13 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, [
 			ClientID: s.ClientID,
 			Secret:   s.ClientSecret,
 		}
-		return wrap(azure.ConnectWithCredentials(ctx, s.Endpoint, creds))
+		return azure.ConnectWithCredentials(ctx, s.Endpoint, creds)
 	case s.ManagedIdentityClientID != "":
 		creds := azure.ManagedIdentity{
 			ClientID: s.ManagedIdentityClientID,
 		}
-		return wrap(azure.ConnectWithIdentity(ctx, s.Endpoint, creds))
+		return azure.ConnectWithIdentity(ctx, s.Endpoint, creds)
 	default:
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: no authentication method specified")
 	}
 }
-
-func wrap(conn kms.Conn, err error) (kv.Store[string, []byte], error) {
-	if err != nil {
-		return nil, err
-	}
-	return &store{conn: conn}, nil
-}
-
-type store struct {
-	conn kms.Conn
-}
-
-var _ kv.Store[string, []byte] = (*store)(nil) // compiler check
-
-func (s *store) Status(ctx context.Context) (kv.State, error) {
-	state, err := s.conn.Status(ctx)
-	if err == nil {
-		return kv.State(state), nil
-	}
-
-	if uErr, ok := kms.IsUnreachable(err); ok {
-		return kv.State{}, &kv.Unreachable{Err: uErr.Err}
-	}
-	if uErr, ok := kms.IsUnavailable(err); ok {
-		return kv.State{}, &kv.Unreachable{Err: uErr.Err}
-	}
-	return kv.State{}, err
-}
-
-func (s *store) Create(ctx context.Context, name string, value []byte) error {
-	return s.conn.Create(ctx, name, value)
-}
-
-func (s *store) Set(ctx context.Context, name string, value []byte) error {
-	return s.conn.Create(ctx, name, value)
-}
-
-func (s *store) Get(ctx context.Context, name string) ([]byte, error) {
-	return s.conn.Get(ctx, name)
-}
-
-func (s *store) Delete(ctx context.Context, name string) error {
-	return s.conn.Delete(ctx, name)
-}
-
-func (s *store) List(ctx context.Context) (kv.Iter[string], error) {
-	i, err := s.conn.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &iter{iter: i}, nil
-}
-
-type iter struct {
-	iter kms.Iter
-}
-
-var _ kv.Iter[string] = (*iter)(nil) // compiler check
-
-func (i *iter) Next() (string, bool) {
-	if next := i.iter.Next(); next {
-		return i.iter.Name(), next
-	}
-	return "", false
-}
-
-func (i *iter) Close() error { return i.iter.Close() }
