@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -18,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Credentials represents static AWS credentials:
@@ -54,7 +53,7 @@ type Config struct {
 
 // Connect establishes and returns a Conn to a AWS SecretManager
 // using the given config.
-func Connect(ctx context.Context, config *Config) (*Conn, error) {
+func Connect(ctx context.Context, config *Config) (*Store, error) {
 	credentials := credentials.NewStaticCredentials(
 		config.Login.AccessKey,
 		config.Login.SecretKey,
@@ -85,7 +84,7 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 		return nil, err
 	}
 
-	c := &Conn{
+	c := &Store{
 		config: *config,
 		client: secretsmanager.New(session),
 	}
@@ -95,27 +94,27 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 	return c, nil
 }
 
-// Conn is a connection to an AWS SecretsManager.
-type Conn struct {
+// Store is an AWS SecretsManager secret store.
+type Store struct {
 	config Config
 	client *secretsmanager.SecretsManager
 }
 
-var _ kms.Conn = (*Conn)(nil)
+var _ kv.Store[string, []byte] = (*Store)(nil)
 
 // Status returns the current state of the AWS SecretsManager instance.
 // In particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.client.Endpoint, nil)
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.client.Endpoint, nil)
 	if err != nil {
-		return kms.State{}, err
+		return kv.State{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -127,15 +126,15 @@ func (c *Conn) Status(ctx context.Context) (kms.State, error) {
 // If the SecretsManager.KMSKeyID is set AWS will use this key ID to
 // encrypt the values. Otherwise, AWS will use the default key ID for
 // encrypting secrets at the AWS SecretsManager.
-func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	createOpt := secretsmanager.CreateSecretInput{
 		Name:         aws.String(name),
 		SecretString: aws.String(string(value)),
 	}
-	if c.config.KMSKeyID != "" {
-		createOpt.KmsKeyId = aws.String(c.config.KMSKeyID)
+	if s.config.KMSKeyID != "" {
+		createOpt.KmsKeyId = aws.String(s.config.KMSKeyID)
 	}
-	if _, err := c.client.CreateSecretWithContext(ctx, &createOpt); err != nil {
+	if _, err := s.client.CreateSecretWithContext(ctx, &createOpt); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -150,10 +149,21 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
+// Set stores the given key-value pair at the AWS SecretsManager
+// if and only if it doesn't exists. If such an entry already exists
+// it returns kes.ErrKeyExists.
+//
+// If the SecretsManager.KMSKeyID is set AWS will use this key ID to
+// encrypt the values. Otherwise, AWS will use the default key ID for
+// encrypting secrets at the AWS SecretsManager.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Get returns the value associated with the given key.
 // If no entry for key exists, it returns kes.ErrKeyNotFound.
-func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
-	response, err := c.client.GetSecretValueWithContext(ctx, &secretsmanager.GetSecretValueInput{
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
+	response, err := s.client.GetSecretValueWithContext(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(name),
 	})
 	if err != nil {
@@ -189,8 +199,8 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 
 // Delete removes the key-value pair from the AWS SecretsManager, if
 // it exists.
-func (c *Conn) Delete(ctx context.Context, name string) error {
-	_, err := c.client.DeleteSecretWithContext(ctx, &secretsmanager.DeleteSecretInput{
+func (s *Store) Delete(ctx context.Context, name string) error {
+	_, err := s.client.DeleteSecretWithContext(ctx, &secretsmanager.DeleteSecretInput{
 		SecretId:                   aws.String(name),
 		ForceDeleteWithoutRecovery: aws.Bool(true),
 	})
@@ -210,14 +220,14 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+	var cancel context.CancelCauseFunc
+	ctx, cancel = context.WithCancelCause(ctx)
 	values := make(chan string, 10)
-	iterator := &iterator{
-		values: values,
-	}
+
 	go func() {
 		defer close(values)
-		err := c.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
+		err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
 			for _, secret := range page.SecretList {
 				values <- *secret.Name
 			}
@@ -228,39 +238,29 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			return !lastPage
 		})
 		if err != nil {
-			iterator.SetErr(fmt.Errorf("aws: failed to list keys: %v", err))
+			cancel(err)
 		}
 	}()
-	return iterator, nil
+	return &iter{
+		ch:  values,
+		ctx: ctx,
+	}, nil
 }
 
-type iterator struct {
-	values <-chan string
-	last   string
-
-	lock sync.Mutex
-	err  error
+type iter struct {
+	ch  <-chan string
+	ctx context.Context
 }
 
-func (i *iterator) Next() bool {
-	v, ok := <-i.values
-	if !ok {
-		return false
+func (i *iter) Next() (string, bool) {
+	select {
+	case v, ok := <-i.ch:
+		return v, ok
+	case <-i.ctx.Done():
+		return "", false
 	}
-	i.last = v
-	return true
 }
 
-func (i *iterator) Name() string { return i.last }
-
-func (i *iterator) Close() error {
-	i.lock.Lock()
-	defer i.lock.Unlock()
-	return i.err
-}
-
-func (i *iterator) SetErr(err error) {
-	i.lock.Lock()
-	i.err = err
-	i.lock.Unlock()
+func (i *iter) Close() error {
+	return context.Cause(i.ctx)
 }

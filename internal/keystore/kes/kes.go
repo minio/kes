@@ -13,7 +13,7 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/https"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Config is a structure containing configuration
@@ -46,7 +46,7 @@ type Config struct {
 }
 
 // Connect connects to a KES server with the given configuration.
-func Connect(ctx context.Context, config *Config) (*Conn, error) {
+func Connect(ctx context.Context, config *Config) (*Store, error) {
 	if len(config.Endpoints) == 0 {
 		return nil, errors.New("kes: no endpoints provided")
 	}
@@ -69,41 +69,43 @@ func Connect(ctx context.Context, config *Config) (*Conn, error) {
 		}
 	}
 
-	conn := &Conn{
+	store := &Store{
 		client: kes.NewClientWithConfig("", &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      rootCAs,
 		}),
 		enclave: config.Enclave,
 	}
-	conn.client.Endpoints = config.Endpoints
+	store.client.Endpoints = config.Endpoints
 
-	if _, err := conn.Status(ctx); err != nil {
+	if _, err := store.Status(ctx); err != nil {
 		return nil, err
 	}
-	return conn, nil
+	return store, nil
 }
 
-// Conn is a connection to a KES server.
-type Conn struct {
+// Store is a connection to a KES server.
+type Store struct {
 	client  *kes.Client
 	enclave string
 }
 
+var _ kv.Store[string, []byte] = (*Store)(nil)
+
 // Status returns the current state of the KES connection.
 // I particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	start := time.Now()
-	_, err := c.client.Status(ctx)
+	_, err := s.client.Status(ctx)
 	latency := time.Since(start)
 
 	if connErr, ok := kes.IsConnError(err); ok {
-		return kms.State{}, &kms.Unreachable{Err: connErr}
+		return kv.State{}, &kv.Unreachable{Err: connErr}
 	}
 	if err != nil {
-		return kms.State{}, &kms.Unavailable{Err: err}
+		return kv.State{}, &kv.Unavailable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: latency,
 	}, nil
 }
@@ -111,8 +113,8 @@ func (c *Conn) Status(ctx context.Context) (kms.State, error) {
 // Create creates the given key-value pair at the KES server
 // as a seret if and only no such secret already exists.
 // If such an entry already exists it returns kes.ErrKeyExists.
-func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
-	enclave := c.client.Enclave(c.enclave)
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
+	enclave := s.client.Enclave(s.enclave)
 	err := enclave.CreateSecret(ctx, name, value, nil)
 	if errors.Is(err, kes.ErrSecretExists) {
 		return kes.ErrKeyExists
@@ -120,10 +122,17 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return err
 }
 
+// Set creates the given key-value pair at the KES server
+// as a seret if and only no such secret already exists.
+// If such an entry already exists it returns kes.ErrKeyExists.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Get returns the value associated with the given name.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
-	enclave := c.client.Enclave(c.enclave)
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
+	enclave := s.client.Enclave(s.enclave)
 	secret, _, err := enclave.ReadSecret(ctx, name)
 	if errors.Is(err, kes.ErrSecretNotFound) {
 		return nil, kes.ErrKeyNotFound
@@ -134,8 +143,8 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 // Delete removes a the value associated with the given name
 // from KES, if it exists. If no such entry exists it returns
 // kes.ErrKeyNotFound.
-func (c *Conn) Delete(ctx context.Context, name string) error {
-	enclave := c.client.Enclave(c.enclave)
+func (s *Store) Delete(ctx context.Context, name string) error {
+	enclave := s.client.Enclave(s.enclave)
 	err := enclave.DeleteSecret(ctx, name)
 	if errors.Is(err, kes.ErrSecretNotFound) {
 		return kes.ErrKeyNotFound
@@ -144,7 +153,24 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 }
 
 // List returns a new kms.Iter over all stored entries.
-func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
-	enclave := c.client.Enclave(c.enclave)
-	return enclave.ListSecrets(ctx, "*")
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+	enclave := s.client.Enclave(s.enclave)
+	i, err := enclave.ListSecrets(ctx, "*")
+	if err != nil {
+		return nil, err
+	}
+	return &iter{i}, nil
 }
+
+type iter struct {
+	*kes.SecretIter
+}
+
+func (i *iter) Next() (string, bool) {
+	if i.SecretIter.Next() {
+		return i.Name(), true
+	}
+	return "", false
+}
+
+func (i *iter) Close() error { return i.SecretIter.Close() }

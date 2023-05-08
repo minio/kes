@@ -13,7 +13,7 @@ import (
 	"github.com/minio/kes/internal/audit"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 func status(config *RouterConfig) API {
@@ -193,7 +193,7 @@ func edgeStatus(config *EdgeRouterConfig) API {
 		state, err := config.Keys.Status(r.Context())
 		if err != nil {
 			response.KeyStoreUnavailable = true
-			_, response.KeyStoreUnreachable = kms.IsUnreachable(err)
+			_, response.KeyStoreUnreachable = kv.IsUnreachable(err)
 		} else {
 			latency := state.Latency.Round(time.Millisecond)
 			if latency == 0 { // Make sure we actually send a latency even if the key store respond time is < 1ms.

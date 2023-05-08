@@ -992,11 +992,11 @@ func listKey(config *RouterConfig) API {
 
 				var hasWritten bool
 				encoder := json.NewEncoder(w)
-				for iterator.Next() {
-					if ok, _ := path.Match(pattern, iterator.Name()); !ok || iterator.Name() == "" {
+				for name, next := iterator.Next(); next; name, next = iterator.Next() {
+					if ok, _ := path.Match(pattern, name); !ok || name == "" {
 						continue
 					}
-					key, err := enclave.GetKey(r.Context(), iterator.Name())
+					key, err := enclave.GetKey(r.Context(), name)
 					if err != nil {
 						return hasWritten, err
 					}
@@ -1007,7 +1007,7 @@ func listKey(config *RouterConfig) API {
 					}
 
 					err = encoder.Encode(Response{
-						Name:      iterator.Name(),
+						Name:      name,
 						ID:        key.ID(),
 						Algorithm: key.Algorithm(),
 						CreatedAt: key.CreatedAt(),
