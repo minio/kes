@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,17 +22,17 @@ import (
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 )
 
-// Conn is a connection to a GCP SecretManager.
-type Conn struct {
+// Store is a GCP SecretManager secret store.
+type Store struct {
 	client *secretmanager.Client
 	config *Config
 }
 
-var _ kms.Conn = (*Conn)(nil) // compiler check
+var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
 // Connect connects and authenticates to a GCP SecretManager
 // server.
-func Connect(ctx context.Context, c *Config) (*Conn, error) {
+func Connect(ctx context.Context, c *Config) (*Store, error) {
 	c = c.Clone()
 	if c == nil {
 		c = &Config{}
@@ -91,7 +91,7 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 		return nil, err
 	}
 
-	conn := &Conn{
+	conn := &Store{
 		client: client,
 		config: c,
 	}
@@ -103,17 +103,17 @@ func Connect(ctx context.Context, c *Config) (*Conn, error) {
 
 // Status returns the current state of the GCP SecretManager instance.
 // In particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.Endpoint, nil)
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kms.State{}, err
+		return kv.State{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -125,9 +125,9 @@ func (c *Conn) Status(ctx context.Context) (kms.State, error) {
 // Creating a secret at the GCP SecretManager requires first creating
 // secret itself and then adding a secret version with some payload
 // data. The payload data contains the actual value.
-func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
-	secret, err := c.client.CreateSecret(ctx, &secretmanagerpb.CreateSecretRequest{
-		Parent:   path.Join("projects", c.config.ProjectID),
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
+	secret, err := s.client.CreateSecret(ctx, &secretmanagerpb.CreateSecretRequest{
+		Parent:   path.Join("projects", s.config.ProjectID),
 		SecretId: name,
 		Secret: &secretmanagerpb.Secret{
 			Replication: &secretmanagerpb.Replication{
@@ -147,7 +147,7 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 		return fmt.Errorf("gcp: failed to create '%s': %v", name, err)
 	}
 
-	_, err = c.client.AddSecretVersion(ctx, &secretmanagerpb.AddSecretVersionRequest{
+	_, err = s.client.AddSecretVersion(ctx, &secretmanagerpb.AddSecretVersionRequest{
 		Parent: secret.Name,
 		Payload: &secretmanagerpb.SecretPayload{
 			Data: value,
@@ -162,10 +162,21 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
+// Set stores the given key-value pair at GCP secret manager
+// if and only if it doesn't exists. If such an entry already exists
+// it returns kes.ErrKeyExists.
+//
+// Creating a secret at the GCP SecretManager requires first creating
+// secret itself and then adding a secret version with some payload
+// data. The payload data contains the actual value.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Get returns the value associated with the given key.
-func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
-	result, err := c.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
-		Name: path.Join("projects", c.config.ProjectID, "secrets", name, "versions", "1"),
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
+	result, err := s.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
+		Name: path.Join("projects", s.config.ProjectID, "secrets", name, "versions", "1"),
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -187,9 +198,9 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 // versions through e.g. the GCP CLI. However, KES does not
 // support multiple secret versions and expects a different
 // mechanism for "key-rotation".
-func (c *Conn) Delete(ctx context.Context, name string) error {
-	err := c.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
-		Name: path.Join("projects", c.config.ProjectID, "secrets", name),
+func (s *Store) Delete(ctx context.Context, name string) error {
+	err := s.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
+		Name: path.Join("projects", s.config.ProjectID, "secrets", name),
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -205,10 +216,10 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
-	location := path.Join("projects", c.config.ProjectID)
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+	location := path.Join("projects", s.config.ProjectID)
 	return &iterator{
-		src: c.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
+		src: s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
 			Parent: location,
 		}),
 	}, nil

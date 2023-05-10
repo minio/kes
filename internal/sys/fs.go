@@ -17,7 +17,7 @@ import (
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/secret"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // VaultFS provides access to Vault state.
@@ -75,7 +75,7 @@ type KeyFS interface {
 	DeleteKey(ctx context.Context, name string) error
 
 	// ListKeys returns an iterator over all key entries.
-	ListKeys(ctx context.Context) (kms.Iter, error)
+	ListKeys(ctx context.Context) (kv.Iter[string], error)
 }
 
 // SecretFS provides access to secrets within a particular

@@ -77,34 +77,6 @@ type Store[K comparable, V any] interface {
 	List(context.Context) (Iter[K], error)
 }
 
-// Iter iterates over a list of keys.
-//
-// Its Next method returns the next key
-// and a bool indicating whether there
-// are more entries.
-//
-// An Iter should be closed to release
-// associated resources.
-type Iter[K any] interface {
-	// Next returns the next entry, if any,
-	// and a bool indicating whether the
-	// end of the Iter has been reached.
-	//
-	// After Next returns false, the Close
-	// method returns any error occurred
-	// while iterating.
-	Next() (K, bool)
-
-	// Close closes the Iter and releases
-	// associated resources.
-	//
-	// It returns either the first error
-	// encountered during iterating, if
-	// any, or any error that occurrs in
-	// the closing process.
-	Close() error
-}
-
 // State describes the state of a Store.
 type State struct {
 	// Latency is the connection latency
