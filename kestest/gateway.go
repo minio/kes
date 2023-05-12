@@ -26,17 +26,17 @@ import (
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/keystore"
-	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
+	"github.com/minio/kes/kv"
 )
 
 // NewGateway starts and returns a new Gateway.
 // The caller should call Close when finished,
 // to shut it down.
-func NewGateway() *Gateway {
+func NewGateway(store kv.Store[string, []byte]) *Gateway {
 	g := &Gateway{}
-	g.start()
+	g.start(store)
 	return g
 }
 
@@ -92,7 +92,7 @@ func (g *Gateway) CAs() *x509.CertPool {
 	return certpool
 }
 
-func (g *Gateway) start() {
+func (g *Gateway) start(kmsStore kv.Store[string, []byte]) {
 	var (
 		rootCAs   = g.CAs()
 		auditLog  = log.New(io.Discard, "", 0)
@@ -108,7 +108,7 @@ func (g *Gateway) start() {
 
 	auditLog.Add(metrics.AuditEventCounter())
 	errorLog.Add(metrics.ErrorEventCounter())
-	store := keystore.NewCache(context.Background(), &mem.Store{}, &keystore.CacheConfig{
+	store := keystore.NewCache(context.Background(), kmsStore, &keystore.CacheConfig{
 		Expiry:       30 * time.Second,
 		ExpiryUnused: 5 * time.Second,
 	})

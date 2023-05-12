@@ -18,8 +18,12 @@ import (
 	"time"
 
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/kestest"
+	"github.com/minio/kes/kv"
 )
+
+var store = kv.Store[string, []byte](&mem.Store{})
 
 var gatewayAPIs = map[string]struct {
 	Method  string
@@ -58,7 +62,7 @@ func TestMetrics(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
@@ -88,7 +92,7 @@ func TestAPIs(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
@@ -130,7 +134,7 @@ func TestCreateKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
@@ -154,8 +158,8 @@ var importKeyTests = []struct {
 	ShouldFail bool
 	Err        error
 }{
-	{Name: "my-key", Key: make([]byte, 32)},
-	{Name: "my-key", Key: make([]byte, 32), ShouldFail: true, Err: kes.ErrKeyExists},
+	{Name: "my-key1", Key: make([]byte, 32)},
+	{Name: "my-key1", Key: make([]byte, 32), ShouldFail: true, Err: kes.ErrKeyExists},
 
 	{Name: "fail-key", Key: make([]byte, 0), ShouldFail: true},
 	{Name: "fail-key2", Key: make([]byte, 1<<20), ShouldFail: true},
@@ -165,7 +169,7 @@ func TestImportKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
@@ -197,12 +201,12 @@ func TestGenerateKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
 
-	const KeyName = "my-key"
+	const KeyName = "my-key2"
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
 	}
@@ -248,12 +252,12 @@ func TestEncryptKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
 
-	const KeyName = "my-key"
+	const KeyName = "my-key3"
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
 	}
@@ -308,12 +312,12 @@ func TestDecryptKey(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
 
-	const KeyName = "my-key"
+	const KeyName = "my-key4"
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -383,12 +387,12 @@ func TestDecryptKeyAll(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
 
-	const KeyName = "my-key"
+	const KeyName = "my-key5"
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -445,7 +449,7 @@ func TestDescribePolicy(t *testing.T) {
 
 	for i, test := range getPolicyTests {
 		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
-			server := kestest.NewGateway()
+			server := kestest.NewGateway(store)
 			defer server.Close()
 
 			server.Policy().Add(test.Name, test.Policy)
@@ -474,7 +478,7 @@ func TestGetPolicy(t *testing.T) {
 
 	for i, test := range getPolicyTests {
 		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
-			server := kestest.NewGateway()
+			server := kestest.NewGateway(store)
 			defer server.Close()
 
 			server.Policy().Add(test.Name, test.Policy)
@@ -549,7 +553,7 @@ func TestSelfDescribe(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
