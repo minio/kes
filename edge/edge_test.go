@@ -2,323 +2,182 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge
+package edge_test
 
 import (
+	"bytes"
+	"context"
 	"os"
+	"os/signal"
 	"testing"
-	"time"
+
+	"github.com/minio/kes/kv"
 )
 
-func TestReadServerConfigYAML_FS(t *testing.T) {
-	const (
-		Filename = "./testdata/fs.yml"
+type SetupFunc func(context.Context, kv.Store[string, []byte]) error
 
-		FSPath = "/tmp/keys"
-	)
+var createTests = []struct {
+	Args       map[string][]byte
+	Setup      SetupFunc
+	ShouldFail bool
+}{
+	{ // 0
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+	},
+	{ // 1
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
+			return s.Create(ctx, "my-key", []byte(""))
+		},
+		ShouldFail: true,
+	},
+}
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
+func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	defer clean(ctx, store, t)
+	for i, test := range createTests {
+		if test.Setup != nil {
+			if err := test.Setup(ctx, store); err != nil {
+				t.Fatalf("Test %d: failed to setup: %v", i, err)
+			}
+		}
 
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	fs, ok := config.KeyStore.(*FSKeyStore)
-	if !ok {
-		var want *FSKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
-	}
-	if fs.Path != FSPath {
-		t.Fatalf("Invalid keystore: got path '%s' - want path '%s'", fs.Path, FSPath)
+		for key, value := range test.Args {
+			err := store.Create(ctx, key, value)
+			if err != nil && !test.ShouldFail {
+				t.Errorf("Test %d: failed to create key '%s': %v", i, key, err)
+			}
+			if err == nil && test.ShouldFail {
+				t.Errorf("Test %d: creating key '%s' should have failed: %v", i, key, err)
+			}
+		}
+		clean(ctx, store, t)
 	}
 }
 
-func TestReadServerConfigYAML_CustomAPI(t *testing.T) {
-	const (
-		Filename = "./testdata/custom-api.yml"
+var setTests = []struct {
+	Args       map[string][]byte
+	Setup      SetupFunc
+	ShouldFail bool
+}{
+	{ // 0
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+	},
+	{ // 1
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
+			return s.Create(ctx, "my-key", []byte(""))
+		},
+		ShouldFail: true,
+	},
+}
 
-		StatusPath      = "/v1/status"
-		StatusTimeout   = 17 * time.Second
-		StatusSkipAuth  = true
-		MetricsPath     = "/v1/metrics"
-		MetricsTimeout  = 22 * time.Second
-		MetricsSkipAuth = true
-	)
+func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	defer clean(ctx, store, t)
+	for i, test := range setTests {
+		if test.Setup != nil {
+			if err := test.Setup(ctx, store); err != nil {
+				t.Fatalf("Test %d: failed to setup: %v", i, err)
+			}
+		}
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	api, ok := config.API.Paths[StatusPath]
-	if !ok {
-		t.Fatalf("Invalid API config: missing API '%s'", StatusPath)
-	}
-	if api.Timeout != StatusTimeout {
-		t.Fatalf("Invalid API config: invalid timeout for '%s': got '%v' - want '%v'", StatusPath, api.Timeout, StatusTimeout)
-	}
-	if api.InsecureSkipAuth != StatusSkipAuth {
-		t.Fatalf("Invalid API config: invalid skip_auth for '%s': got '%v' - want '%v'", StatusPath, api.InsecureSkipAuth, StatusSkipAuth)
-	}
-
-	api, ok = config.API.Paths[MetricsPath]
-	if !ok {
-		t.Fatalf("Invalid API config: missing API '%s'", MetricsPath)
-	}
-	if api.Timeout != MetricsTimeout {
-		t.Fatalf("Invalid API config: invalid timeout for '%s': got '%v' - want '%v'", StatusPath, api.Timeout, MetricsTimeout)
-	}
-	if api.InsecureSkipAuth != MetricsSkipAuth {
-		t.Fatalf("Invalid API config: invalid skip_auth for '%s': got '%v' - want '%v'", StatusPath, api.InsecureSkipAuth, MetricsSkipAuth)
+		for key, value := range test.Args {
+			err := store.Create(ctx, key, value)
+			if err != nil && !test.ShouldFail {
+				t.Errorf("Test %d: failed to set key '%s': %v", i, key, err)
+			}
+			if err == nil && test.ShouldFail {
+				t.Errorf("Test %d: setting key '%s' should have failed: %v", i, key, err)
+			}
+		}
+		clean(ctx, store, t)
 	}
 }
 
-func TestReadServerConfigYAML_VaultWithAppRole(t *testing.T) {
-	const (
-		Filename = "./testdata/vault-approle.yml"
+var getTests = []struct {
+	Args       map[string][]byte
+	Setup      SetupFunc
+	ShouldFail bool
+}{
+	{ // 0
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
+			return s.Create(ctx, "my-key", []byte("my-value"))
+		},
+	},
+	{ // 1
+		Args:       map[string][]byte{"my-key": []byte("my-value")},
+		ShouldFail: true,
+	},
+	{ // 1
+		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
+			return s.Create(ctx, "my-key", []byte("my-value2"))
+		},
+		ShouldFail: true,
+	},
+}
 
-		Endpoint      = "https://127.0.0.1:8200"
-		Engine        = "kv"
-		APIVersion    = "v2"
-		Namespace     = "ns1"
-		Prefix        = "tenant-1"
-		AppRoleEngine = "approle"
-		AppRoleID     = "db02de05-fa39-4855-059b-67221c5c2f63"
-		AppRoleSecret = "6a174c20-f6de-a53c-74d2-6018fcceff64"
-	)
+func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	defer clean(ctx, store, t)
+	for i, test := range getTests {
+		if test.Setup != nil {
+			if err := test.Setup(ctx, store); err != nil {
+				t.Fatalf("Test %d: failed to setup: %v", i, err)
+			}
+		}
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	vault, ok := config.KeyStore.(*VaultKeyStore)
-	if !ok {
-		var want *VaultKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
-	}
-	if vault.Endpoint != Endpoint {
-		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", vault.Endpoint, Endpoint)
-	}
-	if vault.Engine != Engine {
-		t.Fatalf("Invalid engine: got '%s' - want '%s'", vault.Engine, Engine)
-	}
-	if vault.APIVersion != APIVersion {
-		t.Fatalf("Invalid API version: got '%s' - want '%s'", vault.APIVersion, APIVersion)
-	}
-	if vault.Namespace != Namespace {
-		t.Fatalf("Invalid namespace: got '%s' - want '%s'", vault.Namespace, Namespace)
-	}
-	if vault.AppRole.Engine != AppRoleEngine {
-		t.Fatalf("Invalid approle engine: got '%s' - want '%s'", vault.AppRole.Engine, AppRoleEngine)
-	}
-	if vault.AppRole.ID != AppRoleID {
-		t.Fatalf("Invalid approle ID: got '%s' - want '%s'", vault.AppRole.ID, AppRoleID)
-	}
-	if vault.AppRole.Secret != AppRoleSecret {
-		t.Fatalf("Invalid approle secret: got '%s' - want '%s'", vault.AppRole.Secret, AppRoleSecret)
+		for key, value := range test.Args {
+			v, err := store.Get(ctx, key)
+			if !test.ShouldFail {
+				if err != nil {
+					t.Errorf("Test %d: failed to get key '%s': %v", i, key, err)
+				}
+				if !bytes.Equal(v, value) {
+					t.Errorf("Test %d: failed to get key: got '%s' - want '%s'", i, string(v), string(value))
+				}
+			}
+			if test.ShouldFail && err == nil && bytes.Equal(v, value) {
+				t.Errorf("Test %d: getting key '%s' should have failed: %v", i, key, err)
+			}
+		}
+		clean(ctx, store, t)
 	}
 }
 
-func TestReadServerConfigYAML_VaultWithK8S(t *testing.T) {
-	const (
-		Filename = "./testdata/vault-k8s.yml"
-
-		Endpoint   = "https://127.0.0.1:8201"
-		Engine     = "secrets"
-		APIVersion = "v1"
-		Namespace  = "ns2"
-		Prefix     = "tenant-2"
-		K8SEngine  = "kubernetes"
-		K8SRole    = "default"
-		K8SJWT     = "eyJhbGciOiJSUzI1NiIsImtpZCI6IkJQbGNNeTdBeXdLQmZMaGw2N1dFZkJvUmtsdnVvdkxXWGsteTc5TmJPeGMifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJteS1uYW1lc3BhY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoibXktc2VydmljZS1hY2NvdW50LXRva2VuLXA5NWRyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6Im15LXNlcnZpY2UtYWNjb3VudCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjdiYmViZGE2LTViMDUtNGFlNC05Yjg2LTBkODE0NWMwNzdhNSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpteS1uYW1lc3BhY2U6bXktc2VydmljZS1hY2NvdW50In0.dnvJE3LU7L8XxsIOwea3lUZAULdwAjV9_crHFLKBGNxEu70lk3MQmUbGTEFvawryArmxMa1bWF9wbK1GHEsNipDgWAmc0rmBYByP_ahlf9bI2EEzpaGU5s194csB_eG7kvfi1AHED_nkVTfvCjIJM-9oGICCjDJcoNOP1NAXICFmqvWfXl6SY3UoZvtzUOcH9-0hbARY3p6V5pPecW4Dm-yGub9PKZLJNzv7GxChM-uvBvHAt6o0UBIL4iSy6Bx2l91ojB-RSkm_oy0W9gKi9ZFQPgyvcvQnEfjoGdvNGlOEdFEdXvl-dP6iLBPnZ5xwhAk8lK0oOONWvQg6VDNd9w"
-	)
-
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	vault, ok := config.KeyStore.(*VaultKeyStore)
-	if !ok {
-		var want *VaultKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
-	}
-	if vault.Endpoint != Endpoint {
-		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", vault.Endpoint, Endpoint)
-	}
-	if vault.Engine != Engine {
-		t.Fatalf("Invalid engine: got '%s' - want '%s'", vault.Engine, Engine)
-	}
-	if vault.APIVersion != APIVersion {
-		t.Fatalf("Invalid API version: got '%s' - want '%s'", vault.APIVersion, APIVersion)
-	}
-	if vault.Namespace != Namespace {
-		t.Fatalf("Invalid namespace: got '%s' - want '%s'", vault.Namespace, Namespace)
-	}
-	if vault.Kubernetes.Engine != K8SEngine {
-		t.Fatalf("Invalid K8S engine: got '%s' - want '%s'", vault.Kubernetes.Engine, K8SEngine)
-	}
-	if vault.Kubernetes.JWT != K8SJWT {
-		t.Fatalf("Invalid K8S JWT: got '%s' - want '%s'", vault.Kubernetes.JWT, K8SJWT)
-	}
-	if vault.Kubernetes.Role != K8SRole {
-		t.Fatalf("Invalid K8S role: got '%s' - want '%s'", vault.Kubernetes.Role, K8SRole)
+func testStatus(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	if _, err := store.Status(ctx); err != nil {
+		t.Fatalf("Failed to fetch status: %v", err)
 	}
 }
 
-func TestReadServerConfigYAML_VaultWithK8S_JWTFile(t *testing.T) {
-	const (
-		Filename = "./testdata/vault-k8s-with-service-account-file.yml"
+var osCtx, _ = signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
-		Endpoint   = "https://127.0.0.1:8201"
-		Engine     = "secrets"
-		APIVersion = "v1"
-		Namespace  = "ns2"
-		Prefix     = "tenant-2"
-		K8SEngine  = "kubernetes"
-		K8SRole    = "default"
-		K8SJWT     = "eyJhbGciOiJSUzI1NiIsImtpZCI6IkJQbGNNeTdBeXdLQmZMaGw2N1dFZkJvUmtsdnVvdkxXWGsteTc5TmJPeGMifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJteS1uYW1lc3BhY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoibXktc2VydmljZS1hY2NvdW50LXRva2VuLXA5NWRyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6Im15LXNlcnZpY2UtYWNjb3VudCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjdiYmViZGE2LTViMDUtNGFlNC05Yjg2LTBkODE0NWMwNzdhNSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpteS1uYW1lc3BhY2U6bXktc2VydmljZS1hY2NvdW50In0.dnvJE3LU7L8XxsIOwea3lUZAULdwAjV9_crHFLKBGNxEu70lk3MQmUbGTEFvawryArmxMa1bWF9wbK1GHEsNipDgWAmc0rmBYByP_ahlf9bI2EEzpaGU5s194csB_eG7kvfi1AHED_nkVTfvCjIJM-9oGICCjDJcoNOP1NAXICFmqvWfXl6SY3UoZvtzUOcH9-0hbARY3p6V5pPecW4Dm-yGub9PKZLJNzv7GxChM-uvBvHAt6o0UBIL4iSy6Bx2l91ojB-RSkm_oy0W9gKi9ZFQPgyvcvQnEfjoGdvNGlOEdFEdXvl-dP6iLBPnZ5xwhAk8lK0oOONWvQg6VDNd9w"
-	)
-
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	vault, ok := config.KeyStore.(*VaultKeyStore)
+func testingContext(t *testing.T) (context.Context, context.CancelFunc) {
+	d, ok := t.Deadline()
 	if !ok {
-		var want *VaultKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
+		return osCtx, func() {}
 	}
-	if vault.Endpoint != Endpoint {
-		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", vault.Endpoint, Endpoint)
-	}
-	if vault.Engine != Engine {
-		t.Fatalf("Invalid engine: got '%s' - want '%s'", vault.Engine, Engine)
-	}
-	if vault.APIVersion != APIVersion {
-		t.Fatalf("Invalid API version: got '%s' - want '%s'", vault.APIVersion, APIVersion)
-	}
-	if vault.Namespace != Namespace {
-		t.Fatalf("Invalid namespace: got '%s' - want '%s'", vault.Namespace, Namespace)
-	}
-	if vault.Kubernetes.Engine != K8SEngine {
-		t.Fatalf("Invalid K8S engine: got '%s' - want '%s'", vault.Kubernetes.Engine, K8SEngine)
-	}
-	if vault.Kubernetes.JWT != K8SJWT {
-		t.Fatalf("Invalid K8S JWT: got '%s' - want '%s'", vault.Kubernetes.JWT, K8SJWT)
-	}
-	if vault.Kubernetes.Role != K8SRole {
-		t.Fatalf("Invalid K8S role: got '%s' - want'%s'", vault.Kubernetes.Role, K8SRole)
-	}
+	return context.WithDeadline(osCtx, d)
 }
 
-func TestReadServerConfigYAML_AWS(t *testing.T) {
-	const (
-		Filename = "./testdata/aws.yml"
-
-		Endpoint  = "secretsmanager.us-east-2.amazonaws.com"
-		Region    = "us-east-2"
-		AccessKey = "AKIAIOSFODNN7EXAMPLE"
-		Secretkey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-	)
-
-	file, err := os.Open(Filename)
+func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	iter, err := store.List(ctx)
 	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
+		t.Fatalf("Cleanup: failed to list keys: %v", err)
 	}
+	defer iter.Close()
 
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
+	var names []string
+	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
+		names = append(names, next)
 	}
-
-	aws, ok := config.KeyStore.(*AWSSecretsManagerKeyStore)
-	if !ok {
-		var want *AWSSecretsManagerKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
+	for _, name := range names {
+		if err = store.Delete(ctx, name); err != nil {
+			t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
+		}
 	}
-	if aws.Endpoint != Endpoint {
-		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", aws.Endpoint, Endpoint)
-	}
-	if aws.Region != Region {
-		t.Fatalf("Invalid region: got '%s' - want '%s'", aws.Region, Region)
-	}
-	if aws.AccessKey != AccessKey {
-		t.Fatalf("Invalid access key: got '%s' - want '%s'", aws.AccessKey, AccessKey)
-	}
-	if aws.SecretKey != Secretkey {
-		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SecretKey, Secretkey)
-	}
-}
-
-func TestReadServerConfigYAML_AWS_NoCredentials(t *testing.T) {
-	// The AWS SDK will look for access credentials from the env.
-	// when no credentials are specified in the config.
-
-	const (
-		Filename = "./testdata/aws-no-credentials.yml"
-
-		Endpoint     = "secretsmanager.us-east-2.amazonaws.com"
-		Region       = "us-east-2"
-		AccessKey    = ""
-		Secretkey    = ""
-		SessionToken = ""
-	)
-
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatalf("Failed to read file '%s': %v", Filename, err)
-	}
-
-	aws, ok := config.KeyStore.(*AWSSecretsManagerKeyStore)
-	if !ok {
-		var want *AWSSecretsManagerKeyStore
-		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
-	}
-	if aws.Endpoint != Endpoint {
-		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", aws.Endpoint, Endpoint)
-	}
-	if aws.Region != Region {
-		t.Fatalf("Invalid region: got '%s' - want '%s'", aws.Region, Region)
-	}
-	if aws.AccessKey != AccessKey {
-		t.Fatalf("Invalid access key: got '%s' - want '%s'", aws.AccessKey, AccessKey)
-	}
-	if aws.SecretKey != Secretkey {
-		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SecretKey, Secretkey)
-	}
-	if aws.SessionToken != SessionToken {
-		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SessionToken, SessionToken)
+	if err = iter.Close(); err != nil {
+		t.Errorf("Cleanup: failed to close iter: %v", err)
 	}
 }
