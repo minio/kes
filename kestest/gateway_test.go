@@ -130,7 +130,7 @@ func testCreateKey(ctx context.Context, store kv.Store[string, []byte], t *testi
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	for i, test := range createKeyTests {
 		err := client.CreateKey(ctx, test.Name)
@@ -180,7 +180,7 @@ func testImportKey(ctx context.Context, store kv.Store[string, []byte], t *testi
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	for i, test := range importKeyTests {
 		err := client.ImportKey(ctx, test.Name, test.Key)
@@ -213,7 +213,7 @@ func testGenerateKey(ctx context.Context, store kv.Store[string, []byte], t *tes
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -262,7 +262,7 @@ func testEncryptKey(ctx context.Context, store kv.Store[string, []byte], t *test
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -320,7 +320,7 @@ func testDecryptKey(ctx context.Context, store kv.Store[string, []byte], t *test
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
@@ -393,7 +393,7 @@ func testDecryptKeyAll(ctx context.Context, store kv.Store[string, []byte], t *t
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, "my-key*", t)
+	defer clean(ctx, client, t)
 
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
@@ -627,24 +627,20 @@ func mustDecodeB64(s string) []byte {
 	return b
 }
 
-func clean(ctx context.Context, client *kes.Client, pattern string, t *testing.T) {
-	iter, err := client.ListKeys(ctx, pattern)
+func clean(ctx context.Context, client *kes.Client, t *testing.T) {
+	iter, err := client.ListKeys(ctx, "*")
 	if err != nil {
 		t.Fatalf("Cleanup: failed to list keys: %v", err)
 	}
 	defer iter.Close()
 
-	names := []string{}
 	keysInfo, err := iter.Values(-1)
 	if err != nil {
 		t.Fatalf("Cleanup: failed to iterate keys")
 	}
-	for _, keyInfo := range keysInfo {
-		names = append(names, keyInfo.Name)
-	}
-	for _, name := range names {
-		if err = client.DeleteKey(ctx, name); err != nil {
-			t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
+	for _, info := range keysInfo {
+		if err = client.DeleteKey(ctx, info.Name); err != nil {
+			t.Errorf("Cleanup: failed to delete '%s': %v", info.Name, err)
 		}
 	}
 	if err = iter.Close(); err != nil {
