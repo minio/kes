@@ -1,26 +1,17 @@
 package kestest_test
 
 import (
-	"flag"
 	"testing"
 
-	"github.com/minio/kes/internal/keystore/fs"
+	"github.com/minio/kes/internal/keystore/mem"
+	"github.com/minio/kes/kv"
 )
 
-var fsPath = flag.String("fs.path", "", "FS Path")
-
-func TestGatewayFS(t *testing.T) {
-	if *fsPath == "" {
-		t.Skip("FS tests disabled. Use -fs.path=<path> to enable them.")
-	}
-	var err error
-	store, err := fs.NewStore(*fsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func TestGatewayMem(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
+
+	store := kv.Store[string, []byte](&mem.Store{})
 
 	t.Run("Metrics", func(t *testing.T) { testMetrics(ctx, store, t) })
 	t.Run("APIs", func(t *testing.T) { testAPIs(ctx, store, t) })
