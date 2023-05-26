@@ -186,9 +186,6 @@ func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T, se
 			}
 		}
 	}
-	if err = iter.Close(); err != nil {
-		t.Errorf("Cleanup: failed to close iter: %v", err)
-	}
 }
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
