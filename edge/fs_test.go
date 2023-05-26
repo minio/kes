@@ -29,8 +29,8 @@ func TestFS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("Create", func(t *testing.T) { testCreate(ctx, store, t) })
-	t.Run("Set", func(t *testing.T) { testSet(ctx, store, t) })
-	t.Run("Get", func(t *testing.T) { testGet(ctx, store, t) })
+	t.Run("Create", func(t *testing.T) { testCreate(ctx, store, t, RandString(ranStringLength)) })
+	t.Run("Set", func(t *testing.T) { testSet(ctx, store, t, RandString(ranStringLength)) })
+	t.Run("Get", func(t *testing.T) { testGet(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("Status", func(t *testing.T) { testStatus(ctx, store, t) })
 }

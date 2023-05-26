@@ -7,14 +7,21 @@ package edge_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"testing"
 
+	"github.com/minio/kes-go"
 	"github.com/minio/kes/kv"
 )
 
-type SetupFunc func(context.Context, kv.Store[string, []byte]) error
+type SetupFunc func(context.Context, kv.Store[string, []byte], string) error
+
+const ranStringLength = 8
 
 var createTests = []struct {
 	Args       map[string][]byte
@@ -22,36 +29,36 @@ var createTests = []struct {
 	ShouldFail bool
 }{
 	{ // 0
-		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
 	},
 	{ // 1
-		Args: map[string][]byte{"my-key": []byte("my-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
-			return s.Create(ctx, "my-key", []byte(""))
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+			return s.Create(ctx, "edge-test-"+suffix, []byte("t"))
 		},
 		ShouldFail: true,
 	},
 }
 
-func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	defer clean(ctx, store, t)
+func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	defer clean(ctx, store, t, seed)
 	for i, test := range createTests {
 		if test.Setup != nil {
-			if err := test.Setup(ctx, store); err != nil {
+			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
 				t.Fatalf("Test %d: failed to setup: %v", i, err)
 			}
 		}
 
 		for key, value := range test.Args {
-			err := store.Create(ctx, key, value)
+			secretKet := fmt.Sprintf("%s-%s-%d", key, seed, i)
+			err := store.Create(ctx, secretKet, value)
 			if err != nil && !test.ShouldFail {
-				t.Errorf("Test %d: failed to create key '%s': %v", i, key, err)
+				t.Errorf("Test %d: failed to create key '%s': %v", i, secretKet, err)
 			}
 			if err == nil && test.ShouldFail {
-				t.Errorf("Test %d: creating key '%s' should have failed: %v", i, key, err)
+				t.Errorf("Test %d: creating key '%s' should have failed: %v", i, secretKet, err)
 			}
 		}
-		clean(ctx, store, t)
 	}
 }
 
@@ -61,36 +68,36 @@ var setTests = []struct {
 	ShouldFail bool
 }{
 	{ // 0
-		Args: map[string][]byte{"my-key": []byte("my-value")},
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
 	},
 	{ // 1
-		Args: map[string][]byte{"my-key": []byte("my-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
-			return s.Create(ctx, "my-key", []byte(""))
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte], sufffix string) error {
+			return s.Create(ctx, "edge-test-"+sufffix, []byte("t"))
 		},
 		ShouldFail: true,
 	},
 }
 
-func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	defer clean(ctx, store, t)
+func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	defer clean(ctx, store, t, seed)
 	for i, test := range setTests {
 		if test.Setup != nil {
-			if err := test.Setup(ctx, store); err != nil {
+			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
 				t.Fatalf("Test %d: failed to setup: %v", i, err)
 			}
 		}
 
 		for key, value := range test.Args {
-			err := store.Create(ctx, key, value)
+			secretKet := fmt.Sprintf("%s-%s-%d", key, seed, i)
+			err := store.Create(ctx, secretKet, value)
 			if err != nil && !test.ShouldFail {
-				t.Errorf("Test %d: failed to set key '%s': %v", i, key, err)
+				t.Errorf("Test %d: failed to set key '%s': %v", i, secretKet, err)
 			}
 			if err == nil && test.ShouldFail {
-				t.Errorf("Test %d: setting key '%s' should have failed: %v", i, key, err)
+				t.Errorf("Test %d: setting key '%s' should have failed: %v", i, secretKet, err)
 			}
 		}
-		clean(ctx, store, t)
 	}
 }
 
@@ -100,48 +107,48 @@ var getTests = []struct {
 	ShouldFail bool
 }{
 	{ // 0
-		Args: map[string][]byte{"my-key": []byte("my-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
-			return s.Create(ctx, "my-key", []byte("my-value"))
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+			return s.Create(ctx, "edge-test-"+suffix, []byte("edge-test-value"))
 		},
 	},
 	{ // 1
-		Args:       map[string][]byte{"my-key": []byte("my-value")},
+		Args:       map[string][]byte{"edge-test": []byte("edge-test-value")},
 		ShouldFail: true,
 	},
 	{ // 1
-		Args: map[string][]byte{"my-key": []byte("my-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte]) error {
-			return s.Create(ctx, "my-key", []byte("my-value2"))
+		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
+		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+			return s.Create(ctx, "edge-test-"+suffix, []byte("edge-test-value2"))
 		},
 		ShouldFail: true,
 	},
 }
 
-func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	defer clean(ctx, store, t)
+func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	defer clean(ctx, store, t, seed)
 	for i, test := range getTests {
 		if test.Setup != nil {
-			if err := test.Setup(ctx, store); err != nil {
+			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
 				t.Fatalf("Test %d: failed to setup: %v", i, err)
 			}
 		}
 
 		for key, value := range test.Args {
-			v, err := store.Get(ctx, key)
+			secretKet := fmt.Sprintf("%s-%s-%d", key, seed, i)
+			v, err := store.Get(ctx, secretKet)
 			if !test.ShouldFail {
 				if err != nil {
-					t.Errorf("Test %d: failed to get key '%s': %v", i, key, err)
+					t.Errorf("Test %d: failed to get key '%s': %v", i, secretKet, err)
 				}
 				if !bytes.Equal(v, value) {
 					t.Errorf("Test %d: failed to get key: got '%s' - want '%s'", i, string(v), string(value))
 				}
 			}
 			if test.ShouldFail && err == nil && bytes.Equal(v, value) {
-				t.Errorf("Test %d: getting key '%s' should have failed: %v", i, key, err)
+				t.Errorf("Test %d: getting key '%s' should have failed: %v", i, secretKet, err)
 			}
 		}
-		clean(ctx, store, t)
 	}
 }
 
@@ -161,7 +168,7 @@ func testingContext(t *testing.T) (context.Context, context.CancelFunc) {
 	return context.WithDeadline(osCtx, d)
 }
 
-func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
 	iter, err := store.List(ctx)
 	if err != nil {
 		t.Fatalf("Cleanup: failed to list keys: %v", err)
@@ -173,11 +180,23 @@ func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
 		names = append(names, next)
 	}
 	for _, name := range names {
-		if err = store.Delete(ctx, name); err != nil {
-			t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
+		if strings.HasPrefix(name, fmt.Sprintf("edge-test-%s", seed)) {
+			if err = store.Delete(ctx, name); err != nil && !errors.Is(err, kes.ErrKeyNotFound) {
+				t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
+			}
 		}
 	}
 	if err = iter.Close(); err != nil {
 		t.Errorf("Cleanup: failed to close iter: %v", err)
 	}
+}
+
+const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
