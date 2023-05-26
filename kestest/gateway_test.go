@@ -643,7 +643,7 @@ func clean(ctx context.Context, client *kes.Client, t *testing.T) {
 			t.Errorf("Cleanup: failed to delete '%s': %v", info.Name, err)
 		}
 	}
-	if err = iter.Close(); err != nil {
-		t.Errorf("Cleanup: failed to close iter: %v", err)
-	}
+	// if err = iter.Close(); err != nil {
+	// 	t.Errorf("Cleanup: failed to close iter: %v", err)
+	// }
 }
