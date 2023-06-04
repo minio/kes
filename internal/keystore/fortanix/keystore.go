@@ -21,14 +21,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/kv"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/kv"
 )
 
 // APIKey is a Fortanix API key for authenticating to
@@ -71,8 +72,6 @@ type Store struct {
 	config Config
 	client xhttp.Retry
 }
-
-var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
 // Connect establishes and returns a Store to a Fortanix SDKMS server
 // using the given config.
@@ -182,19 +181,21 @@ func Connect(ctx context.Context, config *Config) (*Store, error) {
 	}, nil
 }
 
+func (s *Store) Endpoint() string { return s.config.Endpoint }
+
 // Status returns the current state of the Fortanix SDKMS instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return edge.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
 	}
-	return kv.State{
+	return edge.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -313,7 +314,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		KeyID string `json:"kid"`
 	}
 	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, 1*mem.MiB)).Decode(&response); err != nil {
 		return fmt.Errorf("fortanix: failed to delete '%s': failed to parse key metadata: %v", name, err)
 	}
 
@@ -388,7 +389,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		Enabled bool   `json:"enabled"`
 	}
 	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, 1*mem.MiB)).Decode(&response); err != nil {
 		return nil, fmt.Errorf("fortanix: failed to fetch '%s': failed to parse server response %v", name, err)
 	}
 	if !response.Enabled {
@@ -407,93 +408,47 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 // concurrent changes to the Fortanix SDKMS instance - i.e.
 // creates or deletes. Further, it does not provide any
 // ordering guarantees.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	go func() {
-		defer close(values)
-
-		var start string
-		for {
-			reqURL := endpoint(s.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
-			if start != "" {
-				reqURL += "&start=" + start
-			}
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-			if err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
-				return
-			}
-			req.Header.Set("Authorization", s.config.APIKey.String())
-
-			resp, err := s.client.Do(req)
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancel(err)
-				return
-			}
-			if err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
-				return
-			}
-
-			type Response struct {
-				Name string `json:"name"`
-			}
-			var keys []Response
-			if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
-				return
-			}
-			if len(keys) == 0 {
-				return
-			}
-			for _, k := range keys {
-				select {
-				case values <- k.Name:
-				case <-ctx.Done():
-					return
-				}
-			}
-			start = url.QueryEscape(keys[len(keys)-1].Name)
-		}
-	}()
-	return &iterator{
-		ch:     values,
-		ctx:    ctx,
-		cancel: cancel,
-	}, nil
-}
-
-type iterator struct {
-	ch     <-chan string
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
-var _ kv.Iter[string] = (*iterator)(nil)
-
-// Next moves the iterator to the next key, if any.
-// This key is available until Next is called again.
-//
-// It returns true if and only if there is a new key
-// available. If there are no more keys or an error
-// has been encountered, Next returns false.
-func (i *iterator) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	if prefix != "" {
+		prefix = url.QueryEscape(prefix)
 	}
-}
+	if n <= 0 || n > 100 {
+		n = 100
+	}
 
-// Err returns the first error, if any, encountered
-// while iterating over the set of keys.
-func (i *iterator) Close() error {
-	i.cancel(context.Canceled)
-	return context.Cause(i.ctx)
+	reqURL := endpoint(s.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=" + strconv.Itoa(n)
+	if prefix != "" {
+		reqURL += "&start=" + prefix
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("fortanix: failed to list keys: %v", err)
+	}
+	req.Header.Set("Authorization", s.config.APIKey.String())
+
+	resp, err := s.client.Do(req)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, "", err
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("fortanix: failed to list keys: %v", err)
+	}
+
+	type Response struct {
+		Name string `json:"name"`
+	}
+	var keys []Response
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*mem.MiB)).Decode(&keys); err != nil {
+		return nil, "", fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err)
+	}
+	if len(keys) == 0 {
+		return []string{}, "", nil
+	}
+	names := make([]string, 0, len(keys))
+	for _, key := range keys {
+		names = append(names, key.Name)
+	}
+	return names, keys[len(keys)-1].Name, nil
 }
 
 // parseErrorResponse returns an error containing

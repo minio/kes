@@ -5,34 +5,86 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/internal/sys"
 )
 
-// Config is a structure for configuring
-// a KES server API.
-type Config struct {
-	// Timeout is the duration after which a request
-	// times out. If Timeout <= 0 the API default
-	// is used.
-	Timeout time.Duration
+const (
+	PathVersion  = "/version"
+	PathStatus   = "/v1/status"
+	PathReady    = "/v1/ready"
+	PathMetrics  = "/v1/metrics"
+	PathListAPIs = "/v1/api"
 
-	// InsecureSkipAuth controls whether the API verifies
-	// client identities. If InsecureSkipAuth is true,
-	// the API accepts requests from arbitrary identities.
-	// In this mode, the API can be used by anyone who can
-	// communicate to the KES server over HTTPS.
-	// This should only be set for testing or in certain
-	// cases for APIs that don't expose sensitive information,
-	// like metrics.
-	InsecureSkipAuth bool
+	PathEnclaveCreate   = "/v1/enclave/create/"
+	PathEnclaveDescribe = "/v1/enclave/describe/"
+	PathEnclaveDelete   = "/v1/enclave/delete/"
+	PathEnclaveList     = "/v1/enclave/list/"
+
+	PathSecretKeyCreate   = "/v1/key/create/"
+	PathSecretKeyImport   = "/v1/key/import/"
+	PathSecretKeyDescribe = "/v1/key/describe/"
+	PathSecretKeyDelete   = "/v1/key/delete/"
+	PathSecretKeyList     = "/v1/key/list/"
+	PathSecretKeyGenerate = "/v1/key/generate/"
+	PathSecretKeyEncrypt  = "/v1/key/encrypt/"
+	PathSecretKeyDecrypt  = "/v1/key/decrypt/"
+
+	PathSecretCreate   = "/v1/secret/create/"
+	PathSecretDescribe = "/v1/secret/describe/"
+	PathSecretRead     = "/v1/secret/read/"
+	PathSecretDelete   = "/v1/secret/delete/"
+	PathSecretList     = "/v1/secret/list"
+
+	PathPolicyCreate   = "/v1/policy/create/"
+	PathPolicyAssign   = "/v1/policy/assign/"
+	PathPolicyDescribe = "/v1/policy/describe/"
+	PathPolicyRead     = "/v1/policy/read/"
+	PathPolicyDelete   = "/v1/policy/delete/"
+	PathPolicyList     = "/v1/policy/list/"
+
+	PathIdentityCreate       = "/v1/identity/create/"
+	PathIdentityDescribe     = "/v1/identity/describe/"
+	PathIdentityList         = "/v1/identity/list/"
+	PathIdentityDelete       = "/v1/identity/delete/"
+	PathIdentitySelfDescribe = "/v1/identity/self/describe"
+
+	PathLogError = "/v1/log/error"
+	PathLogAudit = "/v1/log/audit"
+
+	PathClusterExpand   = "/v1/cluster/expand"
+	PathClusterDescribe = "/v1/cluster/describe"
+	PathClusterShrink   = "/v1/cluster/shrink"
+	PathClusterBackup   = "/v1/cluster/backup"
+	PathClusterRestore  = "/v1/cluster/restore"
+
+	PathClusterRPCReplicate = "/v1/cluster/rpc/replicate"
+	PathClusterRPCForward   = "/v1/cluster/rpc/forward"
+	PathClusterRPCVote      = "/v1/cluster/rpc/vote"
+)
+
+func Failf(w http.ResponseWriter, code int, format string, a ...any) {
+	type Error struct {
+		Message string `json:"message"`
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(Error{
+		Message: fmt.Sprintf(format, a...),
+	})
+}
+
+func CutPath(url *url.URL, path string, f func(string) error) (string, error) {
+	return trimPath(url, path, f)
 }
 
 // API describes a KES server API.
@@ -41,7 +93,8 @@ type API struct {
 	Path    string        // The URI API path
 	MaxBody int64         // The max. body size the API accepts
 	Timeout time.Duration // The duration after which an API request times out. 0 means no timeout
-	Verify  bool          // Whether the API verifies the client identity
+
+	Verify Verifier
 
 	// Handler implements the API.
 	//
@@ -51,14 +104,35 @@ type API struct {
 	//  - the API path being a prefix of the request URL.
 	//  - the request body being limited to the API's MaxBody size.
 	//  - the request timing out after the duration specified for the API.
-	Handler http.Handler
+	Handler Handler
+}
 
-	_ [0]int
+type Verifier interface {
+	Verify(*http.Request) (kes.Identity, error)
+}
+
+type VerifyFunc func(*http.Request) (kes.Identity, error)
+
+func (f VerifyFunc) Verify(r *http.Request) (kes.Identity, error) { return f(r) }
+
+var InsecureSkipVerify Verifier = VerifyFunc(insecureSkipVerify)
+
+func insecureSkipVerify(*http.Request) (kes.Identity, error) { return "", nil }
+
+type HandlerFunc func(http.ResponseWriter, *http.Request, Verifier)
+
+func (f HandlerFunc) ServeAPI(w http.ResponseWriter, r *http.Request, v Verifier) { f(w, r, v) }
+
+type Handler interface {
+	ServeAPI(http.ResponseWriter, *http.Request, Verifier)
 }
 
 // ServerHTTP takes an HTTP Request and ResponseWriter and executes the
 // API's Handler.
 func (a API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.Method == http.MethodPut && r.Method == http.MethodPost {
+		r.Method = http.MethodPut
+	}
 	if r.Method != a.Method {
 		w.Header().Set("Accept", a.Method)
 		Fail(w, kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)))
@@ -80,35 +154,51 @@ func (a API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	a.Handler.ServeHTTP(w, r)
+	a.Handler.ServeAPI(w, r, a.Verify)
 }
 
-// nameFromRequest strips the API path from the request URL, verifies
-// that the remaining path is a valid name, via verifyName, and returns
-// the remaining path.
-func nameFromRequest(r *http.Request, apiPath string) (string, error) {
-	name := strings.TrimPrefix(r.URL.Path, apiPath)
-	if len(name) == len(r.URL.Path) {
-		return "", fmt.Errorf("api: patch mismatch: received '%s' - expected '%s'", r.URL.Path, apiPath)
+const (
+	maxNameLen   = 128
+	maxPrefixLen = 128
+)
+
+func trimPath(url *url.URL, path string, f func(string) error) (string, error) {
+	s := strings.TrimPrefix(url.Path, path)
+	if len(s) == len(url.Path) && path != "" {
+		return "", fmt.Errorf("api: invalid path: '%s' is not a prefix of '%s'", path, url.Path)
 	}
-	if err := verifyName(name); err != nil {
+	if err := f(s); err != nil {
 		return "", err
 	}
-	return name, nil
+	return s, nil
 }
 
-// patternFromRequest strips the API path from the request URL, verifies
-// that the remaining path is a valid pattern, via verifyPattern, and returns
-// the remaining path.
-func patternFromRequest(r *http.Request, apiPath string) (string, error) {
-	pattern := strings.TrimPrefix(r.URL.Path, apiPath)
-	if len(pattern) == len(r.URL.Path) {
-		return "", fmt.Errorf("api: patch mismatch: received '%s' - expected '%s'", r.URL.Path, apiPath)
+func IsValidPrefix(s string) error { return isValidPrefix(s) }
+
+func isValidPrefix(s string) error {
+	if len(s) > maxPrefixLen {
+		return kes.NewError(http.StatusBadRequest, "prefix is too long")
 	}
-	if err := verifyPattern(pattern); err != nil {
-		return "", err
+	for _, r := range s { // Valid characters are: [ 0-9 , A-Z , a-z , - , _ , * ]
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'A' && r <= 'Z':
+		case r >= 'a' && r <= 'z':
+		case r == '-':
+		case r == '_':
+		default:
+			return kes.NewError(http.StatusBadRequest, "prefix contains invalid character")
+		}
 	}
-	return pattern, nil
+	return nil
+}
+
+func IsValidName(s string) error {
+	return verifyName(s)
+}
+
+func IsValidPattern(s string) error {
+	return verifyPattern(s)
 }
 
 // verifyName reports whether the name is valid.
@@ -166,40 +256,4 @@ func verifyPattern(pattern string) error {
 		}
 	}
 	return nil
-}
-
-// enclaveFromRequest parses the enclave name from the request URL
-// and returns the corresponding enclave present at the vault.
-func enclaveFromRequest(vault *sys.Vault, req *http.Request) (*sys.Enclave, error) {
-	name := req.URL.Query().Get("enclave")
-	if name == "" {
-		name = sys.DefaultEnclaveName
-	}
-	if err := verifyName(name); err != nil {
-		return nil, err
-	}
-	return vault.GetEnclave(req.Context(), name)
-}
-
-// Sync calls f while holding the given lock and
-// releases the lock once f has been finished.
-//
-// Sync returns the error returned by f, if  any.
-func Sync(locker sync.Locker, f func() error) error {
-	locker.Lock()
-	defer locker.Unlock()
-
-	return f()
-}
-
-// VSync calls f while holding the given lock and
-// releases the lock once f has been finished.
-//
-// VSync returns the result of f and its error
-// if  any.
-func VSync[V any](locker sync.Locker, f func() (V, error)) (V, error) {
-	locker.Lock()
-	defer locker.Unlock()
-
-	return f()
 }

@@ -17,7 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/kv"
 )
 
 // Credentials represents static AWS credentials:
@@ -100,21 +101,21 @@ type Store struct {
 	client *secretsmanager.SecretsManager
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
+func (s *Store) Endpoint() string { return s.config.Addr }
 
 // Status returns the current state of the AWS SecretsManager instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.client.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return edge.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
 	}
-	return kv.State{
+	return edge.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -220,47 +221,25 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	go func() {
-		defer close(values)
-		err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
-			for _, secret := range page.SecretList {
-				values <- *secret.Name
-			}
-
-			// The pagination is stopped once we return false.
-			// If lastPage is true then we reached the end. Therefore,
-			// we return !lastPage which then is false.
-			return !lastPage
-		})
-		if err != nil {
-			cancel(err)
-		}
-	}()
-	return &iter{
-		ch:  values,
-		ctx: ctx,
-	}, nil
-}
-
-type iter struct {
-	ch  <-chan string
-	ctx context.Context
-}
-
-func (i *iter) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	var names []string
+	var maxResults *int64
+	if n > 0 {
+		N := int64(n)
+		maxResults = &N
 	}
-}
-
-func (i *iter) Close() error {
-	return context.Cause(i.ctx)
+	if err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{NextToken: aws.String(prefix), MaxResults: maxResults}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
+		for _, secret := range page.SecretList {
+			names = append(names, *secret.Name)
+		}
+		if lastPage || page.NextToken == nil {
+			prefix = ""
+		} else {
+			prefix = *page.NextToken
+		}
+		return false
+	}); err != nil {
+		return nil, "", err
+	}
+	return names, prefix, nil
 }

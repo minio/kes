@@ -27,13 +27,14 @@ func Log(logger *log.Logger, h http.Handler) http.Handler {
 				ip = net.ParseIP(addr)
 			}
 		}
+		identity, _ := auth.IdentifyRequest(r.TLS)
 		w = &responseWriter{
 			rw: w,
 
 			log:       logger,
 			url:       *r.URL,
 			ip:        ip,
-			identity:  auth.Identify(r),
+			identity:  identity,
 			timestamp: time.Now(),
 		}
 		h.ServeHTTP(w, r)

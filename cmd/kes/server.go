@@ -7,92 +7,90 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"syscall"
-	"time"
 
-	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes/internal/api"
-	"github.com/minio/kes/internal/auth"
+	"github.com/minio/kes"
+	kesconf "github.com/minio/kes/cluster"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/fips"
-	"github.com/minio/kes/internal/https"
-	"github.com/minio/kes/internal/log"
-	xlog "github.com/minio/kes/internal/log"
-	"github.com/minio/kes/internal/metric"
-	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/internal/sys/fs"
+	"github.com/minio/kes/internal/crypto/fips"
+	"github.com/minio/kes/internal/mtls"
 	flag "github.com/spf13/pflag"
 )
 
 const serverCmdUsage = `Usage:
-    kes server [options]
+    kes server [options] <DIR>
 
 Options:
-    --addr <IP:PORT>         The address of the server (default: 0.0.0.0:7373)
-    --config <PATH>          Path to the server configuration file
+    --addr <[ip]:port>       The network interface the KES server will listen on.
+                             The default is '0.0.0.0:7373', causing KES to listen
+                             on all available network interfaces.
+	
+    --host <host:port>       The public IP or FQDN and port of this KES server.
+                             Defaults to the first unicast IP address and the port
+                             specified by '--addr'. For example, '10.1.2.3:7373'
+                             or '192.168.1.73:443'.
+                             If no unicast IP address is available, defaults to
+                             'localhost' and the port specified by '--addr'.
 
-    --key <PATH>             Path to the TLS private key. It takes precedence over
-                             the config file
-    --cert <PATH>            Path to the TLS certificate. It takes precedence over
-                             the config file
-
-    --auth {on|off}          Controls how the server handles mTLS authentication.
-                             By default, the server requires a client certificate
-                             and verifies that certificate has been issued by a
-                             trusted CA.
-                             Valid options are:
-                                Require and verify      : --auth=on (default)
-                                Require but don't verify: --auth=off
-
+    --config <file>          An optional config file. If not specified, KES will
+                             use the configuration from the KES config directory,
+                             '$USER/.kes' on unix systems and '$USERPROFILE/.kes'
+                             on windows systems.
+                             
     -h, --help               Show list of command-line options
 
-Starts a KES server. The server address can be specified in the config file but
-may be overwritten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
-the PORT to 7373.
 
-The client TLS verification can be disabled by setting --auth=off. The server then
-accepts arbitrary client certificates but still maps them to policies. So, it disables
-authentication but not authorization.
+KES is a cloud-native distributed key management and encryption server.
+It can either run as stateless edge node in front of a central KMS or
+as stateful high performance KMS cluster.
+	
+    Quick Start: https://github.com/minio/kes#quick-start
+    Docs:        https://github.com/minio/kes/wiki
+
+KES leverages hardware security modules (HSMs) to seal and unseal its encrypted
+state on disk. The HSM is responsible for en/decrypting the cluster root key.
+The $KES_HSM_KEY env. variable can be used to emulate such an HSM in software.
+The same $KES_HSM_KEY must be present on all KES servers within a KES cluster.
+You must generate your own $KES_HSM_KEY and keep it secure:
+	
+     $ kes --soft-hsm
 
 Examples:
-    $ kes server --config config.yml --auth =off
-`
+  1. Start a single node KES cluster accessible at 'localhost:7373'
+     $ export KES_HSM_KEY=kes:v1:aes256:H2BFEgK48Mr4KfuBkxUFJJJNn8f+J0ugpn43ZYJfw30= # Use your own
+     $ kes server /tmp/kes0
 
-type serverConfig struct {
-	Address     string
-	ConfigPath  string
-	PrivateKey  string
-	Certificate string
-	TLSAuth     string
-}
+  2. Start a single node KES cluster accessible at 'kes-0.local:7373'
+     $ export KES_HSM_KEY=kes:v1:chacha20:OYmWIhY6iZAMOqNt610dqit5j/NuZNZc71+XreVdwug= # Use your own
+     $ kes server --host kes-0.local:7373 ~/kes0
+
+  3. Start a single node KES cluster accessible at '10.1.2.3:443'
+     $ export KES_HSM_KEY=kes:v1:aes256:OBwNvb9qloQi235KindURBuSqArJzWN6JaYKUZHIyPY= # Use your own
+     $ kes server --addr :443 --host 10.1.2.3:443 ~/kes0
+
+License:
+   Copyright:  MinIO, Inc.
+   GNU AGPLv3: https://www.gnu.org/licenses/agpl-3.0.html
+`
 
 func serverCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, serverCmdUsage) }
 
 	var (
-		addrFlag     string
-		configFlag   string
-		tlsKeyFlag   string
-		tlsCertFlag  string
-		mtlsAuthFlag string
+		addrFlag   string
+		hostFlag   string
+		configFlag string
 	)
-	cmd.StringVar(&addrFlag, "addr", "", "The address of the server")
-	cmd.StringVar(&configFlag, "config", "", "Path to the server configuration file")
-	cmd.StringVar(&tlsKeyFlag, "key", "", "Path to the TLS private key")
-	cmd.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
-	cmd.StringVar(&mtlsAuthFlag, "auth", "", "Controls how the server handles mTLS authentication")
+	cmd.StringVar(&addrFlag, "addr", "", "The network interface the KES server listens on. Default: 0.0.0.0:7373")
+	cmd.StringVar(&hostFlag, "host", "", "")
+	cmd.StringVar(&configFlag, "config", "", "")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -100,203 +98,174 @@ func serverCmd(args []string) {
 		cli.Fatalf("%v. See 'kes server --help'", err)
 	}
 
+	if cmd.NArg() == 0 {
+		cmd.Usage()
+		os.Exit(1)
+	}
 	if cmd.NArg() > 1 {
 		cli.Fatal("too many arguments. See 'kes server --help'")
 	}
-	if cmd.NArg() == 0 {
-		startGateway(gatewayConfig{
-			Address:     addrFlag,
-			ConfigFile:  configFlag,
-			PrivateKey:  tlsKeyFlag,
-			Certificate: tlsCertFlag,
-			TLSAuth:     mtlsAuthFlag,
-		})
-	} else {
-		config := serverConfig{
-			Address:     addrFlag,
-			ConfigPath:  configFlag,
-			PrivateKey:  tlsKeyFlag,
-			Certificate: tlsCertFlag,
-			TLSAuth:     mtlsAuthFlag,
+
+	if hostFlag == "" {
+		port := "7373"
+		if addrFlag != "" {
+			_, p, err := net.SplitHostPort(addrFlag)
+			if err != nil {
+				cli.Fatalf("invalid '--addr=%s': %v", addrFlag, err)
+			}
+			port = p
 		}
-		startServer(cmd.Arg(0), config)
+
+		if ip, err := lookupExternalIP(); err == nil {
+			hostFlag = net.JoinHostPort(ip.String(), port)
+		} else {
+			hostFlag = net.JoinHostPort("localhost", port)
+		}
 	}
+
+	nodeAddr, err := kes.ParseAddr(hostFlag)
+	if err != nil {
+		cli.Fatalf("invalid host addr '%s': %v", hostFlag, err)
+	}
+	startServer(cmd.Arg(0), addrFlag, nodeAddr, configFlag)
 }
 
-func startServer(path string, sConfig serverConfig) {
-	var mlock bool
-	if runtime.GOOS == "linux" {
-		mlock = mlockall() == nil
-	}
-
+func startServer(path, addr string, nodeAddr kes.Addr, configFile string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelCtx()
 
-	init, err := fs.ReadInitConfig(filepath.Join(path, ".init"))
+	hsmKey, ok := os.LookupEnv("KES_HSM_KEY")
+	if !ok {
+		cli.Fatal("env variable 'KES_HSM_KEY' is not present")
+	}
+	hsm, err := kes.ParseSoftHSM(hsmKey)
 	if err != nil {
-		cli.Fatalf("failed to initialize vault: %v", err)
-	}
-	if sConfig.Address != "" {
-		init.Address.Set(sConfig.Address)
-	}
-	if sConfig.PrivateKey != "" {
-		init.PrivateKey.Set(sConfig.PrivateKey)
-	}
-	if sConfig.Certificate != "" {
-		init.Certificate.Set(sConfig.Certificate)
-	}
-	switch strings.ToLower(sConfig.TLSAuth) {
-	case "on":
-		init.VerifyClientCerts.Set(true)
-	case "off":
-		init.VerifyClientCerts.Set(false)
+		cli.Fatalf("invalid env variable 'KES_HSM_KEY': %v", err)
 	}
 
-	if init.Address.Value() == "" {
-		init.Address.Set("0.0.0.0:7373")
-	}
-	if init.PrivateKey.Value() == "" {
-		cli.Fatal("no TLS private key specified")
-	}
-	if init.Certificate.Value() == "" {
-		cli.Fatal("no TLS certificate specified")
-	}
-
-	auditLog := xlog.New(ioutil.Discard, "", 0)
-	if isTerm(os.Stderr) {
-		style := tui.NewStyle().Foreground(tui.Color("#ac0000")) // red
-		log.Default().SetPrefix(style.Render("Error: "))
-	}
-
-	certificate, err := https.CertificateFromFile(init.Certificate.Value(), init.PrivateKey.Value(), init.Password.Value())
-	if err != nil {
-		cli.Fatalf("failed to load TLS certificate: %v", err)
-	}
-	if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
-		// Support for TLS certificates with a subject CN but without any SAN
-		// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
-		// Therefore, we require at least one SAN for the server certificate.
-		cli.Fatal("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
-	}
-
-	clientAuth := tls.RequireAnyClientCert
-	if init.VerifyClientCerts.Value() {
-		clientAuth = tls.RequireAndVerifyClientCert
-	}
-
-	var proxy *auth.TLSProxy
-	if len(init.ProxyIdentities) != 0 {
-		proxy = &auth.TLSProxy{
-			CertHeader: http.CanonicalHeaderKey(init.ProxyClientCert.Value()),
+	var config *kesconf.ServerConfig
+	if configFile != "" {
+		file, err := os.Open(configFile)
+		if err != nil {
+			cli.Fatalf("failed to read server config: %v", err)
 		}
-		if clientAuth == tls.RequireAndVerifyClientCert || clientAuth == tls.VerifyClientCertIfGiven {
-			proxy.VerifyOptions = new(x509.VerifyOptions)
+		config, err = kesconf.ReadServerConfigYAML(file)
+		if err != nil {
+			file.Close()
+			cli.Fatalf("failed to read server config: %v", err)
 		}
-		for _, identity := range init.ProxyIdentities {
-			if !identity.Value().IsUnknown() {
-				proxy.Add(identity.Value())
-			}
+		if err = file.Close(); err != nil {
+			cli.Fatalf("failed to read server config: %v", err)
+		}
+	} else {
+		dir, err := os.UserHomeDir()
+		if err != nil {
+			cli.Fatalf("failed to detect home directory: %v", err)
+		}
+		dir = filepath.Join(dir, ".kes")
+		os.Mkdir(dir, 0o755)
+		os.Mkdir(filepath.Join(dir, "CAs"), 0o755)
+
+		config = &kesconf.ServerConfig{
+			Addr:  "0.0.0.0:7373",
+			Admin: "",
+			TLS: &kesconf.TLSConfig{
+				PrivateKey:  filepath.Join(dir, "private.key"),
+				Certificate: filepath.Join(dir, "public.crt"),
+				CAPath:      filepath.Join(dir, "CAs"),
+			},
 		}
 	}
-
-	vault, err := fs.Open(path)
-	if err != nil {
-		cli.Fatalf("failed to initialize vault: %v", err)
+	if addr == "" && config.Addr != "" {
+		addr = config.Addr
 	}
 
-	metrics := metric.New()
-	log.Default().Add(metrics.ErrorEventCounter())
-	auditLog.Add(metrics.AuditEventCounter())
+	tlsOptions := []mtls.Option{
+		mtls.WithServerCertificate(config.TLS.Certificate, config.TLS.PrivateKey, "", nodeAddr.Host()),
+		mtls.WithRootCAs(config.TLS.CAPath),
+		mtls.WithClientAuth(tls.RequestClientCert),
+	}
+	tlsConfig := new(tls.Config)
+	for _, opt := range tlsOptions {
+		if err = opt(tlsConfig); err != nil {
+			cli.Fatal(err)
+		}
+	}
+	tlsConfig.MinVersion = tls.VersionTLS12
+	tlsConfig.CipherSuites = fips.TLSCiphers()
+	tlsConfig.CurvePreferences = fips.TLSCurveIDs()
+	tlsConfig.RootCAs.AddCert(tlsConfig.Certificates[0].Leaf)
 
-	server := https.NewServer(&https.Config{
-		Addr: init.Address.Value(),
-		Handler: api.NewRouter(&api.RouterConfig{
-			Vault:    vault,
-			Proxy:    proxy,
-			AuditLog: auditLog,
-			ErrorLog: log.Default(),
-			Metrics:  metrics,
-		}),
-		TLSConfig: &tls.Config{
-			MinVersion:       tls.VersionTLS12,
-			Certificates:     []tls.Certificate{certificate},
-			CipherSuites:     fips.TLSCiphers(),
-			CurvePreferences: fips.TLSCurveIDs(),
-			ClientAuth:       clientAuth,
-		},
+	if err = kes.Init(path, nodeAddr); err != nil {
+		cli.Fatal(err)
+	}
+
+	node := kes.NewServer(nodeAddr)
+	node.Register(kes.SigStart, func() { cli.PrintStartupMessage(node) })
+	node.Register(kes.SigJoin, func() {
+		cli.Println()
+		cli.Println("Node joining the cluster...")
+		cli.Println("")
+		cli.PrintStartupMessage(node)
 	})
-	go func(ctx context.Context) {
-		ticker := time.NewTicker(15 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-			case <-ticker.C:
-				certificate, err := https.CertificateFromFile(init.Certificate.Value(), init.PrivateKey.Value(), init.Password.Value())
-				if err != nil {
-					xlog.Printf("failed to load TLS certificate: %v", err)
-				}
-				if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
-					// Support for TLS certificates with a subject CN but without any SAN
-					// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
-					// Therefore, we require at least one SAN for the server certificate.
-					xlog.Print("failed to load TLS certificate: certificate does not contain any DNS or IP address as SAN")
-				}
-				c := &tls.Config{
-					MinVersion:       tls.VersionTLS12,
-					Certificates:     []tls.Certificate{certificate},
-					CipherSuites:     fips.TLSCiphers(),
-					CurvePreferences: fips.TLSCurveIDs(),
-					ClientAuth:       clientAuth,
-				}
-				if err = server.UpdateTLS(c); err != nil {
-					log.Printf("failed to update TLS configuration: %v", err)
-				}
-			}
-		}
-	}(ctx)
-
-	ip, port := serverAddr(init.Address.Value())
-	ifaceIPs := listeningOnV4(ip)
-	if len(ifaceIPs) == 0 {
-		cli.Fatal("failed to listen on network interfaces")
-	}
-
-	var faint, item, green, red tui.Style
-	if isTerm(os.Stdout) {
-		faint = faint.Faint(true)
-		item = item.Foreground(tui.Color("#2e42d1")).Bold(true)
-		green = green.Foreground(tui.Color("#00a700"))
-		red = red.Foreground(tui.Color("#a70000"))
-	}
-
-	var buffer cli.Buffer
-	buffer.Stylef(item, "%-12s", "Copyright").Sprintf("%-22s", "MinIO, Inc.").Styleln(faint, "https://min.io")
-	buffer.Stylef(item, "%-12s", "License").Sprintf("%-22s", "GNU AGPLv3").Styleln(faint, "https://www.gnu.org/licenses/agpl-3.0.html")
-	buffer.Stylef(item, "%-12s", "Version").Sprintf("%-22s", sys.BinaryInfo().Version).Stylef(faint, "%s/%s\n", runtime.GOOS, runtime.GOARCH)
-	buffer.Sprintln()
-	buffer.Stylef(item, "%-12s", "Endpoints").Sprintf("https://%s:%s\n", ifaceIPs[0], port)
-	for _, ifaceIP := range ifaceIPs[1:] {
-		buffer.Sprintf("%-12s", " ").Sprintf("https://%s:%s\n", ifaceIP, port)
-	}
-	buffer.Sprintln()
-	if clientAuth == tls.RequireAndVerifyClientCert {
-		buffer.Stylef(item, "%-12s", "Mutual TLS").Sprint("on").Styleln(faint, "Verify client certificates")
-	}
-	switch {
-	case runtime.GOOS == "linux" && mlock:
-		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(green, "%-22s", "on").Styleln(faint, "RAM pages will not be swapped to disk")
-	case runtime.GOOS == "linux":
-		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(red, "%-22s", "off").Styleln(faint, "Failed to lock RAM pages. Consider granting CAP_IPC_LOCK")
-	default:
-		buffer.Stylef(item, "%-12s", "Mem Lock").Stylef(red, "%-22s", "off").Stylef(faint, "Not supported on %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	}
-	cli.Println(buffer.String())
-
-	if err := server.Start(ctx); err != http.ErrServerClosed {
+	node.Register(kes.SigLeave, func() {
+		cli.Println()
+		cli.Println("Node leaving the cluster...")
+		cli.Println("")
+		cli.PrintStartupMessage(node)
+	})
+	if err := node.Start(ctx, path, &kes.Config{
+		Addr:     addr,
+		Admin:    config.Admin,
+		HSM:      hsm,
+		TLS:      tlsConfig,
+		ErrorLog: nil,
+		AuditLog: nil,
+	}); err != nil {
 		cli.Fatalf("failed to start server: %v", err)
 	}
+}
+
+func lookupExternalIP() (net.IP, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	var ipv6 net.IP
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue // interface is down or is loopback
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+				continue
+			}
+
+			if ipv4 := ip.To4(); ipv4 != nil { // Prefer IPv4: return first non-nil IPv4
+				return ipv4, nil
+			}
+			if ipv6 == nil && len(ip) == net.IPv6len { // Record first IPv6 - just in case we don't find an IPv4
+				ipv6 = ip
+			}
+		}
+	}
+	if ipv6 != nil {
+		return ipv6, nil
+	}
+	return nil, errors.New("no IP addrs")
 }
 
 // listeningOnV4 returns a list of the system IPv4 interface

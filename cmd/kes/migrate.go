@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/edgeconf"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -90,7 +91,7 @@ func migrateCmd(args []string) {
 	if err != nil {
 		cli.Fatalf("failed to read '--from' config file: %v", err)
 	}
-	sourceConfig, err := edge.ReadServerConfigYAML(file)
+	src, _, err := edgeconf.Connect(ctx, file)
 	if err != nil {
 		cli.Fatalf("failed to read '--from' config file: %v", err)
 	}
@@ -101,20 +102,11 @@ func migrateCmd(args []string) {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 
-	targetConfig, err := edge.ReadServerConfigYAML(file)
+	dst, _, err := edgeconf.Connect(ctx, file)
 	if err != nil {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 	file.Close()
-
-	src, err := sourceConfig.KeyStore.Connect(ctx)
-	if err != nil {
-		cli.Fatal(err)
-	}
-	dst, err := targetConfig.KeyStore.Connect(ctx)
-	if err != nil {
-		cli.Fatal(err)
-	}
 
 	var (
 		n        uint64
@@ -123,9 +115,8 @@ func migrateCmd(args []string) {
 	defer uiTicker.Stop()
 
 	// Now, we start listing the keys at the source.
-	iterator, err := src.List(ctx)
-	if err != nil {
-		cli.Fatal(err)
+	iter := kes.ListIter[string]{
+		NextFunc: src.List,
 	}
 
 	// Then, we start the UI which prints how many keys have
@@ -145,9 +136,12 @@ func migrateCmd(args []string) {
 
 	// Finally, we start the actual migration.
 	for {
-		name, ok := iterator.Next()
-		if !ok {
+		name, err := iter.Next(ctx)
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			cli.Fatalf("failed to list keys: %v", err)
 		}
 		if ok, _ := filepath.Match(pattern, name); !ok {
 			continue
@@ -175,10 +169,6 @@ func migrateCmd(args []string) {
 			cli.Fatalf("failed to migrate %q: %v\nMigrated keys: %d", name, err, atomic.LoadUint64(&n))
 		}
 		atomic.AddUint64(&n, 1)
-	}
-	if err = iterator.Close(); err != nil {
-		quiet.ClearLine()
-		cli.Fatalf("failed to list keys: %v\nMigrated keys: %d", err, atomic.LoadUint64(&n))
 	}
 	cancel()
 

@@ -19,12 +19,15 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
+	"strings"
 	"time"
 
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/kv"
 )
 
 // Store is a Hashicorp Vault secret store.
@@ -132,20 +135,20 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	}, nil
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
-
 var errSealed = errors.New("vault: key store is sealed")
+
+func (s *Store) Endpoint() string { return s.config.Endpoint }
 
 // Status returns the current state of the Hashicorp Vault instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	// This is a workaround for https://github.com/hashicorp/vault/issues/14934
 	// The Vault SDK should not set the X-Vault-Namespace header
 	// for root-only API paths.
 	// Otherwise, Vault may respond with: 404 - unsupported path
 	client, err := s.client.Clone()
 	if err != nil {
-		return kv.State{}, err
+		return edge.KeyStoreState{}, err
 	}
 	client.ClearNamespace()
 
@@ -154,17 +157,17 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	if err == nil {
 		switch {
 		case !health.Initialized:
-			return kv.State{}, &kv.Unavailable{Err: errors.New("vault: not initialized")}
+			return edge.KeyStoreState{}, &kv.Unavailable{Err: errors.New("vault: not initialized")}
 		case health.Sealed:
-			return kv.State{}, &kv.Unavailable{Err: errSealed}
+			return edge.KeyStoreState{}, &kv.Unavailable{Err: errSealed}
 		default:
-			return kv.State{Latency: time.Since(start)}, nil
+			return edge.KeyStoreState{Latency: time.Since(start)}, nil
 		}
 	}
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
 	}
-	return kv.State{}, err
+	return edge.KeyStoreState{}, err
 }
 
 // Create creates the given key-value pair at Vault if and only
@@ -383,9 +386,9 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	if s.client.Sealed() {
-		return nil, errSealed
+		return nil, "", errSealed
 	}
 
 	// We don't use the Vault SDK vault.Logical.List(string) API
@@ -408,7 +411,7 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 
 	resp, err := s.client.RawRequestWithContext(ctx, r)
 	if err != nil {
-		return nil, fmt.Errorf("vault: failed to list '%s': %v", location, err)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
 	defer resp.Body.Close()
 
@@ -419,10 +422,10 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	const MaxBody = 32 * mem.MiB
 	secret, err := vaultapi.ParseSecret(mem.LimitReader(resp.Body, MaxBody))
 	if err != nil {
-		return nil, fmt.Errorf("vault: failed to list '%s': %v", location, err)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
 	if secret == nil { // The secret may be nil even when there was no error.
-		return &iterator{}, nil // We return an empty iterator in this case.
+		return []string{}, "", nil // We return an empty iterator in this case.
 	}
 
 	// Vault returns a generic map that should contain
@@ -431,7 +434,22 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	// of a dedicated type or []string.
 	values, ok := secret.Data["keys"].([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
 	}
-	return &iterator{values: values}, nil
+
+	var j int
+	names := make([]string, 0, len(values))
+	for _, name := range values {
+		name := fmt.Sprint(name)
+		if strings.HasPrefix(name, prefix) {
+			if n <= 0 && j == n {
+				sort.Strings(names)
+				return names, name, nil
+			}
+			names = append(names, name)
+			j++
+		}
+	}
+	sort.Strings(names)
+	return names, "", nil
 }

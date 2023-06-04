@@ -207,12 +207,6 @@ log:
   # request-response pair - including invalid requests.
   audit: off
 
-# In the keys section, pre-defined keys can be specified. The KES
-# server will try to create the listed keys before startup.
-keys:
-  - name: some-key-name 
-  - name: another-key-name
-
 # The keystore section specifies which KMS - or in general key store - is
 # used to store and fetch encryption keys.
 # A KES server can only use one KMS / key store at the same time.

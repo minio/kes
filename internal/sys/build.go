@@ -15,7 +15,6 @@ import (
 type BuildInfo struct {
 	Version  string
 	CommitID string
-	Data     string
 }
 
 // BinaryInfo returns the BuildInfo of the
@@ -56,7 +55,6 @@ func readBinaryInfo() BuildInfo {
 			binaryInfo.CommitID = setting.Value
 		}
 	}
-	binaryInfo.Data = info.String()
 	return binaryInfo
 }
 

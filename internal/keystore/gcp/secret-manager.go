@@ -13,13 +13,15 @@ import (
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/kv"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	gcpiterator "google.golang.org/api/iterator"
 )
 
 // Store is a GCP SecretManager secret store.
@@ -27,8 +29,6 @@ type Store struct {
 	client *secretmanager.Client
 	config *Config
 }
-
-var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
 // Connect connects and authenticates to a GCP SecretManager
 // server.
@@ -101,19 +101,21 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	return conn, nil
 }
 
+func (s *Store) Endpoint() string { return s.config.ProjectID }
+
 // Status returns the current state of the GCP SecretManager instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return edge.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
 	}
-	return kv.State{
+	return edge.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -216,11 +218,22 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	if n <= 0 {
+		n = 0
+	}
 	location := path.Join("projects", s.config.ProjectID)
-	return &iterator{
-		src: s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
-			Parent: location,
-		}),
-	}, nil
+	iter := s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
+		Parent:    location,
+		PageToken: prefix,
+		PageSize:  int32(n),
+	})
+	var names []string
+	for entry, err := iter.Next(); err != gcpiterator.Done; entry, err = iter.Next() {
+		if err != nil {
+			return nil, "", err
+		}
+		names = append(names, path.Base(entry.GetName()))
+	}
+	return names, "", nil
 }

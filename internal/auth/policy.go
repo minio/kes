@@ -5,71 +5,15 @@
 package auth
 
 import (
-	"bytes"
-	"context"
-	"encoding"
-	"encoding/gob"
 	"net/http"
-	"path"
+	"strings"
 	"time"
 
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/msgp"
 )
 
-// A PolicySet is a set of policies.
-type PolicySet interface {
-	// Set creates or replaces the policy at the given name.
-	Set(ctx context.Context, name string, policy *Policy) error
-
-	// Get returns the policy with the given name.
-	//
-	// It returns ErrPolicyNotFound if no policy with
-	// the given name exists.
-	Get(ctx context.Context, name string) (*Policy, error)
-
-	// Delete deletes the policy with the given name.
-	//
-	// It returns ErrPolicyNotFound if no policy with
-	// the given name exists.
-	Delete(ctx context.Context, name string) error
-
-	// List returns an iterator over all policies.
-	List(ctx context.Context) (PolicyIterator, error)
-}
-
-// A PolicyIterator iterates over a list of policies.
-//
-//	for iterator.Next() {
-//	    _ = iterator.Name() // Get the next policy
-//	}
-//	if err := iterator.Close(); err != nil {
-//	}
-//
-// Once done iterating, a PolicyIterator should be closed.
-//
-// In general, a PolicyIterator does not provide any
-// ordering guranatees. Concurrent changes to the
-// underlying source may not be reflected by the iterator.
-type PolicyIterator interface {
-	// Next moves the iterator to the subsequent policy, if any.
-	// This policy is available until Next is called again.
-	//
-	// It returns true if and only if there is another policy.
-	// Once an error occurs or once there are no more policies,
-	// Next returns false.
-	Next() bool
-
-	// Name returns the name of the current policy. Name can be
-	// called multiple times and returns the same value until
-	// Next is called again.
-	Name() string
-
-	// Close closes the iterator and releases resources. It
-	// returns any error encountered while iterating, if any.
-	// Otherwise, it returns any error that occurred while
-	// closing, if any.
-	Close() error
-}
+type Rule = struct{}
 
 // A Policy defines whether an HTTP request is allowed or
 // should be rejected.
@@ -79,11 +23,11 @@ type PolicyIterator interface {
 type Policy struct {
 	// Allow is a list of glob patterns that are matched
 	// against the URL path of incoming requests.
-	Allow []string
+	Allow map[string]Rule
 
 	// Deny is a list of glob patterns that are matched
 	// against the URL path of incoming requests.
-	Deny []string
+	Deny map[string]Rule
 
 	// CreatedAt is the point in time when the policy
 	// has been created.
@@ -93,44 +37,20 @@ type Policy struct {
 	CreatedBy kes.Identity
 }
 
-var (
-	_ encoding.BinaryMarshaler   = Policy{}
-	_ encoding.BinaryUnmarshaler = (*Policy)(nil)
-)
-
-// MarshalBinary returns the Policy's binary representation.
-func (p Policy) MarshalBinary() ([]byte, error) {
-	type GOB struct {
-		Allow     []string
-		Deny      []string
-		CreatedAt time.Time
-		CreatedBy kes.Identity
-	}
-
-	var buffer bytes.Buffer
-	if err := gob.NewEncoder(&buffer).Encode(GOB(p)); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
+func (p *Policy) MarshalMsg() (msgp.Policy, error) {
+	return msgp.Policy{
+		Allow:     p.Allow,
+		Deny:      p.Deny,
+		CreatedAt: p.CreatedAt,
+		CreatedBy: p.CreatedBy.String(),
+	}, nil
 }
 
-// UnmarshalBinary unmarshals the Policy's binary representation.
-func (p *Policy) UnmarshalBinary(b []byte) error {
-	type GOB struct {
-		Allow     []string
-		Deny      []string
-		CreatedAt time.Time
-		CreatedBy kes.Identity
-	}
-
-	var value GOB
-	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
-		return err
-	}
-	p.Allow = value.Allow
-	p.Deny = value.Deny
-	p.CreatedAt = value.CreatedAt
-	p.CreatedBy = value.CreatedBy
+func (p *Policy) UnmarshalMsg(v *msgp.Policy) error {
+	p.Allow = v.Allow
+	p.Deny = v.Deny
+	p.CreatedAt = v.CreatedAt
+	p.CreatedBy = kes.Identity(v.CreatedBy)
 	return nil
 }
 
@@ -142,15 +62,76 @@ func (p *Policy) UnmarshalBinary(b []byte) error {
 //
 // Otherwise, Verify returns ErrNotAllowed.
 func (p *Policy) Verify(r *http.Request) error {
-	for _, pattern := range p.Deny {
-		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
+	for pattern := range p.Deny {
+		if match(r.URL.Path, pattern) {
 			return kes.ErrNotAllowed
 		}
 	}
-	for _, pattern := range p.Allow {
-		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
+	for pattern := range p.Allow {
+		if match(r.URL.Path, pattern) {
 			return nil
 		}
 	}
 	return kes.ErrNotAllowed
+}
+
+// IsSubset reports whether the Policy p is a subset of o.
+// If it is then any request allowed by p is also allowed
+// by o and any request rejected by o is also rejected by p.
+//
+// Usually, a Policy p is a subset of o when it contains
+// less or less generic allow rules and/or more or more
+// generic deny rules.
+//
+// Two policies, A and B, are equivalent, but not necessarily
+// equal, if:
+//
+//	A.IsSubset(B) && B.IsSubset(A)
+func (p *Policy) IsSubset(o *Policy) bool {
+	for allow := range p.Allow {
+
+		// First, we check whether p's allow rule set
+		// is a subset of o's allow rule set.
+		var matched bool
+		for pattern := range o.Allow {
+			if matched = match(pattern, allow); matched {
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+
+		// Next, we check whether one of p's allow rules
+		// matches any of o's deny rules. If so, p would
+		// allow something o denies unless p also contains
+		// a deny rule equal or more generic than o's.
+		for super := range o.Deny {
+			if !match(allow, super) {
+				continue
+			}
+
+			matched = false
+			for deny := range p.Deny {
+				if matched = match(deny, super); matched {
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func match(pattern, s string) bool {
+	if pattern == "" {
+		return false
+	}
+
+	if i := len(pattern) - 1; pattern[i] == '*' {
+		return strings.HasPrefix(s, pattern[:i])
+	}
+	return s == pattern
 }

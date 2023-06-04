@@ -18,7 +18,6 @@ import (
 	"aead.dev/mem"
 	"github.com/Azure/go-autorest/autorest"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/internal/key"
 )
 
 // status represents a KeyVault operation results.
@@ -147,8 +146,8 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 	}
 
 	limit := mem.Size(resp.ContentLength)
-	if limit < 0 || limit > key.MaxSize {
-		limit = key.MaxSize
+	if limit < 0 || limit > 1*mem.MiB {
+		limit = mem.MiB
 	}
 	var response Response
 	if err = json.NewDecoder(mem.LimitReader(resp.Body, limit)).Decode(&response); err != nil {

@@ -1,6 +1,6 @@
 module github.com/minio/kes
 
-go 1.18
+go 1.20
 
 require (
 	aead.dev/mem v0.2.0
@@ -12,15 +12,17 @@ require (
 	github.com/charmbracelet/lipgloss v0.7.1
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.9.2
-	github.com/minio/kes-go v0.1.0
+	github.com/minio/kes-go v0.2.0
 	github.com/minio/selfupdate v0.4.0
-	github.com/muesli/termenv v0.15.2
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/common v0.44.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tinylib/msgp v1.1.8
+	go.etcd.io/bbolt v1.3.7
 	golang.org/x/crypto v0.6.0
-	golang.org/x/sys v0.8.0
+	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
+	golang.org/x/sync v0.2.0
+	golang.org/x/sys v0.11.0
 	golang.org/x/term v0.8.0
 	google.golang.org/api v0.103.0
 	google.golang.org/grpc v1.53.0
@@ -68,6 +70,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
+	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/philhofer/fwd v1.1.2 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect

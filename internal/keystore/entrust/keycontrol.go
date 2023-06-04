@@ -22,8 +22,9 @@ import (
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/kv"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/kv"
 )
 
 // Config is a structure containing the Entrust KeyControl configuration.
@@ -96,11 +97,11 @@ type KeyControl struct {
 	client xhttp.Retry
 }
 
-var _ kv.Store[string, []byte] = (*KeyControl)(nil)
+func (kc *KeyControl) Endpoint() string { return kc.config.Endpoint }
 
 // Status returns the current state of the KeyControl instance.
 // In particular, whether it is reachable and the network latency.
-func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
+func (kc *KeyControl) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	const (
 		Method     = http.MethodPost
 		Path       = "/vault/1.0/GetBox/"
@@ -113,15 +114,15 @@ func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
 		BoxID: kc.config.BoxID,
 	})
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return edge.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	url, err := url.JoinPath(kc.config.Endpoint, Path)
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return edge.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, Method, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return edge.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	req.ContentLength = int64(len(body))
 	req.Header.Set(VaultToken, *kc.token.Load())
@@ -129,16 +130,16 @@ func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
 	start := time.Now()
 	resp, err := kc.client.Do(req)
 	if err != nil {
-		return kv.State{}, &kv.Unreachable{
+		return edge.KeyStoreState{}, &kv.Unreachable{
 			Err: fmt.Errorf("keycontrol: failed to fetch status: %v", err),
 		}
 	}
 	latency := time.Since(start)
 
 	if resp.StatusCode != http.StatusOK {
-		return kv.State{}, parseErrorResponse(resp)
+		return edge.KeyStoreState{}, parseErrorResponse(resp)
 	}
-	return kv.State{
+	return edge.KeyStoreState{
 		Latency: latency,
 	}, nil
 }
@@ -287,28 +288,7 @@ func (kc *KeyControl) Delete(ctx context.Context, name string) error {
 }
 
 // List returns a new Iterator over the names of all stored keys.
-func (kc *KeyControl) List(ctx context.Context) (kv.Iter[string], error) {
-	var (
-		names  []string
-		prefix string
-		err    error
-	)
-	for {
-		var ids []string
-		ids, prefix, err = kc.list(ctx, prefix, 250)
-		if err != nil {
-			return nil, err
-		}
-		names = append(names, ids...)
-
-		if prefix == "" || len(ids) == 0 {
-			break
-		}
-	}
-	return &iter{names: names}, nil
-}
-
-func (kc *KeyControl) list(ctx context.Context, prefix string, n int) ([]string, string, error) {
+func (kc *KeyControl) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	const (
 		Method     = http.MethodPost
 		Path       = "/vault/1.0/ListSecretIds/"
@@ -570,19 +550,3 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	return errors.New("keycontrol: " + resp.Status + ": " + sb.String())
 }
-
-type iter struct {
-	names []string
-}
-
-func (i *iter) Next() (string, bool) {
-	if len(i.names) == 0 {
-		return "", false
-	}
-
-	name := i.names[0]
-	i.names = i.names[1:]
-	return name, true
-}
-
-func (i *iter) Close() error { return nil }

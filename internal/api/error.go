@@ -5,18 +5,11 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 )
-
-// StatusCode is an interface implemented by types
-// that want to send a custom HTTP status code to
-// clients.
-type StatusCode interface {
-	// Status returns an HTTP status code.
-	Status() int
-}
 
 // Fail sends an error response to the w.
 //
@@ -30,22 +23,21 @@ type StatusCode interface {
 //
 // Fail returns an error if writing to w fails.
 func Fail(w http.ResponseWriter, err error) error {
-	status := http.StatusInternalServerError
-	if s, ok := err.(StatusCode); ok {
-		status = s.Status()
+	var (
+		code = http.StatusInternalServerError
+		stat interface {
+			error
+			Status() int
+		}
+	)
+	if errors.As(err, &stat) {
+		code = stat.Status()
+		err = stat
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if e, ok := err.(interface{ Header() http.Header }); ok {
-		for k, values := range e.Header() {
-			for _, v := range values {
-				w.Header().Add(k, v)
-			}
-		}
-	}
-	w.WriteHeader(status)
-
+	w.WriteHeader(code)
 	const (
 		emptyMsg = `{}`
 		format   = `{"message":"%v"}`

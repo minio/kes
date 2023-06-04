@@ -6,48 +6,55 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 
+	tui "github.com/charmbracelet/lipgloss"
+	kesrv "github.com/minio/kes"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/https"
+	"github.com/minio/kes/internal/crypto/fips"
 	"github.com/minio/kes/internal/sys"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
 
-type commands = map[string]func([]string)
-
 const usage = `Usage:
     kes [options] <command>
 
 Commands:
-    server                   Start a KES server.
-    init                     Initialize a stateful KES server or cluster.
+    server                   Start a stateful  KES server
+    edge                     Start a stateless KES edge server
 
-    enclave                  Manage KES enclaves.
-    key                      Manage cryptographic keys.
-    secret                   Manage KES secrets.
-    policy                   Manage KES policies.
-    identity                 Manage KES identities.
+    cluster                  Manage KES clusters
+    enclave                  Manage KES enclaves
 
-    log                      Print error and audit log events.
-    status                   Print server status.
-    metric                   Print server metrics.
+    key                      Manage cryptographic keys
+    secret                   Manage secrets
+    policy                   Manage policies
+    identity                 Manage identities
 
-    migrate                  Migrate KMS data.
-    update                   Update KES binary.
+    log                      Print error and audit log events
+    status                   Print server status
+    metric                   Print server metrics
+
+    migrate                  Migrate KMS data
+    update                   Update KES binary
 
 Options:
-    -v, --version            Print version information.
-        --auto-completion    Install auto-completion for this shell.
-    -h, --help               Print command line options.
+    -v, --version            Print version information
+        --auto-completion    Install auto-completion for this shell
+        --soft-hsm           Generate a new software HSM key.
+                             The HSM unseals the root key of a cluster
+
+    -h, --help               Print command line options
+
+License:
+   Copyright:  MinIO, Inc.
+   GNU AGPLv3: https://www.gnu.org/licenses/agpl-3.0.html
 `
 
 func main() {
@@ -58,11 +65,13 @@ func main() {
 	cmd := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 
-	subCmds := commands{
+	subCmds := cli.SubCommands{
 		"server": serverCmd,
-		"init":   initCmd,
+		"edge":   edgeCmd,
 
-		"enclave":  enclaveCmd,
+		"cluster": clusterCmd,
+		"enclave": enclaveCmd,
+
 		"key":      keyCmd,
 		"secret":   secretCmd,
 		"policy":   policyCmd,
@@ -88,9 +97,11 @@ func main() {
 	var (
 		showVersion    bool
 		autoCompletion bool
+		softHSM        bool
 	)
 	cmd.BoolVarP(&showVersion, "version", "v", false, "Print version information.")
 	cmd.BoolVar(&autoCompletion, "auto-completion", false, "Install auto-completion for this shell")
+	cmd.BoolVar(&softHSM, "soft-hsm", false, "")
 	if err := cmd.Parse(os.Args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -102,143 +113,81 @@ func main() {
 		cli.Fatalf("%q is not a kes command. See 'kes --help'", cmd.Arg(1))
 	}
 	if showVersion {
+		const ColorVersion tui.Color = "#2283f3"
+		versionColor := tui.NewStyle().Foreground(ColorVersion).Bold(true)
+		faint := tui.NewStyle().Faint(true)
 		buildInfo := sys.BinaryInfo()
-		cli.Printf("kes %s (commit=%s)\n", buildInfo.Version, buildInfo.CommitID)
+
+		buf := cli.Buffer{}
+		buf.Stylef(versionColor, "Version  : %-22s", buildInfo.Version).Stylef(faint, "commit=%s", buildInfo.CommitID).Sprintln()
+		buf.Sprintf("Runtime  : %-22s", runtime.Version()).Stylef(faint, "%s/%s", runtime.GOOS, runtime.GOARCH).Sprintln()
+		buf.Sprintf("License  : %-22s", "AGPLv3").Stylef(faint, "https://www.gnu.org/licenses/agpl-3.0.html").Sprintln()
+		buf.Sprintf("Copyright: %-22s", "MinIO Inc.").Stylef(faint, "https://min.io").Sprintln()
+		cli.Print(buf.String())
 		return
 	}
 	if autoCompletion {
 		installAutoCompletion()
 		return
 	}
+	if softHSM {
+		hsm, err := kesrv.GenerateSoftHSM(nil)
+		if err != nil {
+			cli.Fatalf("failed to generate soft HSM key: %v", err)
+		}
+
+		bold := tui.NewStyle().Bold(true)
+		var buf cli.Buffer
+		buf.Sprintln("Your soft HSM key:").Sprintln()
+		buf.Styleln(bold, "  ", hsm.String()).Sprintln()
+		buf.Sprintln("This is the only time it is shown. Keep it secret and secure!").Sprintln()
+		buf.Sprintln("The HSM protects your KES cluster as unseal mechanism by")
+		buf.Sprintln("decrypting the internal root key ring.")
+		buf.Sprintln("Please store it at a secure location. For example your password")
+		buf.Sprintln("manager. Without your HSM key you cannot decrypt any data within")
+		buf.Sprintln("your KES cluster.")
+		cli.Print(buf.String())
+		return
+	}
+
 	cmd.Usage()
 	os.Exit(2)
 }
 
 func newClient(insecureSkipVerify bool) *kes.Client {
-	const DefaultServer = "https://127.0.0.1:7373"
-	const (
-		EnvServer     = "KES_SERVER"
-		EnvAPIKey     = "KES_API_KEY"
-		EnvClientKey  = "KES_CLIENT_KEY"
-		EnvClientCert = "KES_CLIENT_CERT"
-	)
-
-	if apiKey, ok := os.LookupEnv(EnvAPIKey); ok {
-		if _, ok = os.LookupEnv(EnvClientCert); ok {
-			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientCert)
-		}
-		if _, ok = os.LookupEnv(EnvClientKey); ok {
-			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientKey)
-		}
-		key, err := kes.ParseAPIKey(apiKey)
-		if err != nil {
-			cli.Fatalf("invalid API key: %v", err)
-		}
-		cert, err := kes.GenerateCertificate(key)
-		if err != nil {
-			cli.Fatalf("failed to generate client certificate from API key: %v", err)
-		}
-
-		addr := DefaultServer
-		if env, ok := os.LookupEnv(EnvServer); ok {
-			addr = env
-		}
-		return kes.NewClientWithConfig(addr, &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: insecureSkipVerify,
-		})
-	}
-
-	certPath, ok := os.LookupEnv(EnvClientCert)
-	if !ok {
-		cli.Fatalf("no TLS client certificate. Environment variable '%s' is not set", EnvClientCert)
-	}
-	if strings.TrimSpace(certPath) == "" {
-		cli.Fatalf("no TLS client certificate. Environment variable '%s' is empty", EnvClientCert)
-	}
-
-	keyPath, ok := os.LookupEnv(EnvClientKey)
-	if !ok {
-		cli.Fatalf("no TLS private key. Environment variable '%s' is not set", EnvClientKey)
-	}
-	if strings.TrimSpace(keyPath) == "" {
-		cli.Fatalf("no TLS private key. Environment variable '%s' is empty", EnvClientKey)
-	}
-
-	certPem, err := os.ReadFile(certPath)
+	endpoints, err := cli.EndpointsFromEnv()
 	if err != nil {
-		cli.Fatalf("failed to load TLS certificate: %v", err)
+		cli.Fatal(err)
 	}
-	certPem, err = https.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
-	if err != nil {
-		cli.Fatalf("failed to load TLS certificate: %v", err)
-	}
-	keyPem, err := os.ReadFile(keyPath)
-	if err != nil {
-		cli.Fatalf("failed to load TLS private key: %v", err)
-	}
-
-	// Check whether the private key is encrypted. If so, ask the user
-	// to enter the password on the CLI.
-	privateKey, err := decodePrivateKey(keyPem)
-	if err != nil {
-		cli.Fatalf("failed to read TLS private key: %v", err)
-	}
-	if len(privateKey.Headers) > 0 && x509.IsEncryptedPEMBlock(privateKey) {
+	cert, err := cli.CertificateFromEnv(func() ([]byte, error) {
 		fmt.Fprint(os.Stderr, "Enter password for private key: ")
 		password, err := term.ReadPassword(int(os.Stderr.Fd()))
 		if err != nil {
-			cli.Fatalf("failed to read private key password: %v", err)
+			return nil, fmt.Errorf("failed to read private key password: %v", err)
 		}
 		fmt.Fprintln(os.Stderr) // Add the newline again
-
-		decPrivateKey, err := x509.DecryptPEMBlock(privateKey, password)
-		if err != nil {
-			if errors.Is(err, x509.IncorrectPasswordError) {
-				cli.Fatalf("incorrect password")
-			}
-			cli.Fatalf("failed to decrypt private key: %v", err)
-		}
-		keyPem = pem.EncodeToMemory(&pem.Block{Type: privateKey.Type, Bytes: decPrivateKey})
-	}
-
-	cert, err := tls.X509KeyPair(certPem, keyPem)
+		return password, nil
+	})
 	if err != nil {
-		cli.Fatalf("failed to load TLS private key or certificate: %v", err)
+		cli.Fatal(err)
 	}
-
-	addr := DefaultServer
-	if env, ok := os.LookupEnv(EnvServer); ok {
-		addr = env
-	}
-	return kes.NewClientWithConfig(addr, &tls.Config{
+	client := kes.NewClientWithConfig("", &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: insecureSkipVerify,
+		CipherSuites:       fips.TLSCiphers(),
+		CurvePreferences:   fips.TLSCurveIDs(),
 	})
+	client.Endpoints = endpoints
+	return client
 }
 
 func newEnclave(name string, insecureSkipVerify bool) *kes.Enclave {
 	client := newClient(insecureSkipVerify)
 	if name == "" {
-		name = os.Getenv("KES_ENCLAVE")
+		name = os.Getenv(cli.EnvEnclave)
 	}
 	return client.Enclave(name)
 }
 
 func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
-
-func decodePrivateKey(pemBlock []byte) (*pem.Block, error) {
-	ErrNoPrivateKey := errors.New("no PEM-encoded private key found")
-
-	for len(pemBlock) > 0 {
-		next, rest := pem.Decode(pemBlock)
-		if next == nil {
-			return nil, ErrNoPrivateKey
-		}
-		if next.Type == "PRIVATE KEY" || strings.HasSuffix(next.Type, " PRIVATE KEY") {
-			return next, nil
-		}
-		pemBlock = rest
-	}
-	return nil, ErrNoPrivateKey
-}

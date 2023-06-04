@@ -5,12 +5,11 @@
 package kestest_test
 
 import (
-	"context"
 	"flag"
 	"os"
 	"testing"
 
-	"github.com/minio/kes/edge"
+	"github.com/minio/kes/edge/edgeconf"
 )
 
 var vaultConfigFile = flag.String("vault.config", "", "Path to a KES config file with Vault SecretsManager config")
@@ -24,15 +23,11 @@ func TestGatewayVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	srvrConfig, err := edge.ReadServerConfigYAML(file)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	store, err := srvrConfig.KeyStore.Connect(context.Background())
+	store, _, err := edgeconf.Connect(ctx, file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +39,6 @@ func TestGatewayVault(t *testing.T) {
 	t.Run("GenerateKey", func(t *testing.T) { testGenerateKey(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("EncryptKey", func(t *testing.T) { testEncryptKey(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("DecryptKey", func(t *testing.T) { testDecryptKey(ctx, store, t, RandString(ranStringLength)) })
-	t.Run("DecryptKeyAll", func(t *testing.T) { testDecryptKeyAll(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("DescribePolicy", func(t *testing.T) { testDescribePolicy(ctx, store, t) })
 	t.Run("GetPolicy", func(t *testing.T) { testGetPolicy(ctx, store, t) })
 	t.Run("SelfDescribe", func(t *testing.T) { testSelfDescribe(ctx, store, t) })

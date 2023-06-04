@@ -5,222 +5,81 @@
 package auth
 
 import (
-	"bytes"
-	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
-	"encoding/gob"
 	"encoding/hex"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/hashset"
+	"github.com/minio/kes/internal/msgp"
 )
 
-// VerifyRequest verifies whether the request's identity is allowed to perform
-// the request based on the given policies.
-func VerifyRequest(r *http.Request, policies PolicySet, identities IdentitySet) error {
-	if r.TLS == nil {
-		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
-	}
-
-	var peerCertificates []*x509.Certificate
-	switch {
-	case len(r.TLS.PeerCertificates) <= 1:
-		peerCertificates = r.TLS.PeerCertificates
-	case len(r.TLS.PeerCertificates) > 1:
-		for _, cert := range r.TLS.PeerCertificates {
-			if cert.IsCA {
-				continue
-			}
-			peerCertificates = append(peerCertificates, cert)
-		}
-	}
-	if len(peerCertificates) == 0 {
-		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
-	}
-	if len(peerCertificates) > 1 {
-		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
-	}
-
-	var (
-		h        = sha256.Sum256(peerCertificates[0].RawSubjectPublicKeyInfo)
-		identity = kes.Identity(hex.EncodeToString(h[:]))
-	)
-	admin, err := identities.Admin(r.Context())
-	if err != nil {
-		return err
-	}
-	if identity == admin {
-		return nil
-	}
-
-	info, err := identities.Get(r.Context(), identity)
-	if errors.Is(err, kes.ErrIdentityNotFound) {
-		return kes.ErrNotAllowed
-	}
-	if err != nil {
-		return err
-	}
-	policy, err := policies.Get(r.Context(), info.Policy)
-	if errors.Is(err, kes.ErrPolicyNotFound) {
-		return kes.ErrNotAllowed
-	}
-	if err != nil {
-		return err
-	}
-	return policy.Verify(r)
-}
-
-// Identify computes the identity of the given HTTP request.
-//
-// If the request was not sent over TLS or no client
-// certificate has been provided, Identify returns
-// IdentityUnknown.
-func Identify(req *http.Request) kes.Identity {
-	if req.TLS == nil {
-		return kes.IdentityUnknown
+func IdentifyRequest(state *tls.ConnectionState) (kes.Identity, error) {
+	if state == nil {
+		return "", kes.NewError(http.StatusBadRequest, "insecure connection: TLS is required")
 	}
 
 	var cert *x509.Certificate
-	for _, c := range req.TLS.PeerCertificates {
+	for _, c := range state.PeerCertificates {
 		if c.IsCA {
-			continue // Ignore CA certificates
+			continue
 		}
-
 		if cert != nil {
-			// There is more than one client certificate
-			// that is not a CA certificate. Hence, we
-			// cannot compute an non-ambiguous identity.
-			// Therefore, we return IdentityUnknown.
-			return kes.IdentityUnknown
+			return "", kes.NewError(http.StatusBadRequest, "tls: received more than one client certificate")
 		}
 		cert = c
 	}
 	if cert == nil {
-		return kes.IdentityUnknown
+		return "", kes.NewError(http.StatusBadRequest, "tls: client certificate is required")
 	}
 
 	h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-	return kes.Identity(hex.EncodeToString(h[:]))
+	return kes.Identity(hex.EncodeToString(h[:])), nil
 }
 
-// An IdentitySet is a set of identities that are assigned to policies.
-type IdentitySet interface {
-	// Admin returns the identity of the admin.
-	//
-	// The admin is never assigned to any policy
-	// and can perform any operation.
-	Admin(ctx context.Context) (kes.Identity, error)
+const MaxChildren = 1000
 
-	// Assign assigns the policy to the given identity.
-	//
-	// It returns an error when the identity is equal
-	// to the admin identity.
-	Assign(ctx context.Context, policy string, identity kes.Identity) error
-
-	// Get returns the IdentityInfo of an assigned identity.
-	//
-	// It returns ErrIdentityNotFound when there is no IdentityInfo
-	// associated to the given identity.
-	Get(ctx context.Context, identity kes.Identity) (IdentityInfo, error)
-
-	// Delete deletes the given identity from the list of
-	// assigned identites.
-	//
-	// It returns ErrNotAssigned when the identity is not
-	// assigned.
-	Delete(ctx context.Context, identity kes.Identity) error
-
-	// List returns an iterator over all assigned identities.
-	List(ctx context.Context) (IdentityIterator, error)
-}
-
-// An IdentityIterator iterates over a list of identites.
-//
-//	for iterator.Next() {
-//	    _ = iterator.Identity() // Get the next identity
-//	}
-//	if err := iterator.Close(); err != nil {
-//	}
-//
-// Once done iterating, an IdentityIterator should be closed.
-//
-// In general, an IdentityIterator does not provide any
-// ordering guarantees. Concurrent changes to the underlying
-// source may not be reflected by the iterator.
-type IdentityIterator interface {
-	// Next moves the iterator to the subsequent identity, if any.
-	// This identity is available until Next is called again.
-	//
-	// It returns true if and only if there is another identity.
-	// Once an error occurs or once there are no more identities,
-	// Next returns false.
-	Next() bool
-
-	// Identity returns the current identity. Identity can be
-	// called multiple times and returns the same value until
-	// Next is called again.
-	Identity() kes.Identity
-
-	// Close closes the iterator and releases resources. It
-	// returns any error encountered while iterating, if any.
-	// Otherwise, it returns any error that occurred while
-	// closing, if any.
-	Close() error
-}
-
-// IdentityInfo describes an assigned identity.
-type IdentityInfo struct {
-	// Policy is the policy the identity is assigned to.
-	Policy string
-
-	// IsAdmin indicates whether the identity has admin
-	// privileges.
-	IsAdmin bool
-
-	// CreatedAt is the point in time when the identity
-	// has been assigned.
+type Identity struct {
+	Identity  kes.Identity
+	Policy    string
+	IsAdmin   bool
+	Children  hashset.Set[kes.Identity]
+	TTL       time.Duration
+	ExpiresAt time.Time
 	CreatedAt time.Time
-
-	// CreatedBy is the identity that assigned this
-	// identity to its policy.
 	CreatedBy kes.Identity
 }
 
-// MarshalBinary returns the IdentityInfo's binary representation.
-func (i IdentityInfo) MarshalBinary() ([]byte, error) {
-	type GOB struct {
-		Policy    string
-		IsAdmin   bool
-		CreatedAt time.Time
-		CreatedBy kes.Identity
+func (i *Identity) MarshalMsg() (msgp.Identity, error) {
+	children := make([]string, 0, i.Children.Len())
+	for child := range i.Children.Values() {
+		children = append(children, child.String())
 	}
-
-	var buffer bytes.Buffer
-	if err := gob.NewEncoder(&buffer).Encode(GOB(i)); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
+	return msgp.Identity{
+		Policy:    i.Policy,
+		IsAdmin:   i.IsAdmin,
+		Children:  children,
+		ExpiresAt: i.ExpiresAt,
+		TTL:       i.TTL,
+		CreatedAt: i.CreatedAt,
+		CreatedBy: i.CreatedBy.String(),
+	}, nil
 }
 
-// UnmarshalBinary unmarshals the IdentityInfo's binary representation.
-func (i *IdentityInfo) UnmarshalBinary(b []byte) error {
-	type GOB struct {
-		Policy    string
-		IsAdmin   bool
-		CreatedAt time.Time
-		CreatedBy kes.Identity
+func (i *Identity) UnmarshalMsg(v *msgp.Identity) error {
+	children := hashset.NewSet[kes.Identity](len(v.Children))
+	for _, child := range v.Children {
+		children.Add(kes.Identity(child))
 	}
-
-	var value GOB
-	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
-		return err
-	}
-	i.Policy = value.Policy
-	i.IsAdmin = value.IsAdmin
-	i.CreatedAt = value.CreatedAt
-	i.CreatedBy = value.CreatedBy
+	i.Policy = v.Policy
+	i.IsAdmin = v.IsAdmin
+	i.TTL = v.TTL
+	i.Children = children
+	i.ExpiresAt = v.ExpiresAt
+	i.CreatedAt = v.CreatedAt
+	i.CreatedBy = kes.Identity(v.CreatedBy)
 	return nil
 }

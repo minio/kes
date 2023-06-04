@@ -91,53 +91,9 @@ func (p *TLSProxy) Add(identity kes.Identity) {
 // If the request has not been made by a TLS proxy, Verify
 // only checks whether a client certificate is present.
 func (p *TLSProxy) Verify(req *http.Request) error {
-	if req.TLS == nil {
-		// This can only happen if the server accepts non-TLS
-		// connections - which violates our fundamental security
-		// assumption. Therefore, we respond with BadRequest
-		// and log that the server is not correctly configured.
-		//
-		// Technically, it would be acceptable to allow non-TLS
-		// connections if:
-		// - The kes server and TLS proxy run on the same host
-		//   or within the same trusted (!) network (segment).
-		// - And, the kes server is ONLY reachable from the TLS
-		//   proxy.
-		// However, that would be a very fragile setup and there
-		// is no real disadvantage caused by using TLS between the
-		// proxy and the kes server. Therefore, we fail the request.
-		return kes.NewError(http.StatusBadRequest, "insecure connection: TLS required")
-	}
-
-	// A TLS proxy may send none, one or multiple peer certificates
-	// as part of the TLS handshake. However, we expect exactly
-	// one client certificate to check whether it is an authentic
-	// proxy that can forward client certificates.
-	//
-	// In particular, a TLS proxy may send multiple certificates - for
-	// example their client certificate as well as intermediate or
-	// root CA certificates.
-	// Therefore, we filter all CA certificates and only
-	// process the remaining leaf certificate(s).
-	peerCertificates := make([]*x509.Certificate, 0, len(req.TLS.PeerCertificates))
-	for _, cert := range req.TLS.PeerCertificates {
-		if cert.IsCA {
-			continue
-		}
-		peerCertificates = append(peerCertificates, cert)
-	}
-
-	if len(peerCertificates) == 0 {
-		return kes.NewError(http.StatusBadRequest, "no client certificate is present")
-	}
-	if len(peerCertificates) > 1 {
-		return kes.NewError(http.StatusBadRequest, "too many client certificates are present")
-	}
-	req.TLS.PeerCertificates = peerCertificates
-
-	identity := Identify(req)
-	if identity.IsUnknown() {
-		return kes.ErrNotAllowed
+	identity, err := IdentifyRequest(req.TLS)
+	if err != nil {
+		return err
 	}
 
 	// If identity is the/a proxy we extract the certificate

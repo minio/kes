@@ -7,10 +7,12 @@ package mem
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/edge"
 )
 
 // Store is an in-memory key-value store. Its zero value is
@@ -20,12 +22,10 @@ type Store struct {
 	store map[string][]byte
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
-
 // Status returns the state of the in-memory key store which is
 // always healthy.
-func (s *Store) Status(_ context.Context) (kv.State, error) {
-	return kv.State{Latency: 0}, nil
+func (s *Store) Status(_ context.Context) (edge.KeyStoreState, error) {
+	return edge.KeyStoreState{Latency: 0}, nil
 }
 
 // Create adds the given key to the store if and only if
@@ -75,32 +75,28 @@ func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 }
 
 // List returns a new iterator over the metadata of all stored keys.
-func (s *Store) List(context.Context) (kv.Iter[string], error) {
+func (s *Store) List(_ context.Context, prefix string, n int) ([]string, string, error) {
 	s.lock.RLock()
-	defer s.lock.RUnlock()
-
 	names := make([]string, 0, len(s.store))
 	for name := range s.store {
 		names = append(names, name)
 	}
-	return &iterator{
-		values: names,
-	}, nil
-}
+	s.lock.RUnlock()
 
-type iterator struct {
-	values []string
-}
+	sort.Strings(names)
 
-var _ kv.Iter[string] = (*iterator)(nil)
-
-func (i *iterator) Next() (string, bool) {
-	if len(i.values) > 0 {
-		v := i.values[0]
-		i.values = i.values[1:]
-		return v, true
+	first := -1
+	for i, name := range names {
+		if strings.HasPrefix(name, prefix) {
+			first = i
+			break
+		}
 	}
-	return "", false
+	if first < 0 {
+		return []string{}, "", nil
+	}
+	if n > 0 && first+n < len(names) {
+		return names[first : first+n], "", nil
+	}
+	return names[first:], "", nil
 }
-
-func (*iterator) Close() error { return nil }

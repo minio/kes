@@ -13,15 +13,13 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
 	"time"
 
 	"aead.dev/mem"
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/secret"
+	"github.com/minio/kes/internal/crypto"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -44,7 +42,7 @@ func secretCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, secretCmdUsage) }
 
-	subCmds := commands{
+	subCmds := cli.SubCommands{
 		"create": createSecretCmd,
 		"info":   describeSecretCmd,
 		"show":   showSecretCmd,
@@ -132,7 +130,7 @@ func createSecretCmd(args []string) {
 		defer file.Close()
 
 		var buffer bytes.Buffer
-		if _, err = io.Copy(&buffer, mem.LimitReader(os.Stdin, secret.MaxSize)); err != nil {
+		if _, err = io.Copy(&buffer, mem.LimitReader(os.Stdin, crypto.MaxSecretSize)); err != nil {
 			cli.Fatalf("failed to read '%s': %v", err)
 		}
 		value = buffer.Bytes()
@@ -164,12 +162,8 @@ const describeSecretCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
-        --json               Print keys in JSON format. 
-        --color <when>       Specify when to use colored output. The automatic
-                             mode only enables colors if an interactive terminal
-                             is detected - colors are automatically disabled if
-                             the output goes to a pipe.
-                             Possible values: *auto*, never, always.
+        --json               Print keys in JSON format.
+	
     -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
@@ -184,12 +178,10 @@ func describeSecretCmd(args []string) {
 
 	var (
 		jsonFlag           bool
-		colorFlag          colorOption
 		insecureSkipVerify bool
 		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
-	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
@@ -225,12 +217,10 @@ func describeSecretCmd(args []string) {
 		return
 	}
 
-	var faint, nameStyle tui.Style
-	if colorFlag.Colorize() {
-		const ColorName tui.Color = "#2e42d1"
-		faint = faint.Faint(true).Bold(true)
-		nameStyle = nameStyle.Foreground(ColorName)
-	}
+	const ColorName tui.Color = "#2e42d1"
+	faint := tui.NewStyle().Faint(true).Bold(true)
+	nameStyle := tui.NewStyle().Foreground(ColorName)
+
 	year, month, day := info.CreatedAt.Date()
 	hour, min, sec := info.CreatedAt.Clock()
 
@@ -266,11 +256,7 @@ Options:
     -k, --insecure           Skip TLS certificate validation.
     -p, --plain              Print the raw secret without any styling.
         --json               Print the secret in JSON format. 
-        --color <when>       Specify when to use colored output. The automatic
-                             mode only enables colors if an interactive terminal
-                             is detected - colors are automatically disabled if
-                             the output goes to a pipe.
-                             Possible values: *auto*, never, always.
+
     -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
@@ -286,12 +272,10 @@ func showSecretCmd(args []string) {
 	var (
 		plainFlag          bool
 		jsonFlag           bool
-		colorFlag          colorOption
 		insecureSkipVerify bool
 		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
-	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	cmd.BoolVarP(&plainFlag, "plain", "p", false, "Print the raw secret without any styling")
 	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
@@ -344,12 +328,10 @@ func showSecretCmd(args []string) {
 		return
 	}
 
-	var faint, nameStyle tui.Style
-	if colorFlag.Colorize() {
-		const ColorName tui.Color = "#2e42d1"
-		faint = faint.Faint(true).Bold(true)
-		nameStyle = nameStyle.Foreground(ColorName)
-	}
+	const ColorName tui.Color = "#2e42d1"
+	faint := tui.NewStyle().Faint(true).Bold(true)
+	nameStyle := tui.NewStyle().Foreground(ColorName)
+
 	year, month, day := info.CreatedAt.Date()
 	hour, min, sec := info.CreatedAt.Clock()
 
@@ -436,11 +418,7 @@ const lsSecretCmdUsage = `Usage:
 Options:
     -k, --insecure           Skip TLS certificate validation.
         --json               Print keys in JSON format. 
-        --color <when>       Specify when to use colored output. The automatic
-                             mode only enables colors if an interactive terminal
-                             is detected - colors are automatically disabled if
-                             the output goes to a pipe.
-                             Possible values: *auto*, never, always.
+
     -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
@@ -456,12 +434,10 @@ func lsSecretCmd(args []string) {
 
 	var (
 		jsonFlag           bool
-		colorFlag          colorOption
 		insecureSkipVerify bool
 		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
-	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
 	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
@@ -475,69 +451,22 @@ func lsSecretCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes secret ls --help'")
 	}
 
-	pattern := "*"
+	prefix := ""
 	if cmd.NArg() == 1 {
-		pattern = cmd.Arg(0)
+		prefix = cmd.Arg(0)
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	iterator, err := enclave.ListSecrets(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to list secrets: %v", err)
+	iter := kes.ListIter[string]{
+		NextFunc: enclave.ListSecrets,
 	}
-	defer iterator.Close()
-
-	if jsonFlag {
-		if _, err = iterator.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
-		}
-		if err = iterator.Close(); err != nil {
-			cli.Fatal(err)
-		}
-	} else {
-		secrets, err := iterator.Values(0)
+	for name, err := iter.SeekTo(ctx, prefix); err != io.EOF; name, err = iter.Next(ctx) {
 		if err != nil {
 			cli.Fatalf("failed to list keys: %v", err)
 		}
-		if err = iterator.Close(); err != nil {
-			cli.Fatalf("failed to list keys: %v", err)
-		}
-
-		if len(secrets) > 0 {
-			sort.Slice(secrets, func(i, j int) bool {
-				return strings.Compare(secrets[i].Name, secrets[j].Name) < 0
-			})
-
-			headerStyle := tui.NewStyle()
-			dateStyle := tui.NewStyle()
-			if colorFlag.Colorize() {
-				const ColorDate tui.Color = "#5f8700"
-				headerStyle = headerStyle.Underline(true).Bold(true)
-				dateStyle = dateStyle.Foreground(ColorDate)
-			}
-
-			fmt.Println(
-				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
-				headerStyle.Render("Key"),
-			)
-			for _, key := range secrets {
-				var date string
-				if key.CreatedAt.IsZero() {
-					date = fmt.Sprintf("%5s%s%5s", " ", "<unknown>", " ")
-				} else {
-					year, month, day := key.CreatedAt.Local().Date()
-					hour, min, sec := key.CreatedAt.Local().Clock()
-					date = fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)
-				}
-				fmt.Printf("%s %s\n", dateStyle.Render(date), key.Name)
-			}
-		}
-
+		fmt.Println(name)
 	}
 }

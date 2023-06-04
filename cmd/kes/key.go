@@ -10,10 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
+	"unicode/utf8"
 
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes-go"
@@ -25,25 +25,38 @@ const keyCmdUsage = `Usage:
     kes key <command>
 
 Commands:
-    create                   Create a new crypto key.
-    import                   Import a crypto key.
-    info                     Get information about a crypto key. 
-    ls                       List crypto keys.
-    rm                       Delete a crypto key.
+    create                   Create a new crypto key
+    import                   Import a crypto key
+    info                     Get information about a crypto key
+    ls                       List crypto keys
+    rm                       Delete a crypto key
 
-    encrypt                  Encrypt a message.
-    decrypt                  Decrypt an encrypted message.
-    dek                      Generate a new data encryption key.
+    encrypt                  Encrypt a message
+    decrypt                  Decrypt a ciphertext
+    dek                      Generate a new data encryption key (DEK)
 
 Options:
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
+
+Examples:
+  1. Create a key named 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key create my-key
+
+  2. Encrypt the message 'Hello World' with the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key encrypt my-key 'Hello World'
+
+  3. Get metadata information about the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key info my-key
+
+  4. Delete the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key rm my-key
 `
 
 func keyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, keyCmdUsage) }
 
-	subCmds := commands{
+	subCmds := cli.SubCommands{
 		"create": createKeyCmd,
 		"import": importKeyCmd,
 		"info":   describeKeyCmd,
@@ -81,14 +94,17 @@ const createKeyCmdUsage = `Usage:
     kes key create [options] <name>...
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key create my-key
-    $ kes key create my-key1 my-key2
+  1. Create a key named 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key create my-key
+
+  2. Create the keys 'foo' and 'bar' within the enclave 'tenant-1'.
+     $ kes key create --enclave tenant-1 foo bar
 `
 
 func createKeyCmd(args []string) {
@@ -100,7 +116,7 @@ func createKeyCmd(args []string) {
 		enclaveName        string
 	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -109,19 +125,22 @@ func createKeyCmd(args []string) {
 	}
 
 	if cmd.NArg() == 0 {
-		cli.Fatal("no key name specified. See 'kes key create --help'")
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
 	}
 
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	for _, name := range cmd.Args() {
 		if err := enclave.CreateKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
+				cancel()
 				os.Exit(1)
 			}
-			cli.Fatalf("failed to create key %q: %v", name, err)
+			cli.Fatalf("failed to create key '%s': %v", name, err)
 		}
 	}
 }
@@ -130,8 +149,8 @@ const importKeyCmdUsage = `Usage:
     kes key import [options] <name> [<key>]
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Operate within the specified enclave
+    -k, --insecure           Skip server certificate verification
 
     -h, --help               Print command line options.
 
@@ -174,7 +193,7 @@ func importKeyCmd(args []string) {
 	defer cancel()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	if err = enclave.ImportKey(ctx, name, key); err != nil {
+	if err = enclave.ImportKey(ctx, name, &kes.ImportKeyRequest{Key: key}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
@@ -183,22 +202,21 @@ func importKeyCmd(args []string) {
 }
 
 const describeKeyCmdUsage = `Usage:
-    kes key info [options] <name>
+    kes key info [options] <name>...
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-        --json               Print keys in JSON format. 
-        --color <when>       Specify when to use colored output. The automatic
-                             mode only enables colors if an interactive terminal
-                             is detected - colors are automatically disabled if
-                             the output goes to a pipe.
-                             Possible values: *auto*, never, always.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
+        --json               Print result in JSON format
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key info my-key
+  1. Show metadata of the key named 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key info my-key
+
+  1. Show metadata of the keys 'foo' and 'bar' within the enclave 'tenant-1'.
+     $ kes key info --enclave tenant-1 foo bar
 `
 
 func describeKeyCmd(args []string) {
@@ -207,14 +225,12 @@ func describeKeyCmd(args []string) {
 
 	var (
 		jsonFlag           bool
-		colorFlag          colorOption
 		insecureSkipVerify bool
 		enclaveName        string
 	)
-	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
-	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
+	cmd.BoolVar(&jsonFlag, "json", false, "Print result in JSON format")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -222,92 +238,94 @@ func describeKeyCmd(args []string) {
 		cli.Fatalf("%v. See 'kes key info --help'", err)
 	}
 
-	switch {
-	case cmd.NArg() == 0:
-		cli.Fatal("no key name specified. See 'kes key info --help'")
-	case cmd.NArg() > 1:
-		cli.Fatal("too many arguments. See 'kes key info --help'")
+	if cmd.NArg() == 0 {
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
 	}
 
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
-	name := cmd.Arg(0)
+	infos := map[string]*kes.KeyInfo{}
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	info, err := enclave.DescribeKey(ctx, name)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	for _, name := range cmd.Args() {
+		if _, ok := infos[name]; ok {
+			continue // Avoid fetching a key info twice
 		}
-		cli.Fatalf("failed to describe keys: %v", err)
+
+		info, err := enclave.DescribeKey(ctx, name)
+		if err != nil {
+			cancel()
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1)
+			}
+			cli.Fatalf("failed to describe key '%s': %v", name, err)
+		}
+		infos[name] = info
 	}
+	cancel()
+
 	if jsonFlag {
-		if err = json.NewEncoder(os.Stdout).Encode(info); err != nil {
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) {
+			encoder.SetIndent("", "  ")
+		}
+		if len(infos) == 1 {
+			for name, info := range infos {
+				if err := encoder.Encode(info); err != nil {
+					cli.Fatalf("failed to describe key '%s': %v", name, err)
+				}
+			}
+			return
+		}
+		if err := encoder.Encode(infos); err != nil {
 			cli.Fatalf("failed to describe keys: %v", err)
 		}
 		return
 	}
 
-	var faint, nameStyle tui.Style
-	if colorFlag.Colorize() {
-		const ColorName tui.Color = "#2e42d1"
-		faint = faint.Faint(true).Bold(true)
-		nameStyle = nameStyle.Foreground(ColorName)
-	}
-	year, month, day := info.CreatedAt.Date()
-	hour, min, sec := info.CreatedAt.Clock()
+	const ColorName tui.Color = "#2283f3"
+	nameColor := tui.NewStyle().Foreground(ColorName)
 
-	fmt.Println(
-		faint.Render(fmt.Sprintf("%-11s", "Name")),
-		nameStyle.Render(info.Name),
-	)
-	if info.ID != "" {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "ID")),
-			info.ID,
-		)
+	var buf cli.Buffer
+	for i, name := range cmd.Args() {
+		info, ok := infos[name]
+		if !ok {
+			continue
+		}
+
+		year, month, day := info.CreatedAt.Date()
+		hour, min, sec := info.CreatedAt.Clock()
+		zone, _ := info.CreatedAt.Zone()
+
+		buf.Stylef(nameColor, "Name      : %s", info.Name).Sprintln()
+		buf.Sprintln("Algorithm :", info.Algorithm)
+		buf.Sprintf("Date      : %04d-%02d-%02d %02d:%02d:%02d %s", year, month, day, hour, min, sec, zone).Sprintln()
+		buf.Sprintln("Owner     :", info.CreatedBy)
+		if i < len(cmd.Args())-1 {
+			buf.Sprintln()
+		}
 	}
-	if info.Algorithm != kes.KeyAlgorithmUndefined {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
-			info.Algorithm,
-		)
-	}
-	fmt.Println(
-		faint.Render(fmt.Sprintf("%-11s", "Created At")),
-		fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
-	)
-	if info.CreatedBy.IsUnknown() {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Created By")),
-			"<unknown>",
-		)
-	} else {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Created By")),
-			info.CreatedBy,
-		)
-	}
+	cli.Print(buf.String())
 }
 
 const lsKeyCmdUsage = `Usage:
-    kes key ls [options] [<pattern>]
+    kes key ls [options] [<prefix>]
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-        --json               Print keys in JSON format. 
-        --color <when>       Specify when to use colored output. The automatic
-                             mode only enables colors if an interactive terminal
-                             is detected - colors are automatically disabled if
-                             the output goes to a pipe.
-                             Possible values: *auto*, never, always.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
+        --json               Print result in JSON format
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key ls
-    $ kes key ls 'my-key*'
+  1. List all key names within the enclave $KES_ENCLAVE.
+     $ kes key ls
+	
+  2. List all key names starting with 'foo' within the enclave 'tenant-1'.
+    $ kes key ls --enclave tenant-1 foo
 `
 
 func lsKeyCmd(args []string) {
@@ -316,14 +334,12 @@ func lsKeyCmd(args []string) {
 
 	var (
 		jsonFlag           bool
-		colorFlag          colorOption
 		insecureSkipVerify bool
 		enclaveName        string
 	)
-	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
-	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
+	cmd.BoolVar(&jsonFlag, "json", false, "Print result in JSON format")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -335,85 +351,70 @@ func lsKeyCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes key ls --help'")
 	}
 
-	pattern := "*"
+	prefix := ""
 	if cmd.NArg() == 1 {
-		pattern = cmd.Arg(0)
+		prefix = cmd.Arg(0)
 	}
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	iterator, err := enclave.ListKeys(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to list keys: %v", err)
+	iter := kes.ListIter[string]{
+		NextFunc: enclave.ListKeys,
 	}
-	defer iterator.Close()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	var names []string
+	for name, err := iter.SeekTo(ctx, prefix); err != io.EOF; name, err = iter.Next(ctx) {
+		if err != nil {
+			cancel()
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1)
+			}
+			cli.Fatalf("failed to list keys: %v", err)
+		}
+		names = append(names, name)
+	}
+	cancel()
 
 	if jsonFlag {
-		if _, err = iterator.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) {
+			encoder.SetIndent("", "  ")
 		}
-		if err = iterator.Close(); err != nil {
-			cli.Fatal(err)
-		}
-	} else {
-		keys, err := iterator.Values(0)
-		if err != nil {
+		if err := encoder.Encode(names); err != nil {
 			cli.Fatalf("failed to list keys: %v", err)
 		}
-		if err = iterator.Close(); err != nil {
-			cli.Fatalf("failed to list keys: %v", err)
-		}
-
-		if len(keys) > 0 {
-			sort.Slice(keys, func(i, j int) bool {
-				return strings.Compare(keys[i].Name, keys[j].Name) < 0
-			})
-
-			headerStyle := tui.NewStyle()
-			dateStyle := tui.NewStyle()
-			if colorFlag.Colorize() {
-				const ColorDate tui.Color = "#5f8700"
-				headerStyle = headerStyle.Underline(true).Bold(true)
-				dateStyle = dateStyle.Foreground(ColorDate)
-			}
-
-			fmt.Println(
-				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
-				headerStyle.Render("Key"),
-			)
-			for _, key := range keys {
-				var date string
-				if key.CreatedAt.IsZero() {
-					date = fmt.Sprintf("%5s%s%5s", " ", "<unknown>", " ")
-				} else {
-					year, month, day := key.CreatedAt.Local().Date()
-					hour, min, sec := key.CreatedAt.Local().Clock()
-					date = fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)
-				}
-				fmt.Printf("%s %s\n", dateStyle.Render(date), key.Name)
-			}
-		}
-
+		return
 	}
+
+	if len(names) == 0 {
+		return
+	}
+	var buf cli.Buffer
+	if isTerm(os.Stdout) {
+		buf.Styleln(tui.NewStyle().Underline(true).Bold(true), "Keys")
+	}
+	for _, name := range names {
+		buf.Sprintln(name)
+	}
+	cli.Print(buf.String())
 }
 
 const rmKeyCmdUsage = `Usage:
     kes key rm [options] <name>...
 
 Options:
-    -k, --insecure           Skip X.509 certificate validation during TLS handshake.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
 
-    -h, --help               Show list of command-line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key rm my-key
-    $ kes key rm my-key1 my-key2
+  1. Delete the key named 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key rm my-key
+
+  2. Delete the keys 'foo' and 'bar' within the enclave 'tenant-1'.
+     $ kes key rm --enclave tenant-1 foo bar
 `
 
 func rmKeyCmd(args []string) {
@@ -425,7 +426,7 @@ func rmKeyCmd(args []string) {
 		enclaveName        string
 	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -433,34 +434,42 @@ func rmKeyCmd(args []string) {
 		cli.Fatalf("%v. See 'kes key rm --help'", err)
 	}
 	if cmd.NArg() == 0 {
-		cli.Fatal("no key name specified. See 'kes key rm --help'")
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
 	}
 
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
 	for _, name := range cmd.Args() {
 		if err := enclave.DeleteKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
+				cancel()
 				os.Exit(1)
 			}
-			cli.Fatalf("failed to remove key %q: %v", name, err)
+			cli.Fatalf("failed to delete key '%s': %v", name, err)
 		}
 	}
 }
 
 const encryptKeyCmdUsage = `Usage:
-    kes key encrypt [options] <name> <message>
+    kes key encrypt [options] <name> [<message>]
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key encrypt my-key "Hello World"
+  1. Encrypt 'Hello World' with the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key encrypt my-key 'Hello World'
+
+  2. Encrypt the content of the file ~/secret.txt with the key 'foo' within the
+     enclave 'tenant-1' and write the encrypted data to ~/secret.txt.enc
+     $ cat ~/secret.txt | kes key encrypt --enclave tenant-1 foo > ~/secret.txt.enc
 `
 
 func encryptKeyCmd(args []string) {
@@ -472,7 +481,7 @@ func encryptKeyCmd(args []string) {
 		enclaveName        string
 	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -480,49 +489,69 @@ func encryptKeyCmd(args []string) {
 		cli.Fatalf("%v. See 'kes key encrypt --help'", err)
 	}
 
-	switch {
-	case cmd.NArg() == 0:
-		cli.Fatal("no key name specified. See 'kes key encrypt --help'")
-	case cmd.NArg() == 1:
-		cli.Fatal("no message specified. See 'kes key encrypt --help'")
-	case cmd.NArg() > 2:
+	var message []byte
+	switch cmd.NArg() {
+	case 0:
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
+	case 1:
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			cli.Fatalf("failed to read from stdin: %v", err)
+		}
+		message = data
+	case 2:
+		message = []byte(cmd.Arg(1))
+	default:
 		cli.Fatal("too many arguments. See 'kes key encrypt --help'")
 	}
 
-	name := cmd.Arg(0)
-	message := cmd.Arg(1)
-
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	ciphertext, err := enclave.Encrypt(ctx, name, []byte(message), nil)
+	ciphertext, err := enclave.Encrypt(ctx, cmd.Arg(0), message, nil)
 	if err != nil {
+		cancel()
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
-		cli.Fatalf("failed to encrypt message: %v", err)
+		cli.Fatalf("failed to encrypt: %v", err)
 	}
 
-	if isTerm(os.Stdout) {
-		fmt.Printf("\nciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
-	} else {
-		fmt.Printf(`{"ciphertext":"%s"}`, base64.StdEncoding.EncodeToString(ciphertext))
+	if !isTerm(os.Stdout) {
+		if _, err = os.Stdout.Write(ciphertext); err != nil {
+			cli.Fatalf("failed to write to stdout: %v", err)
+		}
+		return
 	}
+	w := base64.NewEncoder(base64.StdEncoding, os.Stdout)
+	if _, err = w.Write(ciphertext); err != nil {
+		cli.Fatalf("failed to write to stdout: %v", err)
+	}
+	if err = w.Close(); err != nil {
+		cli.Fatalf("failed to write to stdout: %v", err)
+	}
+	cli.Println()
 }
 
 const decryptKeyCmdUsage = `Usage:
-    kes key decrypt [options] <name> <ciphertext> [<context>]
+    kes key decrypt [options] <name> <ciphertext>
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ CIPHERTEXT=$(kes key dek my-key | jq -r .ciphertext)
-    $ kes key decrypt my-key "$CIPHERTEXT"
+  1. Decrypt a ciphertext with the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key decrypt my-key 'Zf64uzl7yDw49/wWpmEO0reSJxhlLuqHArz/NVICus0X1uojYngM/i9F2JrvDW/4GG1mtVsUTwAAAAA='
+
+  2. Decrypt the content of the file ~/secret.txt.enc with the key 'foo' within the
+     enclave 'tenant-1' and write the plaintext data to ~/secret.txt
+     $ cat ~/secret.txt.enc | kes key decrypt --enclave tenant-1 foo > ~/secret.txt
 `
 
 func decryptKeyCmd(args []string) {
@@ -534,67 +563,86 @@ func decryptKeyCmd(args []string) {
 		enclaveName        string
 	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
 		}
 		cli.Fatalf("%v. See 'kes key decrypt --help'", err)
 	}
-
-	switch {
-	case cmd.NArg() == 0:
-		cli.Fatal("no key name specified. See 'kes key decrypt --help'")
-	case cmd.NArg() == 1:
-		cli.Fatal("no ciphertext specified. See 'kes key decrypt --help'")
-	case cmd.NArg() > 3:
+	if cmd.NArg() == 0 {
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
+	}
+	if cmd.NArg() == 1 && isTerm(os.Stdin) {
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no ciphertext specified")
+	}
+	if cmd.NArg() > 2 {
 		cli.Fatal("too many arguments. See 'kes key decrypt --help'")
 	}
 
-	name := cmd.Arg(0)
-	ciphertext, err := base64.StdEncoding.DecodeString(cmd.Arg(1))
-	if err != nil {
-		cli.Fatalf("invalid ciphertext: %v. See 'kes key decrypt --help'", err)
-	}
-
-	var associatedData []byte
-	if cmd.NArg() == 3 {
-		associatedData, err = base64.StdEncoding.DecodeString(cmd.Arg(2))
+	var ciphertext []byte
+	if cmd.NArg() == 1 {
+		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			cli.Fatalf("invalid context: %v. See 'kes key decrypt --help'", err)
+			cli.Fatalf("failed to read from stdin: %v", err)
 		}
+		ciphertext = data
+	} else {
+		ciphertext = []byte(cmd.Arg(1))
+	}
+	if utf8.Valid(ciphertext) {
+		n, err := base64.StdEncoding.Decode(ciphertext, ciphertext)
+		if err != nil {
+			cli.Fatalf("invalid ciphertext: %v", err)
+		}
+		ciphertext = ciphertext[:n]
 	}
 
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	plaintext, err := enclave.Decrypt(ctx, name, ciphertext, associatedData)
+	plaintext, err := enclave.Decrypt(ctx, cmd.Arg(0), ciphertext, nil)
 	if err != nil {
+		cancel()
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
-		cli.Fatalf("failed to decrypt ciphertext: %v", err)
+		cli.Fatalf("failed to decrypt: %v", err)
 	}
 
-	if isTerm(os.Stdout) {
-		fmt.Printf("\nplaintext: %s\n", base64.StdEncoding.EncodeToString(plaintext))
-	} else {
-		fmt.Printf(`{"plaintext":"%s"}`, base64.StdEncoding.EncodeToString(plaintext))
+	switch {
+	case !isTerm(os.Stdout):
+		if _, err = os.Stdout.Write(plaintext); err != nil {
+			cli.Fatalf("failed to write to stdout: %v", err)
+		}
+	case utf8.Valid(plaintext):
+		cli.Println(string(plaintext))
+	default:
+		cli.Println("<binary data>")
 	}
 }
 
 const dekCmdUsage = `Usage:
-    kes key dek <name> [<context>]
+    kes key dek <name>
 
 Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
+        --json               Print result in JSON format
 
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
 
 Examples:
-    $ kes key dek my-key
+  1. Generate a new data encryption key (DEK) using the key 'my-key' within the enclave $KES_ENCLAVE.
+     $ kes key decrypt my-key
+	
+  2. Generate a new data encryption key (DEK) using the key 'foo' within the enclave 'tenant-1'.
+     $ kes key dek my-key --enclave tenant-1
 `
 
 func dekCmd(args []string) {
@@ -603,10 +651,12 @@ func dekCmd(args []string) {
 
 	var (
 		insecureSkipVerify bool
+		jsonFlag           bool
 		enclaveName        string
 	)
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
+	cmd.BoolVar(&jsonFlag, "json", false, "Print result in JSON format")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -614,44 +664,48 @@ func dekCmd(args []string) {
 		cli.Fatalf("%v. See 'kes key dek --help'", err)
 	}
 
-	switch {
-	case cmd.NArg() == 0:
-		cli.Fatal("no key name specified. See 'kes key dek --help'")
-	case cmd.NArg() > 2:
+	if cmd.NArg() == 0 {
+		cmd.Usage()
+		fmt.Fprintln(os.Stderr)
+		cli.Fatal("no key name specified")
+	}
+	if cmd.NArg() > 1 {
 		cli.Fatal("too many arguments. See 'kes key dek --help'")
 	}
 
-	var associatedData []byte
-	name := cmd.Arg(0)
-	if cmd.NArg() == 2 {
-		b, err := base64.StdEncoding.DecodeString(cmd.Arg(1))
-		if err != nil {
-			cli.Fatalf("invalid context: %v. See 'kes key dek --help'", err)
-		}
-		associatedData = b
-	}
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	key, err := enclave.GenerateKey(ctx, name, associatedData)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	key, err := enclave.GenerateKey(ctx, cmd.Arg(0), nil)
 	if err != nil {
+		cancel()
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
-		cli.Fatalf("failed to derive key: %v", err)
+		cli.Fatalf("failed to generate encryption key: %v", err)
 	}
 
-	var (
-		plaintext  = base64.StdEncoding.EncodeToString(key.Plaintext)
-		ciphertext = base64.StdEncoding.EncodeToString(key.Ciphertext)
-	)
-	if isTerm(os.Stdout) {
-		const format = "\nplaintext:  %s\nciphertext: %s\n"
-		fmt.Printf(format, plaintext, ciphertext)
-	} else {
-		const format = `{"plaintext":"%s","ciphertext":"%s"}`
-		fmt.Printf(format, plaintext, ciphertext)
+	if jsonFlag {
+		encoder := json.NewEncoder(os.Stdout)
+		if isTerm(os.Stdout) {
+			encoder.SetIndent("", "  ")
+		}
+		type JSON struct {
+			Plaintext  []byte `json:"plaintext"`
+			Ciphertext []byte `json:"ciphertext"`
+		}
+		if err := encoder.Encode(JSON{
+			Plaintext:  key.Plaintext,
+			Ciphertext: key.Ciphertext,
+		}); err != nil {
+			cli.Fatalf("failed to generate encryption key: %v", err)
+		}
+		return
 	}
+
+	var buf cli.Buffer
+	buf.Sprintln("Plaintext  :", base64.StdEncoding.EncodeToString(key.Plaintext))
+	buf.Sprintln("Ciphertext :", base64.StdEncoding.EncodeToString(key.Ciphertext))
+	cli.Print(buf.String())
 }

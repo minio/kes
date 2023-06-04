@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/kes/internal/fips"
+	"github.com/minio/kes/internal/crypto/fips"
 	"github.com/minio/kes/internal/log"
 )
 
@@ -126,7 +126,8 @@ func (s *Server) Start(ctx context.Context) error {
 		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - see timeout handler.
 		IdleTimeout:       90 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
-		ErrorLog:          log.Default().Log(),
+		// ErrorLog:          log.New(io.Discard, "", 0).Log(), // log.Default().Log(),
+		ErrorLog: log.Default().Log(),
 	}
 	srvCh := make(chan error, 1)
 	go func() { srvCh <- srv.Serve(listener) }()

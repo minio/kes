@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
-	"sync"
 	"time"
 
 	"aead.dev/mem"
@@ -20,16 +18,30 @@ import (
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	flag "github.com/spf13/pflag"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 const metricCmdUsage = `Usage:
     kes metric [options]
 
 Options:
-    --rate                   Scrap rate when monitoring metrics. (default: 5s)
+    -e, --enclave <name>     Specify the enclave to use. Overwrites $KES_ENCLAVE
+    -k, --insecure           Skip server certificate verification
+        --rate <duration>    Fetch and show metric updates periodically
+        --json               Print result in JSON format
 
-    -k, --insecure           Skip TLS certificate validation
-    -h, --help               Print command line options.
+    -h, --help               Print command line options
+
+Examples:
+  1. Show a metric summary.
+     $ kes metric
+
+  2. Show a metric summary in JSON format.
+     $ kes metric --json
+
+  3. Show a metric summary and then display updates every 3 seconds.
+     $ kes metric --rate 3s
 `
 
 func metricCmd(args []string) {
@@ -37,11 +49,15 @@ func metricCmd(args []string) {
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, metricCmdUsage) }
 
 	var (
-		rate               time.Duration
+		jsonFlag           bool
 		insecureSkipVerify bool
+		enclaveName        string
+		rate               time.Duration
 	)
-	cmd.DurationVar(&rate, "rate", 5*time.Second, "Scrap rate when monitoring metrics")
+	cmd.BoolVar(&jsonFlag, "json", false, "Print result in JSON format")
+	cmd.DurationVar(&rate, "rate", 0, "Fetch and show metric updates periodically")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
+	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Specify the enclave to use")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -52,139 +68,120 @@ func metricCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes metric --help'")
 	}
 
-	client := newClient(insecureSkipVerify)
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
-
-	if isTerm(os.Stdout) {
-		traceMetricsWithUI(ctx, client, rate)
+	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	if jsonFlag {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		metrics, err := enclave.Metrics(ctx)
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				os.Exit(1)
+			}
+			cli.Fatalf("failed to fetch metrics: %v", err)
+		}
+		if err = json.NewEncoder(os.Stdout).Encode(metrics); err != nil {
+			cli.Fatalf("failed to encode metrics: %v", err)
+		}
 		return
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	metric, err := enclave.Metrics(ctx)
+	if err != nil {
+		cancel()
+		if errors.Is(err, context.Canceled) {
+			os.Exit(1)
+		}
+		cli.Fatalf("failed to fetch metrics: %v", err)
+	}
+	printMetricSummary(&metric)
+	if rate == 0 {
+		return
+	}
+
+	printHeader := true
 	ticker := time.NewTicker(rate)
 	defer ticker.Stop()
-
-	encoder := json.NewEncoder(os.Stdout)
 	for {
-		metrics, err := client.Metrics(ctx)
-		if err != nil {
-			cli.Fatalf("failed to fetch metrics: %v", err)
-		}
-		encoder.Encode(metrics)
+		prev := metric
 		select {
 		case <-ticker.C:
+			metric, err = enclave.Metrics(ctx)
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 		case <-ctx.Done():
 			return
 		}
-	}
-}
-
-// traceMetricsWithUI iterates scraps the KES metrics
-// and prints a table-like UI to STDOUT.
-func traceMetricsWithUI(ctx context.Context, client *kes.Client, rate time.Duration) {
-	const (
-		EraseLine  = "\033[2K" + "\033[F" + "\r"
-		ShowCursor = "\x1b[?25h"
-		HideCursor = "\x1b[?25l"
-	)
-	var (
-		header = tui.NewStyle().Bold(true).Faint(true)
-		green  = tui.NewStyle().Bold(true).Foreground(tui.Color("#00fe00"))
-		yellow = tui.NewStyle().Bold(true).Foreground(tui.Color("#fede00"))
-		red    = tui.NewStyle().Bold(true).Foreground(tui.Color("#fe0000"))
-	)
-	draw := func(metric *kes.Metric, reqRate float64) {
-		fmt.Println(header.Render("\nRequest    OK [2xx]       Err [4xx]       Err [5xx]      Req/s        Latency"))
-		fmt.Printf("%s%s%s%s%s\n",
-			green.Render(fmt.Sprintf("%19d", metric.RequestOK)),
-			yellow.Render(fmt.Sprintf("%16d", metric.RequestErr)),
-			red.Render(fmt.Sprintf("%16d", metric.RequestFail)),
-			fmt.Sprintf("%11.2f", reqRate),
-			fmt.Sprintf("%15s", avgLatency(metric.LatencyHistogram).Round(time.Millisecond)),
-		)
-		fmt.Printf("%35s%33s%33s\n\n",
-			green.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestOK)/float64(metric.RequestN()))),
-			yellow.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestErr)/float64(metric.RequestN()))),
-			red.Render(fmt.Sprintf("%.2f%%", 100*float64(metric.RequestFail)/float64(metric.RequestN()))),
-		)
-		fmt.Println(header.Render("System       UpTime            Heap           Stack       CPUs        Threads"))
-		fmt.Printf(
-			"%19s%16s%16s%11d%15d\n\n",
-			metric.UpTime,
-			mem.FormatSize(mem.Size(metric.HeapAlloc), 'D', 1),
-			mem.FormatSize(mem.Size(metric.StackAlloc), 'D', 1),
-			metric.UsableCPUs,
-			metric.Threads,
-		)
-	}
-	clearScreen := func() {
-		fmt.Print(EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine, EraseLine)
-	}
-
-	var (
-		metric   kes.Metric
-		requestN uint64
-		reqRate  float64
-		drawn    bool
-	)
-	fmt.Print(HideCursor)
-	defer fmt.Print(ShowCursor)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(rate)
-		for {
-			var err error
-			metric, err = client.Metrics(ctx)
-			if err != nil {
-				continue
-			}
-
-			// Compute the current request rate
-			if requestN == 0 {
-				requestN = metric.RequestN()
-			}
-			reqRate = float64(metric.RequestN()-requestN) / rate.Seconds()
-			requestN = metric.RequestN()
-
-			if drawn {
-				clearScreen()
-			}
-			draw(&metric, reqRate)
-			drawn = true
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
+		if err != nil {
+			continue
 		}
-	}()
-	wg.Wait()
+		if printHeader {
+			var header cli.Buffer
+			header.Sprintln()
+			header.Stylef(tui.NewStyle().Bold(true).Underline(true), "%-8s │ %6s │ %6s │ %6s │ %8s", "Time", "Req/s", "Err/s", "CPU", "RAM")
+			cli.Println(header.String())
+			printHeader = false
+		}
+
+		var (
+			reqPerSec float64
+			errPerSec float64
+		)
+		if sec := (metric.UpTime - prev.UpTime).Seconds(); sec > 0 {
+			reqPerSec = float64(metric.RequestN()-prev.RequestN()) / sec
+			errPerSec = float64((metric.RequestErr+metric.RequestFail)-(prev.RequestErr+prev.RequestFail)) / sec
+		}
+		hour, min, sec := time.Now().Clock()
+
+		cli.Println(fmt.Sprintf("%02d:%02d:%02d │ %6.1f │ %6.1f │ %6d │ %8s ",
+			hour, min, sec,
+			reqPerSec,
+			errPerSec,
+			metric.Threads,
+			mem.FormatSize(mem.Size(metric.HeapAlloc+metric.StackAlloc), 'D', 2),
+		))
+	}
 }
 
-// avgLatency computes the arithmetic mean latency o
-func avgLatency(histogram map[time.Duration]uint64) time.Duration {
-	latencies := make([]time.Duration, 0, len(histogram))
-	for l := range histogram {
-		latencies = append(latencies, l)
-	}
-	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
-
-	// Compute the total number of requests in the histogram
-	var N uint64
-	for _, l := range latencies {
-		N += histogram[l] - N
-	}
-
-	var (
-		avg float64
-		n   uint64
+func printMetricSummary(metrics *kes.Metric) {
+	const (
+		UptimeColor tui.Color = "#2283f3"
+		GreenColor  tui.Color = "#00ff00"
+		YellowColor tui.Color = "#ffb703"
+		RedColor    tui.Color = "#ff0000"
 	)
-	for _, l := range latencies {
-		avg += float64(l) * (float64(histogram[l]-n) / float64(N))
-		n += histogram[l] - n
+	uptimeColor := tui.NewStyle().Foreground(UptimeColor)
+	green := tui.NewStyle().Foreground(GreenColor)
+	yellow := tui.NewStyle().Foreground(YellowColor)
+	red := tui.NewStyle().Foreground(RedColor)
+
+	var buf cli.Buffer
+	buf.Stylef(uptimeColor, "Uptime     %d days %s", int64(metrics.UpTime/(24*time.Hour)), metrics.UpTime%(24*time.Hour)).Sprintln()
+	buf.Sprintf("CPU        %d threads on %d vCPUs", metrics.Threads, metrics.UsableCPUs).Sprintln()
+
+	buf.Sprintln("RAM")
+	buf.Sprintf("   heap      %10s", mem.FormatSize(mem.Size(metrics.HeapAlloc), 'D', 2)).Sprintln()
+	buf.Sprintf("   stack     %10s", mem.FormatSize(mem.Size(metrics.StackAlloc), 'D', 2)).Sprintln()
+
+	buf.Sprintln("Request")
+	buf.Stylef(green, "   OK  [2xx] %10d [ %5.1f%% ]", metrics.RequestOK, 100*(float64(metrics.RequestOK)/float64(metrics.RequestN()))).Sprintln()
+	buf.Stylef(yellow, "   Err [4xx] %10d [ %5.1f%% ]", metrics.RequestErr, 100*(float64(metrics.RequestErr)/float64(metrics.RequestN()))).Sprintln()
+	buf.Stylef(red, "   Err [5xx] %10d [ %5.1f%% ]", metrics.RequestFail, 100*(float64(metrics.RequestFail)/float64(metrics.RequestN()))).Sprintln()
+	buf.Sprintf("   Total     %10d [ 100.0%% ]", metrics.RequestN()).Sprintln()
+
+	buf.Sprintln("Latency")
+	latencies := maps.Keys(metrics.LatencyHistogram)
+	slices.Sort(latencies)
+	for i, latency := range latencies {
+		var prev uint64
+		if i > 0 {
+			prev = metrics.LatencyHistogram[latencies[i-1]]
+		}
+		n := metrics.LatencyHistogram[latency]
+		buf.Sprintf("   %-9s %10d [ %5.1f%% ]", latency, n-prev, 100*float64(n-prev)/float64(metrics.RequestN())).Sprintln()
 	}
-	return time.Duration(avg)
+	cli.Print(buf.String())
 }

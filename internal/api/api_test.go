@@ -5,7 +5,6 @@
 package api
 
 import (
-	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -42,7 +41,7 @@ func TestNameFromRequest(t *testing.T) {
 			t.Fatalf("Test %d: failed to parse URL '%s': %v", i, test.URL, err)
 		}
 
-		name, err := nameFromRequest(&http.Request{URL: url}, test.Path)
+		name, err := trimPath(url, test.Path, IsValidName)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d should have failed", i)
 		}
@@ -62,7 +61,7 @@ func TestPatternFromRequest(t *testing.T) {
 			t.Fatalf("Test %d: failed to parse URL '%s': %v", i, test.URL, err)
 		}
 
-		pattern, err := patternFromRequest(&http.Request{URL: url}, test.Path)
+		pattern, err := trimPath(url, test.Path, IsValidPattern)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d should have failed", i)
 		}

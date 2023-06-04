@@ -1,0 +1,26 @@
+
+address: 0.0.0.0:7373
+admin:
+  identity: disabled
+  
+tls:
+  key:      ./testdata/certs/server.key  
+  cert:     ./testdata/certs/server.crt  
+  
+cache:
+  expiry:
+    any: 5m0s
+    unused: 30s
+    offline: 0s
+
+api:
+  /v1/status:
+    timeout: 17s
+    skip_auth: true    
+  /v1/metrics:
+    timeout: 22s
+    skip_auth: true
+
+keystore:
+  fs:
+    path: /tmp/kes
