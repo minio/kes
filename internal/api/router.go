@@ -11,7 +11,7 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/auth"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
@@ -34,7 +34,7 @@ type RouterConfig struct {
 // EdgeRouterConfig is a structure containing the
 // API configuration for a KES edge server.
 type EdgeRouterConfig struct {
-	Keys *key.Cache
+	Keys *keystore.Cache
 
 	Policies auth.PolicySet
 
@@ -116,6 +116,7 @@ func NewEdgeRouter(config *EdgeRouterConfig) *Router {
 	}
 
 	r.api = append(r.api, edgeVersion(config))
+	r.api = append(r.api, edgeReady(config))
 	r.api = append(r.api, edgeStatus(config))
 	r.api = append(r.api, edgeMetrics(config))
 	r.api = append(r.api, edgeListAPI(r, config))

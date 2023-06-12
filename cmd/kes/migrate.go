@@ -16,8 +16,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/edge"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/keserv"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -86,21 +86,32 @@ func migrateCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt)
 	defer cancel()
 
-	sourceConfig, err := keserv.ReadServerConfig(fromPath)
+	file, err := os.Open(fromPath)
 	if err != nil {
 		cli.Fatalf("failed to read '--from' config file: %v", err)
 	}
+	sourceConfig, err := edge.ReadServerConfigYAML(file)
+	if err != nil {
+		cli.Fatalf("failed to read '--from' config file: %v", err)
+	}
+	file.Close()
 
-	targetConfig, err := keserv.ReadServerConfig(toPath)
+	file, err = os.Open(toPath)
 	if err != nil {
 		cli.Fatalf("failed to read '--to' config file: %v", err)
 	}
 
-	src, err := sourceConfig.KMS.Connect(ctx)
+	targetConfig, err := edge.ReadServerConfigYAML(file)
+	if err != nil {
+		cli.Fatalf("failed to read '--to' config file: %v", err)
+	}
+	file.Close()
+
+	src, err := sourceConfig.KeyStore.Connect(ctx)
 	if err != nil {
 		cli.Fatal(err)
 	}
-	dst, err := targetConfig.KMS.Connect(ctx)
+	dst, err := targetConfig.KeyStore.Connect(ctx)
 	if err != nil {
 		cli.Fatal(err)
 	}
@@ -133,8 +144,11 @@ func migrateCmd(args []string) {
 	}()
 
 	// Finally, we start the actual migration.
-	for iterator.Next() {
-		name := iterator.Name()
+	for {
+		name, ok := iterator.Next()
+		if !ok {
+			break
+		}
 		if ok, _ := filepath.Match(pattern, name); !ok {
 			continue
 		}

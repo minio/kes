@@ -304,7 +304,7 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 		},
 		Log: &LogConfig{
 			Error: strings.TrimSpace(strings.ToLower(y.Log.Error.Value)) != "off", // default is "on" behavior
-			Audit: strings.TrimSpace(strings.ToLower(y.Log.Audit.Value)) != "on",  // default is "off" behavior
+			Audit: strings.TrimSpace(strings.ToLower(y.Log.Audit.Value)) == "on",  // default is "off" behavior
 		},
 		KeyStore: keystore,
 	}
@@ -423,9 +423,10 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 				return nil, errors.New("edge: invalid vault keystore: invalid kubernetes config: no JWT specified")
 			}
 
-			// We check whether the JWT looks like a JWT (<header>.<payload>.<signature>). If not, we assume it's
-			// a path to a file containing the JWT and try to read the JWT from that file.
-			if s := strings.Split(y.KeyStore.Vault.Kubernetes.JWT.Value, "."); len(s) != 3 && strings.Contains(y.KeyStore.Vault.Kubernetes.JWT.Value, "/") {
+			// If the passed JWT value contains a path separator we assume it's a file.
+			// We always check for '/' and the OS-specific one make cover cases where
+			// a path is specified using '/' but the underlying OS is e.g. windows.
+			if jwt := y.KeyStore.Vault.Kubernetes.JWT.Value; strings.ContainsRune(jwt, '/') || strings.ContainsRune(jwt, os.PathSeparator) {
 				b, err := os.ReadFile(y.KeyStore.Vault.Kubernetes.JWT.Value)
 				if err != nil {
 					return nil, fmt.Errorf("edge: failed to read vault kubernetes JWT from '%s': %v", y.KeyStore.Vault.Kubernetes.JWT.Value, err)

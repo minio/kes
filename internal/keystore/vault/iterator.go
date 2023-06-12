@@ -8,29 +8,25 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 type iterator struct {
 	values []interface{}
-	last   string
 }
 
-var _ kms.Iter = (*iterator)(nil)
+var _ kv.Iter[string] = (*iterator)(nil)
 
-func (i *iterator) Next() bool {
+func (i *iterator) Next() (string, bool) {
 	for len(i.values) > 0 {
 		v := fmt.Sprint(i.values[0])
 		i.values = i.values[1:]
 
 		if !strings.HasSuffix(v, "/") { // Ignore prefixes; only iterator over actual entries
-			i.last = v
-			return true
+			return v, true
 		}
 	}
-	return false
+	return "", false
 }
-
-func (i *iterator) Name() string { return i.last }
 
 func (*iterator) Close() error { return nil }

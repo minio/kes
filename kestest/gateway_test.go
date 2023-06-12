@@ -19,6 +19,7 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/kestest"
+	"github.com/minio/kes/kv"
 )
 
 var gatewayAPIs = map[string]struct {
@@ -27,6 +28,7 @@ var gatewayAPIs = map[string]struct {
 	Timeout time.Duration
 }{
 	"/version":    {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
+	"/v1/ready":   {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/status":  {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/metrics": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 	"/v1/api":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
@@ -53,13 +55,9 @@ var gatewayAPIs = map[string]struct {
 	"/v1/log/audit": {Method: http.MethodGet, MaxBody: 0, Timeout: 0},
 }
 
-func TestMetrics(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testMetrics(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
 	metric, err := client.Metrics(ctx)
@@ -83,13 +81,9 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
-func TestAPIs(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testAPIs(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
 	apis, err := client.APIs(ctx)
@@ -121,18 +115,23 @@ var createKeyTests = []struct {
 	ShouldFail bool
 	Err        error
 }{
-	{Name: "my-key"},
-	{Name: "my-key", ShouldFail: true, Err: kes.ErrKeyExists},
+	{ // 0
+		Name: "my-key",
+	},
+	{ // 1
+		Name:       "my-key",
+		ShouldFail: true,
+		Err:        kes.ErrKeyExists,
+	},
 }
 
-func TestCreateKey(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testCreateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
+
+	defer clean(ctx, client, t)
+
 	for i, test := range createKeyTests {
 		err := client.CreateKey(ctx, test.Name)
 		if err == nil && test.ShouldFail {
@@ -153,21 +152,36 @@ var importKeyTests = []struct {
 	ShouldFail bool
 	Err        error
 }{
-	{Name: "my-key", Key: make([]byte, 32)},
-	{Name: "my-key", Key: make([]byte, 32), ShouldFail: true, Err: kes.ErrKeyExists},
+	{ // 0
+		Name: "my-key",
+		Key:  make([]byte, 32),
+	},
+	{ // 1
+		Name:       "my-key",
+		Key:        make([]byte, 32),
+		ShouldFail: true,
+		Err:        kes.ErrKeyExists,
+	},
 
-	{Name: "fail-key", Key: make([]byte, 0), ShouldFail: true},
-	{Name: "fail-key2", Key: make([]byte, 1<<20), ShouldFail: true},
+	{ // 2
+		Name:       "fail-key",
+		Key:        make([]byte, 0),
+		ShouldFail: true,
+	},
+	{ // 3
+		Name:       "fail-key2",
+		Key:        make([]byte, 1<<20),
+		ShouldFail: true,
+	},
 }
 
-func TestImportKey(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testImportKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
+
+	defer clean(ctx, client, t)
+
 	for i, test := range importKeyTests {
 		err := client.ImportKey(ctx, test.Name, test.Key)
 		if err == nil && test.ShouldFail {
@@ -192,16 +206,15 @@ var generateKeyTests = []struct {
 	{Context: make([]byte, 1<<20), ShouldFail: true},
 }
 
-func TestGenerateKey(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
+func testGenerateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	const KeyName = "my-key"
 
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
-	const KeyName = "my-key"
+	defer clean(ctx, client, t)
+
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
 	}
@@ -243,16 +256,14 @@ var encryptKeyTests = []struct {
 	{Plaintext: make([]byte, 512*1024), Context: make([]byte, 512*1024), ShouldFail: true},
 }
 
-func TestEncryptKey(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testEncryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	const KeyName = "my-key"
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
-	const KeyName = "my-key"
+	defer clean(ctx, client, t)
+
 	if err := client.CreateKey(ctx, KeyName); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
 	}
@@ -303,16 +314,14 @@ var decryptKeyTests = []struct {
 	},
 }
 
-func TestDecryptKey(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testDecryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	const KeyName = "my-key"
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
-	const KeyName = "my-key"
+	defer clean(ctx, client, t)
+
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -378,16 +387,14 @@ var decryptAllKeyTests = []struct {
 	},
 }
 
-func TestDecryptKeyAll(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testDecryptKeyAll(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	const KeyName = "my-key"
+	server := kestest.NewGateway(store)
 	defer server.Close()
-
 	client := server.Client()
 
-	const KeyName = "my-key"
+	defer clean(ctx, client, t)
+
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
 	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
 		t.Fatalf("Failed to create %q: %v", KeyName, err)
@@ -438,13 +445,10 @@ var getPolicyTests = []struct {
 	},
 }
 
-func TestDescribePolicy(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
+func testDescribePolicy(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
 	for i, test := range getPolicyTests {
 		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
-			server := kestest.NewGateway()
+			server := kestest.NewGateway(store)
 			defer server.Close()
 
 			server.Policy().Add(test.Name, test.Policy)
@@ -467,13 +471,10 @@ func TestDescribePolicy(t *testing.T) {
 	}
 }
 
-func TestGetPolicy(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
+func testGetPolicy(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
 	for i, test := range getPolicyTests {
 		t.Run(fmt.Sprintf("Test %d", i), func(t *testing.T) {
-			server := kestest.NewGateway()
+			server := kestest.NewGateway(store)
 			defer server.Close()
 
 			server.Policy().Add(test.Name, test.Policy)
@@ -544,11 +545,8 @@ var selfDescribeTests = []struct {
 	},
 }
 
-func TestSelfDescribe(t *testing.T) {
-	ctx, cancel := testingContext(t)
-	defer cancel()
-
-	server := kestest.NewGateway()
+func testSelfDescribe(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+	server := kestest.NewGateway(store)
 	defer server.Close()
 
 	client := server.Client()
@@ -627,4 +625,25 @@ func mustDecodeB64(s string) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func clean(ctx context.Context, client *kes.Client, t *testing.T) {
+	iter, err := client.ListKeys(ctx, "*")
+	if err != nil {
+		t.Fatalf("Cleanup: failed to list keys: %v", err)
+	}
+	defer iter.Close()
+
+	keysInfo, err := iter.Values(-1)
+	if err != nil {
+		t.Fatalf("Cleanup: failed to iterate keys")
+	}
+	for _, info := range keysInfo {
+		if err = client.DeleteKey(ctx, info.Name); err != nil {
+			t.Errorf("Cleanup: failed to delete '%s': %v", info.Name, err)
+		}
+	}
+	if err = iter.Close(); err != nil {
+		t.Errorf("Cleanup: failed to close iter: %v", err)
+	}
 }

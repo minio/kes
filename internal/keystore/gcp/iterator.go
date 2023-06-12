@@ -13,34 +13,29 @@ import (
 
 type iterator struct {
 	src    *secretmanager.SecretIterator
-	last   string
 	err    error
 	closed bool
 }
 
-func (i *iterator) Next() bool {
+func (i *iterator) Next() (string, bool) {
 	if i.closed {
-		return false
+		return "", false
 	}
+
 	v, err := i.src.Next()
-	if err == gcpiterator.Done {
-		i.err = i.Close()
-		return false
-	}
 	if err != nil {
 		i.err = err
-		return false
+		if err == gcpiterator.Done {
+			i.err = i.Close()
+		}
+		return "", false
 	}
-	i.last = path.Base(v.GetName())
-	return true
+	return path.Base(v.GetName()), true
 }
-
-func (i *iterator) Name() string { return i.last }
 
 func (i *iterator) Close() error {
 	if !i.closed {
 		i.closed = true
-		i.last = ""
 	}
 	return i.err
 }

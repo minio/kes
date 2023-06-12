@@ -39,7 +39,7 @@ Examples:
 
 func logCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprintf(os.Stderr, logCmdUsage) }
+	cmd.Usage = func() { fmt.Fprint(os.Stderr, logCmdUsage) }
 
 	var (
 		auditFlag          bool

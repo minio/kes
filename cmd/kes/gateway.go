@@ -33,6 +33,7 @@ import (
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
@@ -482,8 +483,24 @@ func newTLSConfig(config *edge.ServerConfig, auth string) (*tls.Config, error) {
 	switch strings.ToLower(auth) {
 	case "", "on":
 		clientAuth = tls.RequireAndVerifyClientCert
+		if config.API != nil {
+			for _, api := range config.API.Paths {
+				if api.InsecureSkipAuth {
+					clientAuth = tls.VerifyClientCertIfGiven
+					break
+				}
+			}
+		}
 	case "off":
 		clientAuth = tls.RequireAnyClientCert
+		if config.API != nil {
+			for _, api := range config.API.Paths {
+				if api.InsecureSkipAuth {
+					clientAuth = tls.RequestClientCert
+					break
+				}
+			}
+		}
 	default:
 		return nil, fmt.Errorf("invalid option for --auth: %s", auth)
 	}
@@ -562,8 +579,7 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 	if err != nil {
 		return nil, err
 	}
-	store := key.Store{Conn: conn}
-	rConfig.Keys = key.NewCache(store, &key.CacheConfig{
+	rConfig.Keys = keystore.NewCache(ctx, conn, &keystore.CacheConfig{
 		Expiry:        config.Cache.Expiry,
 		ExpiryUnused:  config.Cache.ExpiryUnused,
 		ExpiryOffline: config.Cache.ExpiryOffline,
@@ -581,7 +597,7 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
-		if err = store.Create(ctx, k.Name, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
+		if err = rConfig.Keys.Create(ctx, k.Name, key); err != nil && !errors.Is(err, kes.ErrKeyExists) {
 			return nil, fmt.Errorf("failed to create key '%s': %v", k.Name, err)
 		}
 	}
@@ -603,13 +619,12 @@ func gatewayMessage(config *edge.ServerConfig, tlsConfig *tls.Config, mlock bool
 		return nil, err
 	}
 
-	var faint, item, green, red, yellow tui.Style
+	var faint, item, green, red tui.Style
 	if isTerm(os.Stdout) {
 		faint = faint.Faint(true)
 		item = item.Foreground(tui.Color("#2e42d1")).Bold(true)
 		green = green.Foreground(tui.Color("#00a700"))
 		red = red.Foreground(tui.Color("#a70000"))
-		yellow = yellow.Foreground(tui.Color("#fede00"))
 	}
 
 	buffer := new(cli.Buffer)

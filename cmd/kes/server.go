@@ -263,13 +263,12 @@ func startServer(path string, sConfig serverConfig) {
 		cli.Fatal("failed to listen on network interfaces")
 	}
 
-	var faint, item, green, red, yellow tui.Style
+	var faint, item, green, red tui.Style
 	if isTerm(os.Stdout) {
 		faint = faint.Faint(true)
 		item = item.Foreground(tui.Color("#2e42d1")).Bold(true)
 		green = green.Foreground(tui.Color("#00a700"))
 		red = red.Foreground(tui.Color("#a70000"))
-		yellow = yellow.Foreground(tui.Color("#fede00"))
 	}
 
 	var buffer cli.Buffer

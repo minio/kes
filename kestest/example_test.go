@@ -11,11 +11,12 @@ import (
 	"log"
 
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore/mem"
 	"github.com/minio/kes/kestest"
 )
 
 func ExampleGateway() {
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(&mem.Store{})
 	defer server.Close()
 
 	version, err := server.Client().Version(context.Background())
@@ -29,7 +30,7 @@ func ExampleGateway() {
 }
 
 func ExampleGateway_IssueClientCertificate() {
-	server := kestest.NewGateway()
+	server := kestest.NewGateway(&mem.Store{})
 	defer server.Close()
 
 	server.Policy().Allow("test-policy",

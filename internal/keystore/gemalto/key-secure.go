@@ -21,13 +21,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/kms"
+	"github.com/minio/kes/kv"
 )
 
 // Credentials represents a Gemalto KeySecure
@@ -59,17 +58,17 @@ type Config struct {
 	Login Credentials
 }
 
-// Conn is a connection to a Gemalto KeySecure server.
-type Conn struct {
+// Store is a Gemalto KeySecure secret store.
+type Store struct {
 	config Config
 	client *client
 }
 
-var _ kms.Conn = (*Conn)(nil)
+var _ kv.Store[string, []byte] = (*Store)(nil)
 
-// Connect establishes and returns a Conn to a Gemalto
-// KeySecure server using the given config.
-func Connect(ctx context.Context, config *Config) (c *Conn, err error) {
+// Connect returns a Store to a Gemalto KeySecure
+// server using the given config.
+func Connect(ctx context.Context, config *Config) (c *Store, err error) {
 	var rootCAs *x509.CertPool
 	if config.CAPath != "" {
 		rootCAs, err = loadCustomCAs(config.CAPath)
@@ -104,7 +103,7 @@ func Connect(ctx context.Context, config *Config) (c *Conn, err error) {
 		return nil, err
 	}
 	go client.RenewAuthToken(context.Background(), config.Endpoint, config.Login)
-	return &Conn{
+	return &Store{
 		config: *config,
 		client: client,
 	}, nil
@@ -112,17 +111,17 @@ func Connect(ctx context.Context, config *Config) (c *Conn, err error) {
 
 // Status returns the current state of the Gemalto KeySecure instance.
 // In particular, whether it is reachable and the network latency.
-func (c *Conn) Status(ctx context.Context) (kms.State, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.Endpoint, nil)
+func (s *Store) Status(ctx context.Context) (kv.State, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kms.State{}, err
+		return kv.State{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
+		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-	return kms.State{
+	return kv.State{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -130,7 +129,7 @@ func (c *Conn) Status(ctx context.Context) (kms.State, error) {
 // Create creates the given key-value pair at Gemalto if and only
 // if the given key does not exist. If such an entry already exists
 // it returns kes.ErrKeyExists.
-func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
+func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	type Request struct {
 		Type  string `json:"dataType"`
 		Value string `json:"material"`
@@ -146,15 +145,15 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 		return fmt.Errorf("gemalto: failed to create key '%s': %v", name, err)
 	}
 
-	url := fmt.Sprintf("%s/api/v1/vault/secrets", c.config.Endpoint)
+	url := fmt.Sprintf("%s/api/v1/vault/secrets", s.config.Endpoint)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
 		return fmt.Errorf("gemalto: failed to create key '%s': %v", name, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", c.client.AuthToken())
+	req.Header.Set("Authorization", s.client.AuthToken())
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -176,21 +175,28 @@ func (c *Conn) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
+// Set creates the given key-value pair at Gemalto if and only
+// if the given key does not exist. If such an entry already exists
+// it returns kes.ErrKeyExists.
+func (s *Store) Set(ctx context.Context, name string, value []byte) error {
+	return s.Create(ctx, name, value)
+}
+
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	type Response struct {
 		Value string `json:"material"`
 	}
 
-	url := fmt.Sprintf("%s/api/v1/vault/secrets/%s/export?type=name", c.config.Endpoint, name)
+	url := fmt.Sprintf("%s/api/v1/vault/secrets/%s/export?type=name", s.config.Endpoint, name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("gemalto: failed to access key '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", c.client.AuthToken())
+	req.Header.Set("Authorization", s.client.AuthToken())
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil, err
 	}
@@ -222,15 +228,15 @@ func (c *Conn) Get(ctx context.Context, name string) ([]byte, error) {
 
 // Delete removes a the value associated with the given key
 // from Gemalto, if it exists.
-func (c *Conn) Delete(ctx context.Context, name string) error {
-	url := fmt.Sprintf("%s/api/v1/vault/secrets/%s?type=name", c.config.Endpoint, name)
+func (s *Store) Delete(ctx context.Context, name string) error {
+	url := fmt.Sprintf("%s/api/v1/vault/secrets/%s?type=name", s.config.Endpoint, name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return fmt.Errorf("gemalto: failed to delete key  '%s': %v", name, err)
 	}
-	req.Header.Set("Authorization", c.client.AuthToken())
+	req.Header.Set("Authorization", s.client.AuthToken())
 
-	resp, err := c.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -261,7 +267,7 @@ func (c *Conn) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
+func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	// Response is the JSON response returned by KeySecure.
 	// It only contains the fields that we need to implement
 	// paginated listing. The raw response contains much more
@@ -274,10 +280,9 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 		} `json:"resources"`
 	}
 
+	var cancel context.CancelCauseFunc
+	ctx, cancel = context.WithCancelCause(ctx)
 	values := make(chan string, 10)
-	iterator := &iterator{
-		values: values,
-	}
 
 	// The following go-routine keeps listing keys (in pages of size 'limit')
 	// and writes the keys names to the Iterator.
@@ -295,30 +300,30 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 		for {
 			// We have to tell KeySecure how many items we want to process per page and how many
 			// items we want to skip - resp. how many items we have processed already.
-			url := fmt.Sprintf("%s/api/v1/vault/secrets?limit=%d&skip=%d", c.config.Endpoint, limit, skip)
+			url := fmt.Sprintf("%s/api/v1/vault/secrets?limit=%d&skip=%d", s.config.Endpoint, limit, skip)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
-				iterator.SetErr(fmt.Errorf("gemalto: failed to list keys: %v", err))
+				cancel(fmt.Errorf("gemalto: failed to list keys: %v", err))
 				break
 			}
-			req.Header.Set("Authorization", c.client.AuthToken())
+			req.Header.Set("Authorization", s.client.AuthToken())
 
-			resp, err := c.client.Do(req)
+			resp, err := s.client.Do(req)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				iterator.SetErr(err)
+				cancel(err)
 				break
 			}
 			if err != nil {
-				iterator.SetErr(fmt.Errorf("gemalto: failed to list keys: %v", err))
+				cancel(fmt.Errorf("gemalto: failed to list keys: %v", err))
 				break
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				if response, err := parseServerError(resp); err != nil {
-					iterator.SetErr(fmt.Errorf("gemalto: %s: failed to parse server response: %v", resp.Status, err))
+					cancel(fmt.Errorf("gemalto: %s: failed to parse server response: %v", resp.Status, err))
 				} else {
-					iterator.SetErr(fmt.Errorf("gemalto: failed to list keys: '%s' (%d)", response.Message, response.Code))
+					cancel(fmt.Errorf("gemalto: failed to list keys: '%s' (%d)", response.Message, response.Code))
 				}
 				break
 			}
@@ -326,9 +331,9 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			const MaxBody = 32 * mem.MiB // A page should not be larger than 32 MiB.
 			if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					iterator.SetErr(err)
+					cancel(err)
 				} else {
-					iterator.SetErr(fmt.Errorf("gemalto: failed to list keys: listing page too large: %v", err))
+					cancel(fmt.Errorf("gemalto: failed to list keys: listing page too large: %v", err))
 				}
 				break
 			}
@@ -338,17 +343,13 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			// return items that we've already served to the client or skip items that we haven't
 			// served, yet.
 			if response.Skip != skip {
-				iterator.SetErr(fmt.Errorf("gemalto: failed to list keys: pagination is out-of-sync: tried to skip %d but skipped %d", skip, response.Skip))
+				cancel(fmt.Errorf("gemalto: failed to list keys: pagination is out-of-sync: tried to skip %d but skipped %d", skip, response.Skip))
 				break
 			}
 			for _, v := range response.Resources {
 				select {
 				case values <- v.Name:
 				case <-ctx.Done():
-					if err = ctx.Err(); err == nil {
-						err = context.Canceled
-					}
-					iterator.SetErr(err)
 					return
 				}
 			}
@@ -359,38 +360,31 @@ func (c *Conn) List(ctx context.Context) (kms.Iter, error) {
 			}
 		}
 	}()
-	return iterator, nil
+	return &iter{
+		ch:     values,
+		ctx:    ctx,
+		cancel: cancel,
+	}, nil
 }
 
-type iterator struct {
-	values <-chan string
-	last   string
-
-	lock sync.Mutex
-	err  error
+type iter struct {
+	ch     <-chan string
+	ctx    context.Context
+	cancel context.CancelCauseFunc
 }
 
-func (i *iterator) Next() bool {
-	v, ok := <-i.values
-	if !ok {
-		return false
+func (i *iter) Next() (string, bool) {
+	select {
+	case v, ok := <-i.ch:
+		return v, ok
+	case <-i.ctx.Done():
+		return "", false
 	}
-	i.last = v
-	return true
 }
 
-func (i *iterator) Name() string { return i.last }
-
-func (i *iterator) Close() error {
-	i.lock.Lock()
-	defer i.lock.Unlock()
-	return i.err
-}
-
-func (i *iterator) SetErr(err error) {
-	i.lock.Lock()
-	i.err = err
-	i.lock.Unlock()
+func (i *iter) Close() error {
+	i.cancel(context.Canceled)
+	return context.Cause(i.ctx)
 }
 
 // errResponse represents a KeySecure API error
