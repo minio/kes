@@ -147,8 +147,8 @@ const ListIdentities = () => {
                 itemActions={tableActions}
                 columns={[
                   {
-                    label: "Name",
-                    elementKey: "name",
+                    label: "Policy",
+                    elementKey: "policy",
                   },
                   {
                     label: "Created by",
