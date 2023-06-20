@@ -20,6 +20,8 @@ swagger-gen:
 	@rm -rf restapi/operations
 	@echo "Generating swagger server code from yaml"
 	@swagger generate server -A kes --main-package=management --server-package=restapi --exclude-main -P models.Principal -f ./swagger.yaml -r NOTICE
+	@echo "Generating typescript api"
+	@npx swagger-typescript-api -p ./swagger.yaml -o ./web-app/src/api -n kesApi.ts
 
 assets:
 	@(if [ -f "${NVM_DIR}/nvm.sh" ]; then \. "${NVM_DIR}/nvm.sh" && nvm install && nvm use && npm install -g yarn ; fi &&\
