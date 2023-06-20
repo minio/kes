@@ -16,17 +16,6 @@
 
 import storage from "local-storage-fallback";
 
-export const setCookie = (name: string, val: string) => {
-  const date = new Date();
-  const value = val;
-
-  // Set it expire in 45 minutes
-  date.setTime(date.getTime() + 45 * 60 * 1000);
-
-  // Set it
-  document.cookie =
-    name + "=" + value + "; expires=" + date.toUTCString() + "; path=/";
-};
 
 export const deleteCookie = (name: string) => {
   document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:01 GMT;";

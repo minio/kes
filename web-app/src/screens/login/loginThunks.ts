@@ -17,7 +17,6 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
 import { RootState } from "../../app/store";
 import api from "../../common/api";
-import { ErrorResponseHandler } from "../../common/api/types";
 import { setErrorSnackMessage, userLogged } from "../../systemSlice";
 import { setNavigateTo } from "./loginSlice";
 
@@ -63,19 +62,6 @@ export const doLoginAsync = createAsyncThunk(
         dispatch(setNavigateTo(getTargetPath()));
       })
       .catch((err) => {
-        dispatch(setErrorSnackMessage(err));
-      });
-  }
-);
-export const getFetchConfigurationAsync = createAsyncThunk(
-  "login/getFetchConfigurationAsync",
-  async (_, { getState, rejectWithValue, dispatch }) => {
-    return api
-      .invoke("GET", "/api/v1/login")
-      .then((loginDetails) => {
-        return loginDetails;
-      })
-      .catch((err: ErrorResponseHandler) => {
         dispatch(setErrorSnackMessage(err));
       });
   }

@@ -20,10 +20,3 @@ export interface IMenuItem extends MenuItemProps {
   forceDisplay?: boolean;
   fsHidden?: boolean;
 }
-
-export interface IRouteRule {
-  component: any;
-  path: string;
-  forceDisplay?: boolean;
-  fsHidden?: boolean;
-}
