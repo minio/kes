@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { LoginWrapper } from "mds";
+import { ApplicationLogo, LoginWrapper } from "mds";
 import React, { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -34,7 +34,7 @@ const Login = () => {
 
   return (
     <LoginWrapper
-      promoHeader={<Fragment>KES</Fragment>}
+      promoHeader={<ApplicationLogo applicationName="kes" inverse />}
       promoInfo={
         <Fragment>
           KES is a cloud-native distributed key management and encryption server
@@ -45,11 +45,7 @@ const Login = () => {
         applicationName: "kes",
       }}
       form={<LoginForm />}
-      formFooter={
-        <Fragment>
-          Documentation│<a href={"/"}>GitHub</a>│Support│Download
-        </Fragment>
-      }
+      formFooter={<Fragment></Fragment>}
     />
   );
 };

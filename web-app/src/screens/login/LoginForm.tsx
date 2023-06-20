@@ -34,7 +34,6 @@ import {
   setFileCertToUpload,
   setFileKeyToUpload,
   setInsecure,
-  setIsEncrypted,
   setPassword,
 } from "./loginSlice";
 import { doLoginAsync } from "./loginThunks";
@@ -77,10 +76,8 @@ const LoginForm = () => {
 
   const [loginStrategy, setLoginStrategy] = useState("apiKey");
 
-  const password = useAppSelector((state) => state.login.password);
   const loginSending = useAppSelector((state) => state.login.loginSending);
   const insecure = useAppSelector((state) => state.login.insecure);
-  const isEncrypted = useAppSelector((state) => state.login.isEncrypted);
 
   const fileCertToUpload = useAppSelector(
     (state) => state.login.fileCertToUpload
@@ -105,9 +102,6 @@ const LoginForm = () => {
     ) {
       return true;
     }
-    if (isEncrypted && !password) {
-      return true;
-    }
     return false;
   };
 
@@ -115,6 +109,7 @@ const LoginForm = () => {
     dispatch(setFileCertToUpload(null));
     dispatch(setFileKeyToUpload(null));
     dispatch(setApiKey(""));
+    dispatch(setPassword(""));
     setLoginStrategy(e.target.value);
   };
 
@@ -128,18 +123,6 @@ const LoginForm = () => {
               <Checkbox
                 checked={insecure}
                 onChange={(e) => dispatch(setInsecure(e.target.checked))}
-              />
-            }
-          />
-          <FormControlLabel
-            label="Is Encrypted"
-            control={
-              <Checkbox
-                checked={isEncrypted}
-                onChange={(e) => {
-                  dispatch(setIsEncrypted(e.target.checked));
-                  dispatch(setPassword(""));
-                }}
               />
             }
           />

@@ -15,7 +15,6 @@
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import { IMenuItem } from "./menu/types";
-import { NavLink } from "react-router-dom";
 import {
   IdentitiesMenuIcon,
   KeysMenuIcon,
@@ -47,46 +46,36 @@ export const validRoutes = () => {
       group: "Encryption",
       name: "Status",
       id: "encryption-status",
-      component: NavLink,
-      icon: StatusMenuIcon,
-      to: ROUTES.ENCRYPTION_STATUS,
-      children: [],
+      icon: <StatusMenuIcon />,
+      path: ROUTES.ENCRYPTION_STATUS,
     },
     {
       group: "Encryption",
       name: "Keys",
       id: "encryption-keys",
-      component: NavLink,
-      icon: KeysMenuIcon,
-      to: ROUTES.ENCRYPTION_KEYS,
-      children: [],
+      icon: <KeysMenuIcon />,
+      path: ROUTES.ENCRYPTION_KEYS,
     },
     {
       group: "Encryption",
       name: "Policies",
       id: "encryption-policies",
-      component: NavLink,
-      icon: PoliciesMenuIcon,
-      to: ROUTES.ENCRYPTION_POLICIES,
-      children: [],
+      icon: <PoliciesMenuIcon />,
+      path: ROUTES.ENCRYPTION_POLICIES,
     },
     {
       group: "Encryption",
       name: "Identities",
       id: "encryption-identities",
-      component: NavLink,
-      icon: IdentitiesMenuIcon,
-      to: ROUTES.ENCRYPTION_IDENTITIES,
-      children: [],
+      icon: <IdentitiesMenuIcon />,
+      path: ROUTES.ENCRYPTION_IDENTITIES,
     },
     {
       group: "Encryption",
       name: "Secrets",
       id: "encryption-secret",
-      component: NavLink,
-      icon: SecretsMenuIcon,
-      to: ROUTES.ENCRYPTION_SECRETS,
-      children: [],
+      icon: <SecretsMenuIcon />,
+      path: ROUTES.ENCRYPTION_SECRETS,
     },
   ];
 

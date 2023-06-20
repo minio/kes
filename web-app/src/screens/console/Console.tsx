@@ -16,9 +16,8 @@
 
 import React, { Fragment, Suspense, useEffect, useState } from "react";
 import { Theme } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
 import Snackbar from "@mui/material/Snackbar";
-import Menu from "./menu/Menu";
+import MenuWrapper from "./menu/MenuWrapper";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setSnackBarMessage } from "../../systemSlice";
@@ -39,6 +38,7 @@ import Secrets from "./encryption/secrets/Secrets";
 import AddSecret from "./encryption/secrets/AddSecret";
 import makeStyles from "@mui/styles/makeStyles/makeStyles";
 import { snackBarCommon } from "./common/styleLibrary";
+import { MainContainer } from "mds";
 
 const useStyles = makeStyles((theme: Theme) => ({
   root: {
@@ -77,30 +77,9 @@ const useStyles = makeStyles((theme: Theme) => ({
 const Console = () => {
   const dispatch = useAppDispatch();
   const classes = useStyles();
-  // const sidebarOpen = useAppSelector((state) => state.system.sidebarOpen);
-  // const session = useAppSelector((state) => state.console.session);
   const snackBar = useAppSelector((state) => state.system.snackBar);
-  // const loadingProgress = useSelector(
-  //   (state: AppState) => state.system.loadingProgress
-  // );
 
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-
-  // // Layout effect to be executed after last re-render for resizing only
-  // useLayoutEffect(() => {
-  //   // Debounce to not execute constantly
-  //   const debounceSize = debounce(() => {
-  //     if (open && window.innerWidth <= 1024) {
-  //       dispatch(menuOpen(false));
-  //     }
-  //   }, 300);
-
-  //   // Added event listener for window resize
-  //   window.addEventListener("resize", debounceSize);
-
-  //   // We remove the listener on component unmount
-  //   return () => window.removeEventListener("resize", debounceSize);
-  // });
 
   const consoleRoutes = [
     {
@@ -167,19 +146,13 @@ const Console = () => {
       setOpenSnackbar(false);
       return;
     }
-    // Open SnackBar
     setOpenSnackbar(true);
   }, [snackBar]);
 
   return (
     <Fragment>
-      {/* {session && session.status === "ok" ? ( */}
-      <div className={classes.root}>
-        <CssBaseline />
-        <Menu />
-
-        <main className={classes.content}>
-          {/* <MainError /> */}
+      <MainContainer menu={<MenuWrapper />}>
+        <Fragment>
           <div className={classes.snackDiv}>
             <Snackbar
               open={openSnackbar}
@@ -209,8 +182,8 @@ const Console = () => {
               />
             ))}
           </Routes>
-        </main>
-      </div>
+        </Fragment>
+      </MainContainer>
     </Fragment>
   );
 };

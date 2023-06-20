@@ -25,7 +25,6 @@ export interface LoginState {
   accessKey: string;
   secretKey: string;
   insecure: boolean;
-  isEncrypted: boolean;
   loginStrategy: ILoginDetails;
   loginSending: boolean;
   navigateTo: string;
@@ -39,7 +38,6 @@ const initialState: LoginState = {
   accessKey: "",
   secretKey: "",
   insecure: false,
-  isEncrypted: false,
   loginStrategy: {
     loginStrategy: loginStrategyType.unknown,
     redirectRules: [],
@@ -73,9 +71,6 @@ export const loginSlice = createSlice({
     setInsecure: (state, action: PayloadAction<boolean>) => {
       state.insecure = action.payload;
     },
-    setIsEncrypted: (state, action: PayloadAction<boolean>) => {
-      state.isEncrypted = action.payload;
-    },
     setFileCertToUpload: (state, action: PayloadAction<Blob | null>) => {
       state.fileCertToUpload = action.payload;
     },
@@ -105,7 +100,6 @@ export const {
   setAccessKey,
   setSecretKey,
   setInsecure,
-  setIsEncrypted,
   setNavigateTo,
   setFileCertToUpload,
   setFileKeyToUpload,
@@ -118,7 +112,6 @@ export const password = (state: RootState) => state.login.password;
 export const accessKey = (state: RootState) => state.login.accessKey;
 export const secretKey = (state: RootState) => state.login.secretKey;
 export const insecure = (state: RootState) => state.login.insecure;
-export const isEncrypted = (state: RootState) => state.login.isEncrypted;
 export const loginStrategy = (state: RootState) => state.login.loginStrategy;
 export const fileCertToUpload = (state: RootState) =>
   state.login.fileCertToUpload;

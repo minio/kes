@@ -30,7 +30,6 @@ const FilesForm = () => {
 
   const password = useAppSelector((state) => state.login.password);
   const loginSending = useAppSelector((state) => state.login.loginSending);
-  const isEncrypted = useAppSelector((state) => state.login.isEncrypted);
   const fileCertToUpload = useAppSelector(
     (state) => state.login.fileCertToUpload
   );
@@ -126,32 +125,30 @@ const FilesForm = () => {
           />
         </Fragment>
       </Grid>
-      {isEncrypted && (
-        <Grid item xs={12}>
-          <br />
-          <LoginField
-            fullWidth
-            value={password}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              dispatch(setPassword(e.target.value))
-            }
-            name="secretKey"
-            type="password"
-            id="secretKey"
-            autoComplete="current-password"
-            disabled={loginSending}
-            placeholder={"Password"}
-            variant={"outlined"}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LockFilledIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Grid>
-      )}
+      <Grid item xs={12}>
+        <br />
+        <LoginField
+          fullWidth
+          value={password}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            dispatch(setPassword(e.target.value))
+          }
+          name="secretKey"
+          type="password"
+          id="secretKey"
+          autoComplete="current-password"
+          disabled={loginSending}
+          placeholder={"Password"}
+          variant={"outlined"}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LockFilledIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Grid>
     </>
   );
 };
