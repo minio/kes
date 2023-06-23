@@ -183,6 +183,21 @@ type yml struct {
 				} `yaml:"managed_identity"`
 			} `yaml:"keyvault"`
 		} `yaml:"azure"`
+
+		OpenStack *struct {
+			Barbican *struct {
+				BarbicanUrl env[string] `yaml:"barbican_url"`
+				AuthUrl     env[string] `yaml:"auth_url"`
+
+				Credentials *struct {
+					UserDomain    env[string] `yaml:"user_domain"`
+					Username      env[string] `yaml:"username"`
+					Password      env[string] `yaml:"password"`
+					ProjectDomain env[string] `yaml:"project_domain"`
+					ProjectName   env[string] `yaml:"project_name"`
+				} `yaml:"credentials"`
+			} `yaml:"barbican"`
+		} `yaml:"openstack"`
 	} `yaml:"keystore"`
 }
 
@@ -593,6 +608,42 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 		}
 		if y.KeyStore.Azure.KeyVault.ManagedIdentity != nil {
 			s.ManagedIdentityClientID = y.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value
+		}
+		keystore = s
+	}
+
+	// OpenStack Barbican
+	if y.KeyStore.OpenStack != nil && y.KeyStore.OpenStack.Barbican != nil {
+		if keystore != nil {
+			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.AuthUrl.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no Auth Url specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.BarbicanUrl.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no Barbican Url specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.Credentials.UserDomain.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no User Domain specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.Credentials.Username.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no Username specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.Credentials.Password.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no Password specified")
+		}
+		if y.KeyStore.OpenStack.Barbican.Credentials.ProjectName.Value == "" {
+			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no ProjectName specified")
+		}
+
+		s := &OpenStackBarbicanKeyStore{
+			AuthUrl:       y.KeyStore.OpenStack.Barbican.AuthUrl.Value,
+			BarbicanUrl:   y.KeyStore.OpenStack.Barbican.BarbicanUrl.Value,
+			UserDomain:    y.KeyStore.OpenStack.Barbican.Credentials.UserDomain.Value,
+			Username:      y.KeyStore.OpenStack.Barbican.Credentials.Username.Value,
+			Password:      y.KeyStore.OpenStack.Barbican.Credentials.Password.Value,
+			ProjectDomain: y.KeyStore.OpenStack.Barbican.Credentials.ProjectDomain.Value,
+			ProjectName:   y.KeyStore.OpenStack.Barbican.Credentials.ProjectName.Value,
 		}
 		keystore = s
 	}

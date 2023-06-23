@@ -17,6 +17,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
 	kesstore "github.com/minio/kes/internal/keystore/kes"
+	"github.com/minio/kes/internal/keystore/openstack"
 	"github.com/minio/kes/internal/keystore/vault"
 	"github.com/minio/kes/kv"
 )
@@ -636,4 +637,47 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, [
 	default:
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: no authentication method specified")
 	}
+}
+
+// OpenStackBarbicanKeyStore is a structure containing the
+// configuration for OpenStack Barbican
+type OpenStackBarbicanKeyStore struct {
+	// OpenStack Auth Url
+	AuthUrl string
+
+	// The Domain of the user.
+	UserDomain string
+
+	// The user name. If you do not provide a user name and password, you must provide a token.
+	Username string
+
+	// The password for the user.
+	Password string
+
+	// The Domain of the project. This is a required part of the scope object.
+	ProjectDomain string
+
+	// The project name. Both the Project ID and Project Name are optional.
+	ProjectName string
+
+	// URL of the Barbican instance to connect to
+	BarbicanUrl string
+
+	_ [0]int
+}
+
+// Connect returns a kv.Store that stores key-value pairs on OpenStack Barbican.
+func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+	creds := openstack.Credentials{
+		AuthUrl:        s.AuthUrl,
+		ProjectDomain:  s.ProjectDomain,
+		ProjectName:    s.ProjectName,
+		Username:       s.Username,
+		Password:       s.Password,
+		UserDomainName: s.UserDomain,
+	}
+	return openstack.Connect(ctx, &openstack.Config{
+		Login:    creds,
+		Endpoint: s.BarbicanUrl,
+	})
 }
