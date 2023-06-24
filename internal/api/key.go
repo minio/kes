@@ -323,7 +323,7 @@ func edgeDescribeKey(config *EdgeRouterConfig) API {
 			return err
 		}
 
-		w.Header().Set("Content-Length", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
 			Name:      name,
