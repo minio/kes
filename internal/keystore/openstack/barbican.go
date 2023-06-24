@@ -26,52 +26,6 @@ import (
 	"github.com/minio/kes/kv"
 )
 
-type Credentials struct {
-	ProjectDomain  string
-	ProjectName    string
-	AuthUrl        string
-	Username       string
-	Password       string
-	UserDomainName string
-}
-
-// Config is a structure containing configuration
-// options for connecting to a Barbican server.
-type Config struct {
-	// Endpoint is the Barbican instance endpoint.
-	Endpoint string
-
-	// Credentials used to login to OpenStack to retrieve the APIKey
-	Login Credentials
-}
-
-type Connection struct {
-	config Config
-	client *client
-}
-
-type BarbicanSecretsResponse struct {
-	Next     string           `json:"next"`
-	Previous string           `json:"previous"`
-	Secrets  []BarbicanSecret `json:"secrets"`
-	Total    int              `json:"total"`
-}
-
-type BarbicanSecret struct {
-	Algorithm    interface{}       `json:"algorithm"`
-	BitLength    interface{}       `json:"bit_length"`
-	ContentTypes map[string]string `json:"content_types"`
-	Created      string            `json:"created"`
-	CreatorID    string            `json:"creator_id"`
-	Expiration   interface{}       `json:"expiration"`
-	Mode         interface{}       `json:"mode"`
-	Name         string            `json:"name"`
-	SecretRef    string            `json:"secret_ref"`
-	SecretType   string            `json:"secret_type"`
-	Status       string            `json:"status"`
-	Updated      string            `json:"updated"`
-}
-
 // Connect establishes and returns a Store to a Barbican server
 // using the given config.
 func Connect(ctx context.Context, config *Config) (*Connection, error) {
@@ -228,57 +182,14 @@ func (s *Connection) Set(ctx context.Context, name string, value []byte) error {
 // from Barbican. It may not return an error if no
 // entry for the given name exists.
 func (s *Connection) Delete(ctx context.Context, name string) error {
-	// In order to detele a key, we need to fetch its key ID first.
-	// Barbican does not provide a way to delete a key
-	// using just its name.
-	type Request struct {
-		Name string `json:"name"`
-	}
-	request, err := json.Marshal(Request{
-		Name: name,
-	})
+	secret, err := s.get(ctx, name)
 	if err != nil {
-		return fmt.Errorf("barbican: failed to delete '%s': %v", name, err)
-	}
-
-	url := endpoint(s.config.Endpoint, "/v1/secrets")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, xhttp.RetryReader(bytes.NewReader(request)))
-	if err != nil {
-		return fmt.Errorf("barbican: failed to delete '%s': %v", name, err)
-	}
-	err = s.client.setAuthHeader(ctx, s.config, &req.Header)
-	if err != nil {
-		return fmt.Errorf("barbican: failed to delete '%s': %v", name, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.client.Do(req)
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
-	}
-	if err != nil {
-		return fmt.Errorf("barbican: failed to delete '%s': %v", name, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		switch err = parseErrorResponse(resp); {
-		case err == nil:
-			return fmt.Errorf("barbican: failed to delete '%s': failed fetch key metadata: %s (%d)", name, resp.Status, resp.StatusCode)
-		case resp.StatusCode == http.StatusNotFound:
-			return kes.ErrKeyNotFound
-		default:
-			return fmt.Errorf("barbican: failed to delete '%s': failed to fetch key metadata: %v", name, err)
-		}
-	}
-	defer resp.Body.Close()
-
-	var response BarbicanSecretsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil || len(response.Secrets) == 0 {
-		return fmt.Errorf("barbican: failed to delete '%s': failed to parse key metadata: %v", name, err)
 	}
 
 	// Now, we can delete the key using its UUID.
-	url = endpoint(response.Secrets[0].SecretRef)
-	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	url := endpoint(secret.SecretRef)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
@@ -287,7 +198,7 @@ func (s *Connection) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("barbican: failed to delete '%s': %v", name, err)
 	}
 
-	resp, err = s.client.Do(req)
+	resp, err := s.client.Do(req)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -306,10 +217,7 @@ func (s *Connection) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// Get returns the key associated with the given name.
-//
-// If there is no such entry, Get returns kes.ErrKeyNotFound.
-func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
+func (s *Connection) get(ctx context.Context, name string) (*BarbicanSecret, error) {
 	url := endpoint(s.config.Endpoint, "/v1/secrets") + "?name=" + name
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -371,7 +279,20 @@ func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("barbican: failed to fetch '%s': %v", name, err)
 	}
-	return body, nil
+
+	response.Secrets[0].Payload = body
+	return &response.Secrets[0], nil
+}
+
+// Get returns the key associated with the given name.
+//
+// If there is no such entry, Get returns kes.ErrKeyNotFound.
+func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
+	secret, err := s.get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return secret.Payload, nil
 }
 
 // List returns a new Iterator over the Barbican.
