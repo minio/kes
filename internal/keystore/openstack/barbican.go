@@ -310,18 +310,8 @@ func (s *Connection) Delete(ctx context.Context, name string) error {
 //
 // If there is no such entry, Get returns kes.ErrKeyNotFound.
 func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
-	type Request struct {
-		Name string `json:"name"`
-	}
-	request, err := json.Marshal(Request{
-		Name: name,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("barbican: failed to fetch %q: %v", name, err)
-	}
-
-	url := endpoint(s.config.Endpoint, "/v1/secrets")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, xhttp.RetryReader(bytes.NewReader(request)))
+	url := endpoint(s.config.Endpoint, "/v1/secrets") + "?name=" + name
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("barbican: failed to fetch '%s': %v", name, err)
 	}
@@ -359,7 +349,7 @@ func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
 
 	// now we can get the secret payload
 	url = endpoint(response.Secrets[0].SecretRef, "/payload")
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, xhttp.RetryReader(bytes.NewReader(request)))
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("barbican: failed to fetch '%s': %v", name, err)
 	}
