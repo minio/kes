@@ -381,8 +381,7 @@ func (s *Connection) Get(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("barbican: failed to fetch '%s': %v", name, err)
 	}
-	value, err := base64.StdEncoding.DecodeString(string(body))
-	return value, err
+	return body, nil
 }
 
 // List returns a new Iterator over the Barbican.
