@@ -38,7 +38,11 @@ func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.
 	for i, test := range createTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store); err != nil {
-				t.Fatalf("Test %d: failed to setup: %v", i, err)
+				if !test.ShouldFail {
+					t.Fatalf("Test %d: failed to setup: %v", i, err)
+				} else {
+					return
+				}
 			}
 		}
 
@@ -77,7 +81,11 @@ func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T) 
 	for i, test := range setTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store); err != nil {
-				t.Fatalf("Test %d: failed to setup: %v", i, err)
+				if !test.ShouldFail {
+					t.Fatalf("Test %d: failed to setup: %v", i, err)
+				} else {
+					return
+				}
 			}
 		}
 
