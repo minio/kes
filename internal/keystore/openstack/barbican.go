@@ -340,9 +340,9 @@ func (s *Connection) List(ctx context.Context) (kv.Iter[string], error) {
 
 			if resp.StatusCode != http.StatusOK {
 				if err := parseErrorResponse(resp); err != nil {
-					cancel(fmt.Errorf("gemalto: %s: failed to parse server response: %v", resp.Status, err))
+					cancel(fmt.Errorf("barbican: %s: failed to parse server response: %v", resp.Status, err))
 				} else {
-					cancel(fmt.Errorf("gemalto: failed to list keys: '%s'", fmt.Sprint(resp.StatusCode)))
+					cancel(fmt.Errorf("barbican: failed to list keys: '%s'", fmt.Sprint(resp.StatusCode)))
 				}
 				break
 			}
