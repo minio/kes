@@ -49,40 +49,7 @@ func (c *client) setAuthHeader(ctx context.Context, config Config, h *http.Heade
 // Authenticate should be called to obtain the first authentication
 // token. This token can then be renewed via RenewApiToken.
 func (c *client) Authenticate(ctx context.Context, config Config) error {
-	type (
-		Request struct {
-			Auth struct {
-				Identity struct {
-					Methods  []string `json:"methods"`
-					Password struct {
-						User struct {
-							Domain struct {
-								Name string `json:"name"`
-							} `json:"domain"`
-							Name     string `json:"name"`
-							Password string `json:"password"`
-						} `json:"user"`
-					} `json:"password"`
-				} `json:"identity"`
-				Scope struct {
-					Project struct {
-						Domain struct {
-							Name string `json:"name"`
-						} `json:"domain"`
-						Name string `json:"name"`
-					} `json:"project"`
-				} `json:"scope"`
-			} `json:"auth"`
-		}
-	)
-
-	type Response struct {
-		Token struct {
-			ExpiresAt string `json:"expires_at"`
-		}
-	}
-
-	r := Request{}
+	r := AuthRequest{}
 	r.Auth.Identity.Methods = []string{"password"}
 	r.Auth.Identity.Password.User.Domain.Name = config.Login.UserDomainName
 	r.Auth.Identity.Password.User.Name = config.Login.Username
@@ -114,7 +81,7 @@ func (c *client) Authenticate(ctx context.Context, config Config) error {
 	}
 
 	const MaxSize = 1 * mem.MiB // An auth. token response should not exceed 1 MiB
-	var response Response
+	var response AuthResponse
 	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxSize)).Decode(&response); err != nil {
 		return err
 	}

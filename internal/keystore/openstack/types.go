@@ -50,3 +50,52 @@ type BarbicanSecret struct {
 	Status       string            `json:"status"`
 	Updated      string            `json:"updated"`
 }
+
+// Auth request structures
+
+type AuthRequest struct {
+	Auth Auth `json:"auth"`
+}
+
+type Auth struct {
+	Identity AuthIdentity `json:"identity"`
+	Scope    Scope        `json:"scope"`
+}
+
+type Scope struct {
+	Project Project `json:"project"`
+}
+
+type Project struct {
+	Domain Name   `json:"domain"`
+	Name   string `json:"name"`
+}
+
+type AuthIdentity struct {
+	Methods  []string `json:"methods"`
+	Password Password `json:"password"`
+}
+
+type Name struct {
+	Name string `json:"name"`
+}
+
+type Password struct {
+	User User `json:"user"`
+}
+
+type User struct {
+	Domain   Name   `json:"domain"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+// Auth response structures
+
+type AuthResponse struct {
+	Token Token
+}
+
+type Token struct {
+	ExpiresAt string `json:"expires_at"`
+}
