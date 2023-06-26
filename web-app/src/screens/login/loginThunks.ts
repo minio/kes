@@ -22,13 +22,6 @@ import { setNavigateTo } from "./loginSlice";
 
 export const getTargetPath = () => {
   let targetPath = "/encryption/keys";
-  if (
-    localStorage.getItem("redirect-path") &&
-    localStorage.getItem("redirect-path") !== ""
-  ) {
-    targetPath = `${localStorage.getItem("redirect-path")}`;
-    localStorage.setItem("redirect-path", "");
-  }
   return targetPath;
 };
 

@@ -8,6 +8,9 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/models"
+	apiCerts "github.com/minio/kes/restapi/certs"
+	"github.com/minio/pkg/certs"
+	"github.com/minio/pkg/env"
 )
 
 // KESClientI interface for KESClient
@@ -144,9 +147,14 @@ func newKESClient(session *models.Principal) (*kes.Client, error) {
 	if env, ok := os.LookupEnv("KES_SERVER"); ok {
 		addr = env
 	}
+	rootCAs, err := certs.GetRootCAs(env.Get(KESServerCA, apiCerts.GlobalCertsCADir.Get()))
+	if err != nil {
+		return nil, err
+	}
 	return kes.NewClientWithConfig(addr, &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: session.Insecure,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      rootCAs,
+		MinVersion:   tls.VersionTLS12,
 	}), nil
 }
 

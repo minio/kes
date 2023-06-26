@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React, { useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import api from "./common/api";
 import { ISessionResponse } from "./screens/console/types";
 import { userLogged } from "./systemSlice";
@@ -28,18 +28,11 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
-  const location = useLocation();
   const dispatch = useAppDispatch();
 
   const [sessionLoading, setSessionLoading] = useState<boolean>(true);
   const userLoggedIn = useAppSelector((state) => state.system.loggedIn);
 
-  const { pathname = "" } = useLocation();
-
-  const StorePathAndRedirect = () => {
-    localStorage.setItem("redirect-path", pathname);
-    return <Navigate to={{ pathname: `login` }} />;
-  };
   useEffect(() => {
     api
       .invoke("GET", `/api/v1/session`)
@@ -52,11 +45,11 @@ const ProtectedRoute = ({ Component }: ProtectedRouteProps) => {
         setSessionLoading(false);
         dispatch(userLogged(false));
       });
-  }, [dispatch, location]);
+  }, [dispatch]);
   if (sessionLoading) {
     return <LoadingComponent />;
   }
-  return userLoggedIn ? <Component /> : <StorePathAndRedirect />;
+  return userLoggedIn ? <Component /> : <Navigate to={{ pathname: `login` }} />;
 };
 
 export default ProtectedRoute;

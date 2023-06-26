@@ -18,8 +18,6 @@ import Grid from "@mui/material/Grid";
 import React, { Fragment, useState } from "react";
 import { Button } from "mds";
 import {
-  Checkbox,
-  FormControlLabel,
   LinearProgress,
   MenuItem,
   Select,
@@ -33,7 +31,6 @@ import {
   setApiKey,
   setFileCertToUpload,
   setFileKeyToUpload,
-  setInsecure,
   setPassword,
 } from "./loginSlice";
 import { doLoginAsync } from "./loginThunks";
@@ -77,7 +74,6 @@ const LoginForm = () => {
   const [loginStrategy, setLoginStrategy] = useState("apiKey");
 
   const loginSending = useAppSelector((state) => state.login.loginSending);
-  const insecure = useAppSelector((state) => state.login.insecure);
 
   const fileCertToUpload = useAppSelector(
     (state) => state.login.fileCertToUpload
@@ -116,18 +112,6 @@ const LoginForm = () => {
   return (
     <Fragment>
       <form className={classes.form} noValidate onSubmit={formSubmit}>
-        <Grid item xs={12}>
-          <FormControlLabel
-            label="Insecure"
-            control={
-              <Checkbox
-                checked={insecure}
-                onChange={(e) => dispatch(setInsecure(e.target.checked))}
-              />
-            }
-          />
-        </Grid>
-        <br />
         {loginStrategy === "apiKey" ? <APIKeyForm /> : <FilesForm />}
         <Grid item xs={12} className={classes.submitContainer}>
           <Button

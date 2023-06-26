@@ -31,7 +31,6 @@ const deleteCookie = (name: string) => {
 const clearSession = () => {
   deleteCookie("kes-ui-token");
   localStorage.setItem("userLoggedIn", "");
-  localStorage.setItem("redirect-path", "");
 };
 
 const Logout = () => {
