@@ -25,10 +25,7 @@ import {
 
 export const ROUTES = {
   ENCRYPTION: "/encryption",
-  ENCRYPTION_STATUS: "/encryption/status",
   ENCRYPTION_METRICS: "/encryption/metrics",
-  ENCRYPTION_VERSION: "/encryption/version",
-  ENCRYPTION_SUPPORTED_ENDPOINTS: "/encryption/supported-endpoints",
   ENCRYPTION_KEYS: "/encryption/keys",
   ENCRYPTION_KEYS_ADD: "/encryption/add-key/",
   ENCRYPTION_KEYS_IMPORT: "/encryption/import-key/",
@@ -44,10 +41,10 @@ export const validRoutes = () => {
   let consoleMenus: IMenuItem[] = [
     {
       group: "Encryption",
-      name: "Status",
-      id: "encryption-status",
+      name: "Metrics",
+      id: "encryption-metrics",
       icon: <StatusMenuIcon />,
-      path: ROUTES.ENCRYPTION_STATUS,
+      path: ROUTES.ENCRYPTION_METRICS,
     },
     {
       group: "Encryption",

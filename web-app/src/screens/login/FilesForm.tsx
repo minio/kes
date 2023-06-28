@@ -138,7 +138,7 @@ const FilesForm = () => {
           id="secretKey"
           autoComplete="current-password"
           disabled={loginSending}
-          placeholder={"Password"}
+          placeholder={"Password (Only if certificate is encrypted)"}
           variant={"outlined"}
           InputProps={{
             startAdornment: (

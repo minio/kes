@@ -23,10 +23,7 @@ import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setSnackBarMessage } from "../../systemSlice";
 import { Route, Routes } from "react-router-dom";
 import { ROUTES } from "./valid-routes";
-import Status from "./encryption/api/Status";
-import Version from "./encryption/api/Version";
 import Metrics from "./encryption/api/Metrics";
-import SupportedEndpoints from "./encryption/api/SupportedEndpoints";
 import Keys from "./encryption/keys/Keys";
 import AddKey from "./encryption/keys/AddKey";
 import ImportKey from "./encryption/keys/ImportKey";
@@ -83,20 +80,8 @@ const Console = () => {
 
   const consoleRoutes = [
     {
-      component: Status,
-      path: ROUTES.ENCRYPTION_STATUS,
-    },
-    {
-      component: Version,
-      path: ROUTES.ENCRYPTION_VERSION,
-    },
-    {
       component: Metrics,
       path: ROUTES.ENCRYPTION_METRICS,
-    },
-    {
-      component: SupportedEndpoints,
-      path: ROUTES.ENCRYPTION_SUPPORTED_ENDPOINTS,
     },
     {
       component: Keys,

@@ -30,6 +30,7 @@ import { useAppDispatch } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
+import { PageHeader, PageLayout } from "mds";
 
 const Metrics = () => {
   const dispatch = useAppDispatch();
@@ -92,49 +93,52 @@ const Metrics = () => {
   return (
     metrics && (
       <Fragment>
-        <h3>API Requests</h3>
-        <BarChart width={750} height={250} data={getAPIRequestsData()}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="success" fill="green" />
-          <Bar dataKey="failures" fill="red" />
-          <Bar dataKey="errors" fill="black" />
-          <Bar dataKey="active" fill="#8884d8" />
-        </BarChart>
-        <h3>Events</h3>
-        <BarChart width={750} height={250} data={getEventsData()}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="audit" fill="green" />
-          <Bar dataKey="errors" fill="black" />
-        </BarChart>
-        <h3>Latency Histogram</h3>
-        {metrics.latencyHistogram && (
-          <LineChart
-            width={730}
-            height={250}
-            data={getHistogramData()}
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-          >
+        <PageHeader label="Metrics" />
+        <PageLayout>
+          <h3>API Requests</h3>
+          <BarChart width={750} height={250} data={getAPIRequestsData()}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="duration" />
+            <XAxis dataKey="label" />
             <YAxis />
             <Tooltip />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey="total"
-              stroke="#8884d8"
-              name={"Requests that took T ms or less"}
-            />
-          </LineChart>
-        )}
+            <Bar dataKey="success" fill="green" />
+            <Bar dataKey="failures" fill="red" />
+            <Bar dataKey="errors" fill="black" />
+            <Bar dataKey="active" fill="#8884d8" />
+          </BarChart>
+          <h3>Events</h3>
+          <BarChart width={750} height={250} data={getEventsData()}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="label" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="audit" fill="green" />
+            <Bar dataKey="errors" fill="black" />
+          </BarChart>
+          <h3>Latency Histogram</h3>
+          {metrics.latencyHistogram && (
+            <LineChart
+              width={730}
+              height={250}
+              data={getHistogramData()}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="duration" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="total"
+                stroke="#8884d8"
+                name={"Requests that took T ms or less"}
+              />
+            </LineChart>
+          )}
+        </PageLayout>
       </Fragment>
     )
   );
