@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/artashesbalabekyan/barbican-sdk-go/xhttp"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
@@ -668,7 +669,7 @@ type OpenStackBarbicanKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on OpenStack Barbican.
 func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	creds := openstack.Credentials{
+	creds := xhttp.Credentials{
 		AuthUrl:        s.AuthUrl,
 		ProjectDomain:  s.ProjectDomain,
 		ProjectName:    s.ProjectName,
@@ -676,7 +677,7 @@ func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[strin
 		Password:       s.Password,
 		UserDomainName: s.UserDomain,
 	}
-	return openstack.Connect(ctx, &openstack.Config{
+	return openstack.Connect(ctx, &xhttp.Config{
 		Login:    creds,
 		Endpoint: s.BarbicanUrl,
 	})

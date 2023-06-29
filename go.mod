@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go/secretmanager v1.9.0
 	github.com/Azure/go-autorest/autorest v0.11.17
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.7
+	github.com/artashesbalabekyan/barbican-sdk-go v1.1.0
 	github.com/aws/aws-sdk-go v1.34.0
 	github.com/charmbracelet/lipgloss v0.6.0
 	github.com/fatih/color v1.13.0
