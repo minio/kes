@@ -9,7 +9,6 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.17
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.7
 	github.com/aws/aws-sdk-go v1.34.0
-	github.com/blang/semver/v4 v4.0.0
 	github.com/charmbracelet/lipgloss v0.6.0
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.5.0

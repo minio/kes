@@ -21,7 +21,6 @@ import (
 
 	"aead.dev/mem"
 	"aead.dev/minisign"
-	"github.com/blang/semver/v4"
 	"github.com/minio/kes/internal/cli"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/sys"
@@ -88,7 +87,7 @@ func updateCmd(args []string) {
 
 	const (
 		Latest      = "latest"
-		DownloadURL = "https://github.com/minio/kes-go/releases/download/%s/kes-%s-%s"
+		DownloadURL = "https://github.com/minio/kes/releases/download/%s/kes-%s-%s"
 	)
 	var publicKey minisign.PublicKey
 	if err := publicKey.UnmarshalText([]byte(minisignKey)); err != nil {
@@ -119,14 +118,16 @@ func updateCmd(args []string) {
 			},
 		},
 	}
+
+	releaseTagFormat := "2006-01-02T15-04-05Z"
 	// First, we check what's the latest version and do some
 	// version comparison - i.e. are we already running the
 	// latest version, are we downgrading, etc.
-	var version semver.Version
+	var version time.Time
 	if n := cmd.NArg(); n == 0 || n == 1 && cmd.Arg(0) == Latest {
 		const (
 			MaxBody   = 5 * mem.MiB
-			LatestURL = "https://api.github.com/repos/minio/kes-go/releases/latest"
+			LatestURL = "https://api.github.com/repos/minio/kes/releases/latest"
 			Tag       = "tag_name"
 		)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, LatestURL, nil)
@@ -147,33 +148,35 @@ func updateCmd(args []string) {
 		if !ok {
 			cli.Fatalf("failed to download KES release information: invalid release tag '%v", response[Tag])
 		}
-		version, err = semver.ParseTolerant(tag)
+		version, err = time.Parse(releaseTagFormat, tag)
 		if err != nil {
-			cli.Fatalf("failed to download KES release information: invalid release tag '%s': %v", tag, err)
+			cli.Fatalf("failed to parse KES release information: invalid release tag '%s': %v", tag, err)
 		}
 	} else {
-		v, err := semver.ParseTolerant(cmd.Arg(0))
+		v, err := time.Parse(releaseTagFormat, cmd.Arg(0))
 		if err != nil {
 			cli.Fatalf("invalid release version '%s': %v", cmd.Arg(0), err)
 		}
 		version = v
 	}
-	if cv, err := semver.ParseTolerant(sys.BinaryInfo().Version); err == nil {
-		switch version.Compare(cv) {
-		case 0:
-			cli.Println(fmt.Sprintf("Already on v%v", version))
-			return
-		case -1:
+
+	if cv, err := time.Parse(releaseTagFormat, sys.BinaryInfo().Version); err == nil {
+		switch version.After(cv) {
+		case true:
+			cli.Println(fmt.Sprintf("Upgrading from '%v' to '%v'", cv, version))
+		case false:
 			if !downgrade {
-				cli.Fatalf("'v%v' is older than the current version 'v%v'", version, cv)
+				cli.Println(fmt.Sprintf("Already on latest version %v", cv.Format(releaseTagFormat)))
+				return
 			}
+			cli.Println(fmt.Sprintf("Downgrading from '%v' to '%v'", cv, version))
 		}
 	}
 
 	// We have to download the KES binary and the corresponding minisign signature
 	// file. We start with the signature.
 	binaryURL, err := url.JoinPath(
-		"https://github.com/minio/kes-go/releases/download/",
+		"https://github.com/minio/kes/releases/download/",
 		fmt.Sprintf("v%v", version),
 		fmt.Sprintf("kes-%s-%s", osFlag, archFlag),
 	)
