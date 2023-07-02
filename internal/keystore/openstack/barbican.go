@@ -17,7 +17,7 @@ import (
 )
 
 type Connection struct {
-	conn   *client.Connection
+	conn   client.Conn
 	config *xhttp.Config
 }
 
