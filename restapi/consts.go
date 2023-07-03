@@ -18,10 +18,11 @@ package restapi
 
 // list of all console environment constants
 const (
-	ConsoleHostname = "CONSOLE_HOSTNAME"
-	ConsolePort     = "CONSOLE_PORT"
-	ConsoleTLSPort  = "CONSOLE_TLS_PORT"
-	KESServerCA     = "KES_CA_PATH"
+	ConsoleHostname          = "CONSOLE_HOSTNAME"
+	ConsolePort              = "CONSOLE_PORT"
+	ConsoleTLSPort           = "CONSOLE_TLS_PORT"
+	KESServerCA              = "KES_CA_PATH"
+	ConsoleSecureTLSRedirect = "CONSOLE_SECURE_TLS_REDIRECT"
 
 	SlashSeparator = "/"
 )
