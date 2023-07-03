@@ -27,12 +27,13 @@ import {
 } from "mds";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import SearchBox from "../../common/SearchBox";
 import { ROUTES } from "../../valid-routes";
+import EnclaveSelector from "../EnclaveSelector";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
@@ -45,6 +46,7 @@ const ListSecrets = () => {
   const [selectedSecret, setSelectedSecret] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [records, setRecords] = useState<[]>([]);
+  const enclave = useAppSelector((state) => state.encryption.enclave);
 
   // TODO: Use supported apis endpoint to check available apis
   const deleteSecret = true;
@@ -63,7 +65,10 @@ const ListSecrets = () => {
       if (displaySecrets) {
         let pattern = filter.trim() === "" ? "*" : filter.trim();
         api
-          .invoke("GET", `/api/v1/encryption/secrets?pattern=${pattern}`)
+          .invoke(
+            "GET",
+            `/api/v1/encryption/secrets?pattern=${pattern}&enclave=${enclave}`
+          )
           .then((res) => {
             setLoading(false);
             setRecords(res.results);
@@ -117,7 +122,7 @@ const ListSecrets = () => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      <PageHeader label="Secrets" />
+      <PageHeader label="Secrets" actions={<EnclaveSelector />} />
       <PageLayout>
         <Grid container spacing={1}>
           <Grid

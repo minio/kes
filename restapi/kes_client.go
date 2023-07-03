@@ -42,7 +42,8 @@ type KESClientI interface {
 
 // KESClient is a wrapper around the KES client
 type KESClient struct {
-	Client *kes.Client
+	Client  *kes.Client
+	enclave string
 }
 
 func (k KESClient) status(ctx context.Context) (kes.State, error) {
@@ -62,75 +63,75 @@ func (k KESClient) version(ctx context.Context) (string, error) {
 }
 
 func (k KESClient) describeKey(ctx context.Context, name string) (*kes.KeyInfo, error) {
-	return k.Client.DescribeKey(ctx, name)
+	return k.Client.Enclave(k.enclave).DescribeKey(ctx, name)
 }
 
 func (k KESClient) createKey(ctx context.Context, name string) error {
-	return k.Client.CreateKey(ctx, name)
+	return k.Client.Enclave(k.enclave).CreateKey(ctx, name)
 }
 
 func (k KESClient) deleteKey(ctx context.Context, name string) error {
-	return k.Client.DeleteKey(ctx, name)
+	return k.Client.Enclave(k.enclave).DeleteKey(ctx, name)
 }
 
 func (k KESClient) importKey(ctx context.Context, name string, key []byte) error {
-	return k.Client.ImportKey(ctx, name, key)
+	return k.Client.Enclave(k.enclave).ImportKey(ctx, name, key)
 }
 
 func (k KESClient) listKeys(ctx context.Context, pattern string) (*kes.KeyIterator, error) {
-	return k.Client.ListKeys(ctx, pattern)
+	return k.Client.Enclave(k.enclave).ListKeys(ctx, pattern)
 }
 
 func (k KESClient) setPolicy(ctx context.Context, name string, policy *kes.Policy) error {
-	return k.Client.SetPolicy(ctx, name, policy)
+	return k.Client.Enclave(k.enclave).SetPolicy(ctx, name, policy)
 }
 
 func (k KESClient) assignPolicy(ctx context.Context, name, identity string) error {
-	return k.Client.AssignPolicy(ctx, name, kes.Identity(identity))
+	return k.Client.Enclave(k.enclave).AssignPolicy(ctx, name, kes.Identity(identity))
 }
 
 func (k KESClient) describePolicy(ctx context.Context, name string) (*kes.PolicyInfo, error) {
-	return k.Client.DescribePolicy(ctx, name)
+	return k.Client.Enclave(k.enclave).DescribePolicy(ctx, name)
 }
 
 func (k KESClient) getPolicy(ctx context.Context, name string) (*kes.Policy, error) {
-	return k.Client.GetPolicy(ctx, name)
+	return k.Client.Enclave(k.enclave).GetPolicy(ctx, name)
 }
 
 func (k KESClient) listPolicies(ctx context.Context, pattern string) (*kes.PolicyIterator, error) {
-	return k.Client.ListPolicies(ctx, pattern)
+	return k.Client.Enclave(k.enclave).ListPolicies(ctx, pattern)
 }
 
 func (k KESClient) deletePolicy(ctx context.Context, name string) error {
-	return k.Client.DeletePolicy(ctx, name)
+	return k.Client.Enclave(k.enclave).DeletePolicy(ctx, name)
 }
 
 func (k KESClient) listIdentities(ctx context.Context, pattern string) (*kes.IdentityIterator, error) {
-	return k.Client.ListIdentities(ctx, pattern)
+	return k.Client.Enclave(k.enclave).ListIdentities(ctx, pattern)
 }
 
 func (k KESClient) describeIdentity(ctx context.Context, name string) (*kes.IdentityInfo, error) {
-	return k.Client.DescribeIdentity(ctx, kes.Identity(name))
+	return k.Client.Enclave(k.enclave).DescribeIdentity(ctx, kes.Identity(name))
 }
 
 func (k KESClient) describeSelfIdentity(ctx context.Context) (*kes.IdentityInfo, *kes.Policy, error) {
-	return k.Client.DescribeSelf(ctx)
+	return k.Client.Enclave(k.enclave).DescribeSelf(ctx)
 }
 
 func (k KESClient) deleteIdentity(ctx context.Context, name string) error {
-	return k.Client.DeleteIdentity(ctx, kes.Identity(name))
+	return k.Client.Enclave(k.enclave).DeleteIdentity(ctx, kes.Identity(name))
 }
 
 func (k KESClient) describeSecret(ctx context.Context, name string) (*kes.SecretInfo, error) {
-	return k.Client.DescribeSecret(ctx, name)
+	return k.Client.Enclave(k.enclave).DescribeSecret(ctx, name)
 }
 
 func (k KESClient) createSecret(ctx context.Context, name, value string) error {
-	return k.Client.CreateSecret(ctx, name, []byte(value), nil)
+	return k.Client.Enclave(k.enclave).CreateSecret(ctx, name, []byte(value), nil)
 }
 
 func (k KESClient) deleteSecret(ctx context.Context, name string) error {
-	return k.Client.DeleteSecret(ctx, name)
+	return k.Client.Enclave(k.enclave).DeleteSecret(ctx, name)
 }
 
 func (k KESClient) listSecrets(ctx context.Context, pattern string) (*kes.SecretIter, error) {

@@ -29,6 +29,7 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/validate"
 )
 
 // NewListIdentitiesParams creates a new ListIdentitiesParams object
@@ -48,6 +49,11 @@ type ListIdentitiesParams struct {
 	// HTTP Request Object
 	HTTPRequest *http.Request `json:"-"`
 
+	/*enclave to be used
+	  Required: true
+	  In: query
+	*/
+	Enclave string
 	/*pattern to retrieve identities
 	  In: query
 	*/
@@ -65,6 +71,11 @@ func (o *ListIdentitiesParams) BindRequest(r *http.Request, route *middleware.Ma
 
 	qs := runtime.Values(r.URL.Query())
 
+	qEnclave, qhkEnclave, _ := qs.GetOK("enclave")
+	if err := o.bindEnclave(qEnclave, qhkEnclave, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	qPattern, qhkPattern, _ := qs.GetOK("pattern")
 	if err := o.bindPattern(qPattern, qhkPattern, route.Formats); err != nil {
 		res = append(res, err)
@@ -72,6 +83,27 @@ func (o *ListIdentitiesParams) BindRequest(r *http.Request, route *middleware.Ma
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindEnclave binds and validates parameter Enclave from query.
+func (o *ListIdentitiesParams) bindEnclave(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	if !hasKey {
+		return errors.Required("enclave", "query", rawData)
+	}
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: true
+	// AllowEmptyValue: false
+
+	if err := validate.RequiredString("enclave", "query", raw); err != nil {
+		return err
+	}
+	o.Enclave = raw
+
 	return nil
 }
 

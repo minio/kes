@@ -30,17 +30,19 @@ import {
   PageLayout,
 } from "mds";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
+import EnclaveSelector from "../EnclaveSelector";
 
 const AddKey = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   const onSuccess = () => navigate(ROUTES.ENCRYPTION_KEYS);
+  const enclave = useAppSelector((state) => state.encryption.enclave);
 
   const onError = (err: ErrorResponseHandler) =>
     dispatch(setErrorSnackMessage(err));
@@ -50,7 +52,9 @@ const AddKey = () => {
 
   const addRecord = (event: React.FormEvent) => {
     event.preventDefault();
-    invokeApi("POST", "/api/v1/encryption/keys/", { key: keyName });
+    invokeApi("POST", `/api/v1/encryption/keys/?enclave=${enclave}`, {
+      key: keyName,
+    });
   };
 
   const resetForm = () => {
@@ -75,6 +79,7 @@ const AddKey = () => {
               onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
             />
           }
+          actions={<EnclaveSelector />}
         />
         <PageLayout>
           <FormLayout

@@ -30,11 +30,12 @@ import {
   PageLayout,
 } from "mds";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
+import EnclaveSelector from "../EnclaveSelector";
 
 const AddSecret = () => {
   const dispatch = useAppDispatch();
@@ -48,10 +49,11 @@ const AddSecret = () => {
   const [loading, invokeApi] = useApi(onSuccess, onError);
   const [secretName, setSecretName] = useState<string>("");
   const [secretValue, setSecretValue] = useState<string>("");
+  const enclave = useAppSelector((state) => state.encryption.enclave);
 
   const addRecord = (event: React.FormEvent) => {
     event.preventDefault();
-    invokeApi("POST", "/api/v1/encryption/secrets/", {
+    invokeApi("POST", `/api/v1/encryption/secrets/?enclave=${enclave}`, {
       secret: secretName,
       value: secretValue,
     });
@@ -90,6 +92,7 @@ const AddSecret = () => {
               onClick={() => navigate(ROUTES.ENCRYPTION_SECRETS)}
             />
           }
+          actions={<EnclaveSelector />}
         />
         <PageLayout>
           <FormLayout

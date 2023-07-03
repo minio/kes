@@ -25,11 +25,12 @@ import {
   Tooltip,
 } from "mds";
 import React, { useEffect, useState } from "react";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import api from "../../../../common/api";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import SearchBox from "../../common/SearchBox";
+import EnclaveSelector from "../EnclaveSelector";
 
 const DeleteModal = React.lazy(() => import("../DeleteModal"));
 
@@ -40,6 +41,7 @@ const ListIdentities = () => {
   const [selectedIdentity, setSelectedIdentity] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [records, setRecords] = useState<[]>([]);
+  const enclave = useAppSelector((state) => state.encryption.enclave);
 
   // TODO: Use supported apis endpoint to check available apis
   const deleteIdentity = true;
@@ -58,7 +60,10 @@ const ListIdentities = () => {
       if (displayIdentities) {
         let pattern = filter.trim() === "" ? "*" : filter.trim();
         api
-          .invoke("GET", `/api/v1/encryption/identities?pattern=${pattern}`)
+          .invoke(
+            "GET",
+            `/api/v1/encryption/identities?pattern=${pattern}&enclave=${enclave}`
+          )
           .then((res) => {
             setLoading(false);
             setRecords(res.results);
@@ -112,7 +117,7 @@ const ListIdentities = () => {
           closeDeleteModalAndRefresh={closeDeleteModalAndRefresh}
         />
       )}
-      <PageHeader label="Identities" />
+      <PageHeader label="Identities" actions={<EnclaveSelector />} />
       <PageLayout>
         <Grid container spacing={1}>
           <Grid

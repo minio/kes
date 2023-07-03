@@ -82,6 +82,15 @@ func init() {
         ],
         "summary": "Encryption describe self identity",
         "operationId": "DescribeSelfIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -106,6 +115,13 @@ func init() {
         "summary": "Encryption list identities",
         "operationId": "ListIdentities",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "pattern to retrieve identities",
@@ -139,6 +155,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption identity name",
             "name": "name",
             "in": "path",
@@ -166,6 +189,13 @@ func init() {
         "summary": "Encryption describe identity",
         "operationId": "DescribeIdentity",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "Encryption identity name",
@@ -200,6 +230,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve keys",
             "name": "pattern",
             "in": "query"
@@ -227,6 +264,13 @@ func init() {
         "summary": "Encryption create key",
         "operationId": "CreateKey",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -259,6 +303,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption key name",
             "name": "name",
             "in": "path",
@@ -289,6 +340,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption key name",
             "name": "name",
             "in": "path",
@@ -316,6 +374,13 @@ func init() {
         "summary": "Encryption import key",
         "operationId": "ImportKey",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -378,6 +443,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve policies",
             "name": "pattern",
             "in": "query"
@@ -405,6 +477,13 @@ func init() {
         "summary": "Encryption set policy",
         "operationId": "SetPolicy",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -437,6 +516,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -467,6 +553,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -494,6 +587,13 @@ func init() {
         "summary": "Encryption assign policy",
         "operationId": "AssignPolicy",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -533,6 +633,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -565,6 +672,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve secrets",
             "name": "pattern",
             "in": "query"
@@ -592,6 +706,13 @@ func init() {
         "summary": "Encryption create secret",
         "operationId": "CreateSecret",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -624,6 +745,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption secret name",
             "name": "name",
             "in": "path",
@@ -652,6 +780,13 @@ func init() {
         "summary": "Encryption delete secret",
         "operationId": "DeleteSecret",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "Encryption secret name",
@@ -1411,6 +1546,15 @@ func init() {
         ],
         "summary": "Encryption describe self identity",
         "operationId": "DescribeSelfIdentity",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -1435,6 +1579,13 @@ func init() {
         "summary": "Encryption list identities",
         "operationId": "ListIdentities",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "pattern to retrieve identities",
@@ -1468,6 +1619,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption identity name",
             "name": "name",
             "in": "path",
@@ -1495,6 +1653,13 @@ func init() {
         "summary": "Encryption describe identity",
         "operationId": "DescribeIdentity",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "Encryption identity name",
@@ -1529,6 +1694,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve keys",
             "name": "pattern",
             "in": "query"
@@ -1556,6 +1728,13 @@ func init() {
         "summary": "Encryption create key",
         "operationId": "CreateKey",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -1588,6 +1767,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption key name",
             "name": "name",
             "in": "path",
@@ -1618,6 +1804,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption key name",
             "name": "name",
             "in": "path",
@@ -1645,6 +1838,13 @@ func init() {
         "summary": "Encryption import key",
         "operationId": "ImportKey",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -1707,6 +1907,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve policies",
             "name": "pattern",
             "in": "query"
@@ -1734,6 +1941,13 @@ func init() {
         "summary": "Encryption set policy",
         "operationId": "SetPolicy",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -1766,6 +1980,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -1796,6 +2017,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -1823,6 +2051,13 @@ func init() {
         "summary": "Encryption assign policy",
         "operationId": "AssignPolicy",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -1862,6 +2097,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption policy name",
             "name": "name",
             "in": "path",
@@ -1894,6 +2136,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "pattern to retrieve secrets",
             "name": "pattern",
             "in": "query"
@@ -1921,6 +2170,13 @@ func init() {
         "summary": "Encryption create secret",
         "operationId": "CreateSecret",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "name": "body",
             "in": "body",
@@ -1953,6 +2209,13 @@ func init() {
         "parameters": [
           {
             "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
             "description": "Encryption secret name",
             "name": "name",
             "in": "path",
@@ -1981,6 +2244,13 @@ func init() {
         "summary": "Encryption delete secret",
         "operationId": "DeleteSecret",
         "parameters": [
+          {
+            "type": "string",
+            "description": "enclave to be used",
+            "name": "enclave",
+            "in": "query",
+            "required": true
+          },
           {
             "type": "string",
             "description": "Encryption secret name",

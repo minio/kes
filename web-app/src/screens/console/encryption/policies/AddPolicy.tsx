@@ -31,18 +31,20 @@ import {
 } from "mds";
 // import InputBoxWrapper from "../Common/FormComponents/InputBoxWrapper/InputBoxWrapper";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
+import EnclaveSelector from "../EnclaveSelector";
 
 export const emptyContent = '{\n    "allow": [],\n    "deny": []\n}';
 
 const AddPolicy = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const enclave = useAppSelector((state) => state.encryption.enclave);
 
   const onSuccess = () => navigate(ROUTES.ENCRYPTION_POLICIES);
 
@@ -58,7 +60,7 @@ const AddPolicy = () => {
     event.preventDefault();
     let data = JSON.parse(policyDefinition);
     data["policy"] = policy;
-    invokeApi("POST", "/api/v1/encryption/policies/", data);
+    invokeApi("POST", `/api/v1/encryption/policies/?enclave=${enclave}`, data);
   };
 
   const validatePolicy = (policy: string) => {
@@ -79,6 +81,7 @@ const AddPolicy = () => {
               onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
             />
           }
+          actions={<EnclaveSelector />}
         />
         <PageLayout>
           <FormLayout

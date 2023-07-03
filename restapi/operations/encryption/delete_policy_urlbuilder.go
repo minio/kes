@@ -33,6 +33,8 @@ import (
 type DeletePolicyURL struct {
 	Name string
 
+	Enclave string
+
 	_basePath string
 	// avoid unkeyed usage
 	_ struct{}
@@ -71,6 +73,15 @@ func (o *DeletePolicyURL) Build() (*url.URL, error) {
 		_basePath = "/api/v1"
 	}
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
+
+	qs := make(url.Values)
+
+	enclaveQ := o.Enclave
+	if enclaveQ != "" {
+		qs.Set("enclave", enclaveQ)
+	}
+
+	_result.RawQuery = qs.Encode()
 
 	return &_result, nil
 }

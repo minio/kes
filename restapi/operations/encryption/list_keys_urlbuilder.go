@@ -30,6 +30,7 @@ import (
 
 // ListKeysURL generates an URL for the list keys operation
 type ListKeysURL struct {
+	Enclave string
 	Pattern *string
 
 	_basePath string
@@ -65,6 +66,11 @@ func (o *ListKeysURL) Build() (*url.URL, error) {
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
 
 	qs := make(url.Values)
+
+	enclaveQ := o.Enclave
+	if enclaveQ != "" {
+		qs.Set("enclave", enclaveQ)
+	}
 
 	var patternQ string
 	if o.Pattern != nil {

@@ -30,7 +30,11 @@ import (
 
 // CreateSecretURL generates an URL for the create secret operation
 type CreateSecretURL struct {
+	Enclave string
+
 	_basePath string
+	// avoid unkeyed usage
+	_ struct{}
 }
 
 // WithBasePath sets the base path for this url builder, only required when it's different from the
@@ -59,6 +63,15 @@ func (o *CreateSecretURL) Build() (*url.URL, error) {
 		_basePath = "/api/v1"
 	}
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
+
+	qs := make(url.Values)
+
+	enclaveQ := o.Enclave
+	if enclaveQ != "" {
+		qs.Set("enclave", enclaveQ)
+	}
+
+	_result.RawQuery = qs.Encode()
 
 	return &_result, nil
 }

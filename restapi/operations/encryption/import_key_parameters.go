@@ -57,6 +57,11 @@ type ImportKeyParams struct {
 	  In: body
 	*/
 	Body *models.EncryptionImportKeyRequest
+	/*enclave to be used
+	  Required: true
+	  In: query
+	*/
+	Enclave string
 	/*Encryption key name
 	  Required: true
 	  In: path
@@ -72,6 +77,8 @@ func (o *ImportKeyParams) BindRequest(r *http.Request, route *middleware.Matched
 	var res []error
 
 	o.HTTPRequest = r
+
+	qs := runtime.Values(r.URL.Query())
 
 	if runtime.HasBody(r) {
 		defer r.Body.Close()
@@ -101,6 +108,11 @@ func (o *ImportKeyParams) BindRequest(r *http.Request, route *middleware.Matched
 		res = append(res, errors.Required("body", "body", ""))
 	}
 
+	qEnclave, qhkEnclave, _ := qs.GetOK("enclave")
+	if err := o.bindEnclave(qEnclave, qhkEnclave, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	rName, rhkName, _ := route.Params.GetOK("name")
 	if err := o.bindName(rName, rhkName, route.Formats); err != nil {
 		res = append(res, err)
@@ -108,6 +120,27 @@ func (o *ImportKeyParams) BindRequest(r *http.Request, route *middleware.Matched
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindEnclave binds and validates parameter Enclave from query.
+func (o *ImportKeyParams) bindEnclave(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	if !hasKey {
+		return errors.Required("enclave", "query", rawData)
+	}
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: true
+	// AllowEmptyValue: false
+
+	if err := validate.RequiredString("enclave", "query", raw); err != nil {
+		return err
+	}
+	o.Enclave = raw
+
 	return nil
 }
 

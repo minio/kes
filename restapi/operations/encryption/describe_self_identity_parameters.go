@@ -26,7 +26,10 @@ import (
 	"net/http"
 
 	"github.com/go-openapi/errors"
+	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/validate"
 )
 
 // NewDescribeSelfIdentityParams creates a new DescribeSelfIdentityParams object
@@ -45,6 +48,12 @@ type DescribeSelfIdentityParams struct {
 
 	// HTTP Request Object
 	HTTPRequest *http.Request `json:"-"`
+
+	/*enclave to be used
+	  Required: true
+	  In: query
+	*/
+	Enclave string
 }
 
 // BindRequest both binds and validates a request, it assumes that complex things implement a Validatable(strfmt.Registry) error interface
@@ -56,8 +65,35 @@ func (o *DescribeSelfIdentityParams) BindRequest(r *http.Request, route *middlew
 
 	o.HTTPRequest = r
 
+	qs := runtime.Values(r.URL.Query())
+
+	qEnclave, qhkEnclave, _ := qs.GetOK("enclave")
+	if err := o.bindEnclave(qEnclave, qhkEnclave, route.Formats); err != nil {
+		res = append(res, err)
+	}
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindEnclave binds and validates parameter Enclave from query.
+func (o *DescribeSelfIdentityParams) bindEnclave(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	if !hasKey {
+		return errors.Required("enclave", "query", rawData)
+	}
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: true
+	// AllowEmptyValue: false
+
+	if err := validate.RequiredString("enclave", "query", raw); err != nil {
+		return err
+	}
+	o.Enclave = raw
+
 	return nil
 }

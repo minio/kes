@@ -617,10 +617,18 @@ export class Api<
      * @request POST:/encryption/keys
      * @secure
      */
-    createKey: (body: EncryptionCreateKeyRequest, params: RequestParams = {}) =>
+    createKey: (
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      body: EncryptionCreateKeyRequest,
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/keys`,
         method: "POST",
+        query: query,
         body: body,
         secure: true,
         type: ContentType.Json,
@@ -637,7 +645,9 @@ export class Api<
      * @secure
      */
     listKeys: (
-      query?: {
+      query: {
+        /** enclave to be used */
+        enclave: string;
         /** pattern to retrieve keys */
         pattern?: string;
       },
@@ -661,10 +671,18 @@ export class Api<
      * @request GET:/encryption/keys/{name}
      * @secure
      */
-    describeKey: (name: string, params: RequestParams = {}) =>
+    describeKey: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionDescribeKeyResponse, Error>({
         path: `/encryption/keys/${name}`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -679,10 +697,18 @@ export class Api<
      * @request DELETE:/encryption/keys/{name}
      * @secure
      */
-    deleteKey: (name: string, params: RequestParams = {}) =>
+    deleteKey: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/keys/${name}`,
         method: "DELETE",
+        query: query,
         secure: true,
         ...params,
       }),
@@ -698,12 +724,17 @@ export class Api<
      */
     importKey: (
       name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
       body: EncryptionImportKeyRequest,
       params: RequestParams = {}
     ) =>
       this.request<void, Error>({
         path: `/encryption/keys/${name}/import`,
         method: "POST",
+        query: query,
         body: body,
         secure: true,
         type: ContentType.Json,
@@ -719,10 +750,18 @@ export class Api<
      * @request POST:/encryption/policies
      * @secure
      */
-    setPolicy: (body: EncryptionSetPolicyRequest, params: RequestParams = {}) =>
+    setPolicy: (
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      body: EncryptionSetPolicyRequest,
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/policies`,
         method: "POST",
+        query: query,
         body: body,
         secure: true,
         type: ContentType.Json,
@@ -739,7 +778,9 @@ export class Api<
      * @secure
      */
     listPolicies: (
-      query?: {
+      query: {
+        /** enclave to be used */
+        enclave: string;
         /** pattern to retrieve policies */
         pattern?: string;
       },
@@ -763,10 +804,18 @@ export class Api<
      * @request GET:/encryption/policies/{name}
      * @secure
      */
-    getPolicy: (name: string, params: RequestParams = {}) =>
+    getPolicy: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionGetPolicyResponse, Error>({
         path: `/encryption/policies/${name}`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -781,10 +830,18 @@ export class Api<
      * @request DELETE:/encryption/policies/{name}
      * @secure
      */
-    deletePolicy: (name: string, params: RequestParams = {}) =>
+    deletePolicy: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/policies/${name}`,
         method: "DELETE",
+        query: query,
         secure: true,
         ...params,
       }),
@@ -800,12 +857,17 @@ export class Api<
      */
     assignPolicy: (
       name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
       body: EncryptionAssignPolicyRequest,
       params: RequestParams = {}
     ) =>
       this.request<void, Error>({
         path: `/encryption/policies/${name}/assign`,
         method: "POST",
+        query: query,
         body: body,
         secure: true,
         type: ContentType.Json,
@@ -821,10 +883,18 @@ export class Api<
      * @request GET:/encryption/policies/{name}/describe
      * @secure
      */
-    describePolicy: (name: string, params: RequestParams = {}) =>
+    describePolicy: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionDescribePolicyResponse, Error>({
         path: `/encryption/policies/${name}/describe`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -839,10 +909,18 @@ export class Api<
      * @request DELETE:/encryption/identities/{name}
      * @secure
      */
-    deleteIdentity: (name: string, params: RequestParams = {}) =>
+    deleteIdentity: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/identities/${name}`,
         method: "DELETE",
+        query: query,
         secure: true,
         ...params,
       }),
@@ -856,10 +934,18 @@ export class Api<
      * @request GET:/encryption/identities/{name}/describe
      * @secure
      */
-    describeIdentity: (name: string, params: RequestParams = {}) =>
+    describeIdentity: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionDescribeIdentityResponse, Error>({
         path: `/encryption/identities/${name}/describe`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -874,10 +960,17 @@ export class Api<
      * @request GET:/encryption/describe-self/identity
      * @secure
      */
-    describeSelfIdentity: (params: RequestParams = {}) =>
+    describeSelfIdentity: (
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionDescribeSelfIdentityResponse, Error>({
         path: `/encryption/describe-self/identity`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -893,7 +986,9 @@ export class Api<
      * @secure
      */
     listIdentities: (
-      query?: {
+      query: {
+        /** enclave to be used */
+        enclave: string;
         /** pattern to retrieve identities */
         pattern?: string;
       },
@@ -918,12 +1013,17 @@ export class Api<
      * @secure
      */
     createSecret: (
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
       body: EncryptionCreateSecretRequest,
       params: RequestParams = {}
     ) =>
       this.request<void, Error>({
         path: `/encryption/secrets`,
         method: "POST",
+        query: query,
         body: body,
         secure: true,
         type: ContentType.Json,
@@ -940,7 +1040,9 @@ export class Api<
      * @secure
      */
     listSecrets: (
-      query?: {
+      query: {
+        /** enclave to be used */
+        enclave: string;
         /** pattern to retrieve secrets */
         pattern?: string;
       },
@@ -964,10 +1066,18 @@ export class Api<
      * @request GET:/encryption/secrets/{name}
      * @secure
      */
-    describeSecret: (name: string, params: RequestParams = {}) =>
+    describeSecret: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<EncryptionSecretInfo, Error>({
         path: `/encryption/secrets/${name}`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
@@ -982,10 +1092,18 @@ export class Api<
      * @request DELETE:/encryption/secrets/{name}
      * @secure
      */
-    deleteSecret: (name: string, params: RequestParams = {}) =>
+    deleteSecret: (
+      name: string,
+      query: {
+        /** enclave to be used */
+        enclave: string;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<void, Error>({
         path: `/encryption/secrets/${name}`,
         method: "DELETE",
+        query: query,
         secure: true,
         ...params,
       }),

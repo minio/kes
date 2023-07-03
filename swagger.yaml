@@ -163,6 +163,11 @@ paths:
       summary: Encryption create key
       operationId: CreateKey
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: body
           in: body
           required: true
@@ -181,6 +186,11 @@ paths:
       summary: Encryption list keys
       operationId: ListKeys
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: pattern
           description: pattern to retrieve keys
           in: query
@@ -201,6 +211,11 @@ paths:
       summary: Encryption describe key
       operationId: DescribeKey
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption key name
           in: path
@@ -221,6 +236,11 @@ paths:
       summary: Encryption delete key
       operationId: DeleteKey
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption key name
           in: path
@@ -240,6 +260,11 @@ paths:
       summary: Encryption import key
       operationId: ImportKey
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: body
           in: body
           required: true
@@ -264,6 +289,11 @@ paths:
       summary: Encryption set policy
       operationId: SetPolicy
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: body
           in: body
           required: true
@@ -282,6 +312,11 @@ paths:
       summary: Encryption list policies
       operationId: ListPolicies
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: pattern
           description: pattern to retrieve policies
           in: query
@@ -302,6 +337,11 @@ paths:
       summary: Encryption get policy
       operationId: GetPolicy
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption policy name
           in: path
@@ -322,6 +362,11 @@ paths:
       summary: Encryption delete policy
       operationId: DeletePolicy
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption policy name
           in: path
@@ -341,6 +386,11 @@ paths:
       summary: Encryption assign policy
       operationId: AssignPolicy
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: body
           in: body
           required: true
@@ -365,6 +415,11 @@ paths:
       summary: Encryption describe policy
       operationId: DescribePolicy
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption policy name
           in: path
@@ -386,6 +441,11 @@ paths:
       summary: Encryption delete identity
       operationId: DeleteIdentity
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption identity name
           in: path
@@ -405,6 +465,11 @@ paths:
       summary: Encryption describe identity
       operationId: DescribeIdentity
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption identity name
           in: path
@@ -425,6 +490,12 @@ paths:
     get:
       summary: Encryption describe self identity
       operationId: DescribeSelfIdentity
+      parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
       responses:
         200:
           description: A successful response.
@@ -441,6 +512,11 @@ paths:
       summary: Encryption list identities
       operationId: ListIdentities
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: pattern
           description: pattern to retrieve identities
           in: query
@@ -461,6 +537,11 @@ paths:
       summary: Encryption create secret
       operationId: CreateSecret
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: body
           in: body
           required: true
@@ -479,6 +560,11 @@ paths:
       summary: Encryption list secrets
       operationId: ListSecrets
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: pattern
           description: pattern to retrieve secrets
           in: query
@@ -499,6 +585,11 @@ paths:
       summary: Encryption describe secret
       operationId: DescribeSecret
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption secret name
           in: path
@@ -519,6 +610,11 @@ paths:
       summary: Encryption delete secret
       operationId: DeleteSecret
       parameters:
+        - name: enclave
+          description: enclave to be used
+          in: query
+          required: true
+          type: string
         - name: name
           description: Encryption secret name
           in: path

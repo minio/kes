@@ -30,12 +30,13 @@ import {
   PageLayout,
 } from "mds";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "../../../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../../../app/hooks";
 import { ROUTES } from "../../valid-routes";
 import { ErrorResponseHandler } from "../../../../common/api/types";
 import { setErrorSnackMessage } from "../../../../systemSlice";
 import useApi from "../../../../common/hooks/useApi";
 import CodeMirrorWrapper from "../../common/CodeMirrorWrapper";
+import EnclaveSelector from "../EnclaveSelector";
 
 export const emptyContent = '{\n    "bytes": ""\n}';
 
@@ -48,6 +49,7 @@ const ImportKey = () => {
   const onError = (err: ErrorResponseHandler) =>
     dispatch(setErrorSnackMessage(err));
 
+  const enclave = useAppSelector((state) => state.encryption.enclave);
   const [loading, invokeApi] = useApi(onSuccess, onError);
   const [keyName, setKeyName] = useState<string>("");
   const [keyContent, setKeyContent] = useState<string>(emptyContent);
@@ -55,7 +57,11 @@ const ImportKey = () => {
   const importRecord = (event: React.FormEvent) => {
     event.preventDefault();
     let data = JSON.parse(keyContent);
-    invokeApi("POST", `/api/v1/encryption/keys/${keyName}/import`, data);
+    invokeApi(
+      "POST",
+      `/api/v1/encryption/keys/${keyName}/import?enclave=${enclave}`,
+      data
+    );
   };
 
   const resetForm = () => {
@@ -81,6 +87,7 @@ const ImportKey = () => {
               onClick={() => navigate(ROUTES.ENCRYPTION_KEYS)}
             />
           }
+          actions={<EnclaveSelector />}
         />
         <PageLayout>
           <FormLayout
