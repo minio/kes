@@ -140,7 +140,7 @@ func startServer(path string, sConfig serverConfig) {
 		init.Address.Set(sConfig.Address)
 	}
 	if sConfig.PrivateKey != "" {
-		init.Address.Set(sConfig.PrivateKey)
+		init.PrivateKey.Set(sConfig.PrivateKey)
 	}
 	if sConfig.Certificate != "" {
 		init.Certificate.Set(sConfig.Certificate)
