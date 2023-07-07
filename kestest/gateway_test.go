@@ -10,7 +10,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -21,6 +23,8 @@ import (
 	"github.com/minio/kes/kestest"
 	"github.com/minio/kes/kv"
 )
+
+const ranStringLength = 8
 
 var gatewayAPIs = map[string]struct {
 	Method  string
@@ -116,24 +120,24 @@ var createKeyTests = []struct {
 	Err        error
 }{
 	{ // 0
-		Name: "my-key",
+		Name: "kestest",
 	},
 	{ // 1
-		Name:       "my-key",
+		Name:       "kestest",
 		ShouldFail: true,
 		Err:        kes.ErrKeyExists,
 	},
 }
 
-func testCreateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+func testCreateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
 	for i, test := range createKeyTests {
-		err := client.CreateKey(ctx, test.Name)
+		err := client.CreateKey(ctx, fmt.Sprintf("%s-%s", test.Name, seed))
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: should fail but succeeded", i)
 		}
@@ -153,11 +157,11 @@ var importKeyTests = []struct {
 	Err        error
 }{
 	{ // 0
-		Name: "my-key",
+		Name: "kestest",
 		Key:  make([]byte, 32),
 	},
 	{ // 1
-		Name:       "my-key",
+		Name:       "kestest",
 		Key:        make([]byte, 32),
 		ShouldFail: true,
 		Err:        kes.ErrKeyExists,
@@ -175,15 +179,15 @@ var importKeyTests = []struct {
 	},
 }
 
-func testImportKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+func testImportKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
 	for i, test := range importKeyTests {
-		err := client.ImportKey(ctx, test.Name, test.Key)
+		err := client.ImportKey(ctx, fmt.Sprintf("%s-%s", test.Name, seed), test.Key)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: should fail but succeeded", i)
 		}
@@ -206,20 +210,20 @@ var generateKeyTests = []struct {
 	{Context: make([]byte, 1<<20), ShouldFail: true},
 }
 
-func testGenerateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	const KeyName = "my-key"
+func testGenerateKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	keyName := fmt.Sprintf("kestest-%s", seed)
 
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
-	if err := client.CreateKey(ctx, KeyName); err != nil {
-		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	if err := client.CreateKey(ctx, keyName); err != nil {
+		t.Fatalf("Failed to create %q: %v", keyName, err)
 	}
 	for i, test := range generateKeyTests {
-		dek, err := client.GenerateKey(ctx, KeyName, test.Context)
+		dek, err := client.GenerateKey(ctx, keyName, test.Context)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: should fail but succeeded", i)
 		}
@@ -231,7 +235,7 @@ func testGenerateKey(ctx context.Context, store kv.Store[string, []byte], t *tes
 		}
 
 		if !test.ShouldFail {
-			plaintext, err := client.Decrypt(ctx, KeyName, dek.Ciphertext, test.Context)
+			plaintext, err := client.Decrypt(ctx, keyName, dek.Ciphertext, test.Context)
 			if err != nil {
 				t.Fatalf("Test %d: failed to decrypt ciphertext: %v", i, err)
 			}
@@ -256,19 +260,19 @@ var encryptKeyTests = []struct {
 	{Plaintext: make([]byte, 512*1024), Context: make([]byte, 512*1024), ShouldFail: true},
 }
 
-func testEncryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	const KeyName = "my-key"
+func testEncryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	keyName := fmt.Sprintf("kestest-%s", seed)
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
-	if err := client.CreateKey(ctx, KeyName); err != nil {
-		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	if err := client.CreateKey(ctx, keyName); err != nil {
+		t.Fatalf("Failed to create %q: %v", keyName, err)
 	}
 	for i, test := range encryptKeyTests {
-		ciphertext, err := client.Encrypt(ctx, KeyName, test.Plaintext, test.Context)
+		ciphertext, err := client.Encrypt(ctx, keyName, test.Plaintext, test.Context)
 		if err == nil && test.ShouldFail {
 			t.Fatalf("Test %d: should fail but succeeded", i)
 		}
@@ -280,7 +284,7 @@ func testEncryptKey(ctx context.Context, store kv.Store[string, []byte], t *test
 		}
 
 		if !test.ShouldFail {
-			plaintext, err := client.Decrypt(ctx, KeyName, ciphertext, test.Context)
+			plaintext, err := client.Decrypt(ctx, keyName, ciphertext, test.Context)
 			if err != nil {
 				t.Fatalf("Test %d: failed to decrypt ciphertext: %v", i, err)
 			}
@@ -314,20 +318,20 @@ var decryptKeyTests = []struct {
 	},
 }
 
-func testDecryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	const KeyName = "my-key"
+func testDecryptKey(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	keyName := fmt.Sprintf("kestest-%s", seed)
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
-	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
-		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	if err := client.ImportKey(ctx, keyName, mustDecodeB64(KeyValue)); err != nil {
+		t.Fatalf("Failed to create %q: %v", keyName, err)
 	}
 	for i, test := range decryptKeyTests {
-		plaintext, err := client.Decrypt(ctx, KeyName, test.Ciphertext, test.Context)
+		plaintext, err := client.Decrypt(ctx, keyName, test.Ciphertext, test.Context)
 		if test.ShouldFail {
 			if err == nil {
 				t.Fatalf("Test %d: should fail but succeeded", i)
@@ -387,21 +391,21 @@ var decryptAllKeyTests = []struct {
 	},
 }
 
-func testDecryptKeyAll(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	const KeyName = "my-key"
+func testDecryptKeyAll(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+	keyName := fmt.Sprintf("kestest-%s", seed)
 	server := kestest.NewGateway(store)
 	defer server.Close()
 	client := server.Client()
 
-	defer clean(ctx, client, t)
+	defer clean(ctx, client, t, seed)
 
 	const KeyValue = "pQLPe6/f87AMSItvZzEbrxYdRUzmM81ziXF95HOFE4Y="
-	if err := client.ImportKey(ctx, KeyName, mustDecodeB64(KeyValue)); err != nil {
-		t.Fatalf("Failed to create %q: %v", KeyName, err)
+	if err := client.ImportKey(ctx, keyName, mustDecodeB64(KeyValue)); err != nil {
+		t.Fatalf("Failed to create %q: %v", keyName, err)
 	}
 
 	for i, test := range decryptAllKeyTests {
-		plaintexts, err := client.DecryptAll(ctx, KeyName, test.Ciphertexts...)
+		plaintexts, err := client.DecryptAll(ctx, keyName, test.Ciphertexts...)
 		if test.ShouldFail {
 			if err == nil {
 				t.Fatalf("Test %d: should fail but succeeded", i)
@@ -627,8 +631,8 @@ func mustDecodeB64(s string) []byte {
 	return b
 }
 
-func clean(ctx context.Context, client *kes.Client, t *testing.T) {
-	iter, err := client.ListKeys(ctx, "*")
+func clean(ctx context.Context, client *kes.Client, t *testing.T, seed string) {
+	iter, err := client.ListKeys(ctx, fmt.Sprintf("kestest-%s*", seed))
 	if err != nil {
 		t.Fatalf("Cleanup: failed to list keys: %v", err)
 	}
@@ -639,11 +643,18 @@ func clean(ctx context.Context, client *kes.Client, t *testing.T) {
 		t.Fatalf("Cleanup: failed to iterate keys")
 	}
 	for _, info := range keysInfo {
-		if err = client.DeleteKey(ctx, info.Name); err != nil {
+		if err = client.DeleteKey(ctx, info.Name); err != nil && !errors.Is(err, kes.ErrKeyNotFound) {
 			t.Errorf("Cleanup: failed to delete '%s': %v", info.Name, err)
 		}
 	}
-	if err = iter.Close(); err != nil {
-		t.Errorf("Cleanup: failed to close iter: %v", err)
+}
+
+const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
 	}
+	return string(b)
 }
