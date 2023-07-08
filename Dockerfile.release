@@ -1,10 +1,10 @@
-FROM --platform=linux/amd64 registry.access.redhat.com/ubi8/ubi-minimal:8.7 as build
+FROM --platform=linux/amd64 registry.access.redhat.com/ubi8/ubi-minimal:8.8 as build
 
 RUN microdnf update --nodocs && microdnf install ca-certificates --nodocs
 RUN  curl -s -q https://raw.githubusercontent.com/minio/kes/master/LICENSE -o LICENSE
 RUN  curl -s -q https://raw.githubusercontent.com/minio/kes/master/CREDITS -o CREDITS
 
-FROM registry.access.redhat.com/ubi8/ubi-micro:8.7
+FROM registry.access.redhat.com/ubi8/ubi-micro:8.8
 
 ARG TAG
 
@@ -13,7 +13,7 @@ LABEL name="MinIO" \
       maintainer="MinIO Inc <dev@min.io>" \
       version="${TAG}" \
       release="${TAG}" \
-	  summary="KES is a cloud-native distributed key management and encryption server designed to build zero-trust infrastructures at scale."
+      summary="KES is a cloud-native distributed key management and encryption server designed to build zero-trust infrastructures at scale."
 
 # On RHEL the certificate bundle is located at:
 # - /etc/pki/tls/certs/ca-bundle.crt (RHEL 6)
