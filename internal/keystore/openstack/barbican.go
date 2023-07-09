@@ -61,7 +61,7 @@ func (s *Connection) Status(ctx context.Context) (kv.State, error) {
 func (s *Connection) Create(ctx context.Context, name string, value []byte) error {
 	_, err := s.get(ctx, name)
 	if err == nil {
-		return nil
+		return kes.ErrKeyExists
 	}
 
 	createOpts := secrets.CreateOpts{
