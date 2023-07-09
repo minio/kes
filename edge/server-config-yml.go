@@ -186,15 +186,13 @@ type yml struct {
 
 		OpenStack *struct {
 			Barbican *struct {
-				AuthUrl env[string] `yaml:"auth_url"`
-
+				AuthUrl     env[string] `yaml:"auth_url"`
 				Credentials *struct {
 					UserDomain    env[string] `yaml:"user_domain"`
 					Username      env[string] `yaml:"username"`
 					Password      env[string] `yaml:"password"`
 					ProjectDomain env[string] `yaml:"project_domain"`
 					ProjectName   env[string] `yaml:"project_name"`
-					ServiceType   env[string] `yaml:"service_type"`
 					ServiceName   env[string] `yaml:"service_name"`
 					Region        env[string] `yaml:"region"`
 				} `yaml:"credentials"`
@@ -634,12 +632,6 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 		if y.KeyStore.OpenStack.Barbican.Credentials.ProjectName.Value == "" {
 			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no ProjectName specified")
 		}
-		if y.KeyStore.OpenStack.Barbican.Credentials.ServiceType.Value == "" {
-			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no ServiceType specified")
-		}
-		if y.KeyStore.OpenStack.Barbican.Credentials.ServiceName.Value == "" {
-			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no ServiceName specified")
-		}
 		if y.KeyStore.OpenStack.Barbican.Credentials.Region.Value == "" {
 			return nil, errors.New("edge: invalid OpenStack Barbican keystore: no Region specified")
 		}
@@ -650,9 +642,12 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 			Username:    y.KeyStore.OpenStack.Barbican.Credentials.Username.Value,
 			Password:    y.KeyStore.OpenStack.Barbican.Credentials.Password.Value,
 			ProjectName: y.KeyStore.OpenStack.Barbican.Credentials.ProjectName.Value,
-			ServiceType: y.KeyStore.OpenStack.Barbican.Credentials.ServiceType.Value,
 			ServiceName: y.KeyStore.OpenStack.Barbican.Credentials.ServiceName.Value,
 			Region:      y.KeyStore.OpenStack.Barbican.Credentials.Region.Value,
+		}
+
+		if s.ServiceName == "" {
+			s.ServiceName = "barbican"
 		}
 		keystore = s
 	}

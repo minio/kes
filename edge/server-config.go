@@ -663,9 +663,6 @@ type OpenStackBarbicanKeyStore struct {
 	// URL of the Barbican instance to connect to
 	BarbicanUrl string
 
-	//Service type for the client (e.g., "compute", "object-store", "key-manager")
-	ServiceType string
-
 	// ServiceName [optional] is the service name for the client (e.g., "nova") as it
 	// appears in the service catalog. Services can have the same Type but a
 	// different Name, which is why both Type and Name are sometimes needed.
@@ -692,7 +689,7 @@ func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[strin
 	}
 
 	endpointOpts := gophercloud.EndpointOpts{
-		Type:   s.ServiceType,
+		Type:   "key-manager",
 		Name:   s.ServiceName,
 		Region: s.Region,
 	}
