@@ -6,9 +6,7 @@ package edge
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -678,8 +676,6 @@ type OpenStackBarbicanKeyStore struct {
 
 // Connect returns a kv.Store that stores key-value pairs on OpenStack Barbican.
 func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	js, _ := json.Marshal(s)
-	fmt.Println(string(js))
 	creds := gophercloud.AuthOptions{
 		IdentityEndpoint: s.AuthUrl,
 		Username:         s.Username,
