@@ -6,10 +6,12 @@ package edge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/artashesbalabekyan/barbican-sdk-go/xhttp"
+	"github.com/gophercloud/gophercloud"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
@@ -655,30 +657,45 @@ type OpenStackBarbicanKeyStore struct {
 	// The password for the user.
 	Password string
 
-	// The Domain of the project. This is a required part of the scope object.
-	ProjectDomain string
-
 	// The project name. Both the Project ID and Project Name are optional.
 	ProjectName string
 
 	// URL of the Barbican instance to connect to
 	BarbicanUrl string
 
+	//Service type for the client (e.g., "compute", "object-store", "key-manager")
+	ServiceType string
+
+	// ServiceName [optional] is the service name for the client (e.g., "nova") as it
+	// appears in the service catalog. Services can have the same Type but a
+	// different Name, which is why both Type and Name are sometimes needed.
+	ServiceName string
+
+	// Region [required] is the geographic region in which the endpoint resides,
+	// generally specifying which datacenter should house your resources.
+	// Required only for services that span multiple regions.
+	Region string
+
 	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on OpenStack Barbican.
 func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	creds := xhttp.Credentials{
-		AuthUrl:        s.AuthUrl,
-		ProjectDomain:  s.ProjectDomain,
-		ProjectName:    s.ProjectName,
-		Username:       s.Username,
-		Password:       s.Password,
-		UserDomainName: s.UserDomain,
+	js, _ := json.Marshal(s)
+	fmt.Println(string(js))
+	creds := gophercloud.AuthOptions{
+		IdentityEndpoint: s.AuthUrl,
+		Username:         s.Username,
+		Password:         s.Password,
+		DomainID:         s.UserDomain,
+		TenantName:       s.ProjectName,
 	}
-	return openstack.Connect(ctx, &xhttp.Config{
-		Login:    creds,
-		Endpoint: s.BarbicanUrl,
-	})
+
+	endpointOpts := gophercloud.EndpointOpts{
+		Type:   s.ServiceType,
+		Name:   s.ServiceName,
+		Region: s.Region,
+	}
+
+	return openstack.Connect(ctx, creds, endpointOpts)
 }
