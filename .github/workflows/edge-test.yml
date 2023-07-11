@@ -1,4 +1,4 @@
-name: edge tests
+name: Edge tests
 
 on:
   push:
@@ -22,8 +22,7 @@ jobs:
       env:
         GO111MODULE: on
       run: |
-         cd ./edge
-         go test -v -aws.config=/etc/kes/config-aws.yml -run="TestAWS"
+         go test ./edge -v -aws.config=/etc/kes/config-aws.yml -run="TestAWS"
   azure-edge-test:
     name: Test Azure edge
     runs-on: [self-hosted,minio-pg1]
@@ -40,5 +39,4 @@ jobs:
       env:
         GO111MODULE: on
       run: |
-         cd ./edge
-         go test -v -azure.config=/etc/kes/config-azure.yml -run="TestAzure"
+         go test ./edge -v -azure.config=/etc/kes/config-azure.yml -run="TestAzure"
