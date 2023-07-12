@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"strings"
 	"testing"
 
 	"github.com/minio/kes-go"
@@ -41,7 +40,7 @@ var createTests = []struct {
 }
 
 func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
-	defer clean(ctx, store, t, seed)
+	defer clean(ctx, store, t)
 	for i, test := range createTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
@@ -80,7 +79,7 @@ var setTests = []struct {
 }
 
 func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
-	defer clean(ctx, store, t, seed)
+	defer clean(ctx, store, t)
 	for i, test := range setTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
@@ -126,7 +125,7 @@ var getTests = []struct {
 }
 
 func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
-	defer clean(ctx, store, t, seed)
+	defer clean(ctx, store, t)
 	for i, test := range getTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
@@ -168,7 +167,7 @@ func testingContext(t *testing.T) (context.Context, context.CancelFunc) {
 	return context.WithDeadline(osCtx, d)
 }
 
-func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
 	iter, err := store.List(ctx)
 	if err != nil {
 		t.Fatalf("Cleanup: failed to list keys: %v", err)
@@ -180,10 +179,8 @@ func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T, se
 		names = append(names, next)
 	}
 	for _, name := range names {
-		if strings.HasPrefix(name, fmt.Sprintf("edge-test-%s", seed)) {
-			if err = store.Delete(ctx, name); err != nil && !errors.Is(err, kes.ErrKeyNotFound) {
-				t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
-			}
+		if err = store.Delete(ctx, name); err != nil && !errors.Is(err, kes.ErrKeyNotFound) {
+			t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
 		}
 	}
 }
