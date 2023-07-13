@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go v1.34.0
 	github.com/charmbracelet/lipgloss v0.6.0
 	github.com/fatih/color v1.13.0
+	github.com/gophercloud/gophercloud v1.5.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/minio/kes-go v0.1.0
 	github.com/minio/selfupdate v0.4.0

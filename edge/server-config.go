@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
@@ -17,6 +18,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
 	kesstore "github.com/minio/kes/internal/keystore/kes"
+	"github.com/minio/kes/internal/keystore/openstack"
 	"github.com/minio/kes/internal/keystore/vault"
 	"github.com/minio/kes/kv"
 )
@@ -636,4 +638,57 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, [
 	default:
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: no authentication method specified")
 	}
+}
+
+// OpenStackBarbicanKeyStore is a structure containing the
+// configuration for OpenStack Barbican
+type OpenStackBarbicanKeyStore struct {
+	// OpenStack Auth Url
+	AuthUrl string
+
+	// The Domain of the user.
+	UserDomain string
+
+	// The user name. If you do not provide a user name and password, you must provide a token.
+	Username string
+
+	// The password for the user.
+	Password string
+
+	// The project name. Both the Project ID and Project Name are optional.
+	ProjectName string
+
+	// URL of the Barbican instance to connect to
+	BarbicanUrl string
+
+	// ServiceName [optional] is the service name for the client (e.g., "nova") as it
+	// appears in the service catalog. Services can have the same Type but a
+	// different Name, which is why both Type and Name are sometimes needed.
+	ServiceName string
+
+	// Region [required] is the geographic region in which the endpoint resides,
+	// generally specifying which datacenter should house your resources.
+	// Required only for services that span multiple regions.
+	Region string
+
+	_ [0]int
+}
+
+// Connect returns a kv.Store that stores key-value pairs on OpenStack Barbican.
+func (s *OpenStackBarbicanKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+	creds := gophercloud.AuthOptions{
+		IdentityEndpoint: s.AuthUrl,
+		Username:         s.Username,
+		Password:         s.Password,
+		DomainID:         s.UserDomain,
+		TenantName:       s.ProjectName,
+	}
+
+	endpointOpts := gophercloud.EndpointOpts{
+		Type:   "key-manager",
+		Name:   s.ServiceName,
+		Region: s.Region,
+	}
+
+	return openstack.Connect(ctx, creds, endpointOpts)
 }

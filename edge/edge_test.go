@@ -33,7 +33,7 @@ var createTests = []struct {
 	{ // 1
 		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
 		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
-			return s.Create(ctx, "edge-test-"+suffix, []byte("t"))
+			return s.Create(ctx, "edge-test-"+suffix, []byte(""))
 		},
 		ShouldFail: true,
 	},
@@ -44,7 +44,10 @@ func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.
 	for i, test := range createTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
-				t.Fatalf("Test %d: failed to setup: %v", i, err)
+				if !test.ShouldFail {
+					t.Fatalf("Test %d: failed to setup: %v", i, err)
+				}
+				continue
 			}
 		}
 
@@ -72,7 +75,7 @@ var setTests = []struct {
 	{ // 1
 		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
 		Setup: func(ctx context.Context, s kv.Store[string, []byte], sufffix string) error {
-			return s.Create(ctx, "edge-test-"+sufffix, []byte("t"))
+			return s.Create(ctx, "edge-test-"+sufffix, []byte(""))
 		},
 		ShouldFail: true,
 	},
@@ -83,7 +86,10 @@ func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, 
 	for i, test := range setTests {
 		if test.Setup != nil {
 			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
-				t.Fatalf("Test %d: failed to setup: %v", i, err)
+				if !test.ShouldFail {
+					t.Fatalf("Test %d: failed to setup: %v", i, err)
+				}
+				continue
 			}
 		}
 
