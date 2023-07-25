@@ -194,6 +194,9 @@ func description(config *edge.ServerConfig) (kind string, endpoint []string, err
 	case *edge.AzureKeyVaultKeyStore:
 		kind = "Azure KeyVault"
 		endpoint = []string{kms.Endpoint}
+	case *edge.EntrustKeyControlKeyStore:
+		kind = "Entrust KeyControl"
+		endpoint = []string{kms.Endpoint}
 	default:
 		return "", nil, fmt.Errorf("unknown KMS backend %T", kms)
 	}

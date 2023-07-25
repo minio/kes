@@ -355,3 +355,18 @@ keystore:
       managed_identity:
         client_id: ""      # The Azure managed identity of the client - i.e. a UUID.
 
+  entrust:
+    # The Entrust KeyControl configuration.
+    # For more information take a look at:
+    # https://www.entrust.com/digital-security/key-management/keycontrol
+    keycontrol:
+      endpoint: ""     # The KeyControl endpoint - e.g. https://keycontrol.my-org.com
+      vault_id: ""     # The Vault ID            - e.g. e30497c1-bff7-4e81-beb7-fb35c4b7410c
+      box_id:   ""     # The Box name or ID      - e.g. tenant-1
+      # The KeyControl access credentials
+      credentials:
+        username: ""   # The username able to access the Vault and Box.
+        password: ""   # The user password
+      # The KeyControl client TLS configuration
+      tls:
+        ca: ""         # Path to one or multiple PEM-encoded CA certificates for verifying the KeyControl TLS certificate.

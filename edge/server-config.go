@@ -6,12 +6,16 @@ package edge
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"time"
 
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
+	"github.com/minio/kes/internal/keystore/entrust"
 	"github.com/minio/kes/internal/keystore/fortanix"
 	"github.com/minio/kes/internal/keystore/fs"
 	"github.com/minio/kes/internal/keystore/gcp"
@@ -636,4 +640,53 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, [
 	default:
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: no authentication method specified")
 	}
+}
+
+// EntrustKeyControlKeyStore is a structure containing the
+// configuration for Entrust KeyControl.
+type EntrustKeyControlKeyStore struct {
+	// Endpoint is the Entrust KeyControl endpoint.
+	Endpoint string
+
+	// VaultID is the KeyControl Vault UUID.
+	VaultID string
+
+	// BoxID is the KeyControl box ID or name within the Vault.
+	BoxID string
+
+	// Username is the username used for authentication.
+	Username string
+
+	// Password is the password associated with the provided username.
+	Password string
+
+	// CAPath is an optional path to the root
+	// CA certificate(s) for verifying the TLS
+	// certificate of the KeyControl server.
+	//
+	// If empty, the OS default root CA set is
+	// used.
+	CAPath string
+}
+
+// Connect returns a kv.Store that stores key-value pairs on Entrust KeyControl.
+func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+	var rootCAs *x509.CertPool
+	if s.CAPath != "" {
+		ca, err := https.CertPoolFromFile(s.CAPath)
+		if err != nil {
+			return nil, err
+		}
+		rootCAs = ca
+	}
+	return entrust.Login(ctx, &entrust.Config{
+		Endpoint: s.Endpoint,
+		VaultID:  s.VaultID,
+		BoxID:    s.BoxID,
+		Username: s.Username,
+		Password: s.Password,
+		TLS: &tls.Config{
+			RootCAs: rootCAs,
+		},
+	})
 }

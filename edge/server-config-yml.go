@@ -183,6 +183,20 @@ type yml struct {
 				} `yaml:"managed_identity"`
 			} `yaml:"keyvault"`
 		} `yaml:"azure"`
+		Entrust *struct {
+			KeyControl *struct {
+				Endpoint env[string] `yaml:"endpoint"`
+				VaultID  env[string] `yaml:"vault_id"`
+				BoxID    env[string] `yaml:"box_id"`
+				Login    *struct {
+					Username env[string] `yaml:"username"`
+					Password env[string] `yaml:"password"`
+				} `yaml:"credentials"`
+				TLS struct {
+					CAPath env[string] `yaml:"ca"`
+				} `yaml:"tls"`
+			} `yaml:"keycontrol"`
+		} `yaml:"entrust"`
 	} `yaml:"keystore"`
 }
 
@@ -595,6 +609,34 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 			s.ManagedIdentityClientID = y.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value
 		}
 		keystore = s
+	}
+	if y.KeyStore.Entrust != nil && y.KeyStore.Entrust.KeyControl != nil {
+		if keystore != nil {
+			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+		}
+		if y.KeyStore.Entrust.KeyControl.Endpoint.Value == "" {
+			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no endpoint specified")
+		}
+		if y.KeyStore.Entrust.KeyControl.VaultID.Value == "" {
+			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no vault ID specified")
+		}
+		if y.KeyStore.Entrust.KeyControl.BoxID.Value == "" {
+			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no box ID specified")
+		}
+		if y.KeyStore.Entrust.KeyControl.Login.Username.Value == "" {
+			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no username specified")
+		}
+		if y.KeyStore.Entrust.KeyControl.Login.Password.Value == "" {
+			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no password specified")
+		}
+		keystore = &EntrustKeyControlKeyStore{
+			Endpoint: y.KeyStore.Entrust.KeyControl.Endpoint.Value,
+			VaultID:  y.KeyStore.Entrust.KeyControl.VaultID.Value,
+			BoxID:    y.KeyStore.Entrust.KeyControl.BoxID.Value,
+			Username: y.KeyStore.Entrust.KeyControl.Login.Username.Value,
+			Password: y.KeyStore.Entrust.KeyControl.Login.Password.Value,
+			CAPath:   y.KeyStore.Entrust.KeyControl.TLS.CAPath.Value,
+		}
 	}
 
 	if keystore == nil {

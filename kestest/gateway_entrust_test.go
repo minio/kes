@@ -13,14 +13,13 @@ import (
 	"github.com/minio/kes/edge"
 )
 
-var awsConfigFile = flag.String("aws.config", "", "Path to a KES config file with AWS SecretsManager config")
+var entrustConfigFile = flag.String("entrust.config", "", "Path to a KES config file with Entrust KeyControl config")
 
-func TestGatewayAWS(t *testing.T) {
-	if *awsConfigFile == "" {
-		t.Skip("AWS tests disabled. Use -aws.config=<config file with AWS SecretManager config> to enable them")
+func TestGatewayEntrust(t *testing.T) {
+	if *entrustConfigFile == "" {
+		t.Skip("KeyControl tests disabled. Use -entrust.config=<config file with Entrust KeyControl config> to enable them")
 	}
-
-	file, err := os.Open(*awsConfigFile)
+	file, err := os.Open(*entrustConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
