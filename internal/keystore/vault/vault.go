@@ -149,10 +149,6 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	}
 	client.ClearNamespace()
 
-	// First, we try to fetch the Vault health information.
-	// Only if this fails we try to dial Vault directly over
-	// a TCP connection. See: https://github.com/minio/kes-go/issues/230
-
 	start := time.Now()
 	health, err := client.Sys().HealthWithContext(ctx)
 	if err == nil {
@@ -168,15 +164,7 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
 		return kv.State{}, &kv.Unreachable{Err: err}
 	}
-
-	start = time.Now()
-	req := s.client.Client.NewRequest(http.MethodGet, "")
-	if _, err = s.client.Client.RawRequestWithContext(ctx, req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
-	}
-	return kv.State{
-		Latency: time.Since(start),
-	}, nil
+	return kv.State{}, err
 }
 
 // Create creates the given key-value pair at Vault if and only
