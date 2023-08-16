@@ -30,7 +30,7 @@ type client struct {
 // reflect the current status of the vault server - because it
 // may have changed in the meantime.
 //
-// If the vault health status hasn't been queried every then
+// If the vault health status hasn't been queried ever then
 // Sealed returns false.
 func (c *client) Sealed() bool { return atomic.LoadUint32(&c.sealed) == 1 }
 
@@ -48,8 +48,8 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 		delay = 10 * time.Second
 	}
 
-	timer := time.NewTimer(0)
-	defer timer.Stop()
+	ticker := time.NewTicker(delay)
+	defer ticker.Stop()
 
 	for {
 		status, err := c.Sys().Health()
@@ -61,13 +61,10 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 			}
 		}
 
-		// Add the delay to wait before next health check.
-		timer.Reset(delay)
-
 		select {
 		case <-ctx.Done():
 			return
-		case <-timer.C:
+		case <-ticker.C:
 		}
 	}
 }
@@ -171,8 +168,8 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 		retry = 5 * time.Second
 	}
 
-	timer := time.NewTimer(0)
-	defer timer.Stop()
+	ticker := time.NewTicker(ttl)
+	defer ticker.Stop()
 
 	for {
 		// If Vault is sealed we have to wait
@@ -181,14 +178,13 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 		// Users should start client.CheckStatus() in
 		// another go routine to unblock this for-loop
 		// once vault becomes unsealed again.
-		for c.Sealed() {
-			timer.Reset(time.Second)
-
+		if c.Sealed() {
 			select {
 			case <-ctx.Done():
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
+			continue
 		}
 
 		// If the TTL is 0 we cannot renew the token.
@@ -196,50 +192,45 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 		// get a new token. We repeat that until we
 		// successfully authenticate and got a token.
 		if ttl == 0 {
-			var (
-				token string
-				err   error
-			)
-			token, ttl, err = authenticate()
-			if err != nil {
-				ttl = 0 // On error, set the TTL again to 0 to re-auth. again.
-				timer.Reset(retry)
+			token, newTTL, err := authenticate()
+			if err != nil || newTTL == 0 {
+				retryTimer := time.NewTimer(retry)
 				select {
 				case <-ctx.Done():
 					return
-				case <-timer.C:
+				case <-retryTimer.C:
 				}
-				continue
+			} else {
+				ttl = newTTL
+				c.SetToken(token) // SetToken is safe to call from different go routines
+				ticker.Reset(ttl)
 			}
-			c.SetToken(token) // SetToken is safe to call from different go routines
+			continue
 		}
 
 		// Now the client has a token with a non-zero TTL
 		// such tht we can renew it. We repeat that until
 		// the renewable process fails once. In this case
 		// we try to re-authenticate again.
-		for {
-			timer.Reset(ttl / 2)
-
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-			}
-			secret, err := c.Auth().Token().RenewSelf(int(ttl.Seconds()))
-			if err != nil || secret == nil {
-				break
-			}
-			if ok, err := secret.TokenIsRenewable(); !ok || err != nil {
-				break
-			}
-			ttl, err := secret.TokenTTL()
-			if err != nil || ttl == 0 {
-				break
-			}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
-		// If we exit the for-loop above set the TTL to 0 to trigger
-		// a re-authentication.
-		ttl = 0
+
+		secret, err := c.Auth().Token().RenewSelf(int(ttl.Seconds()))
+		if err != nil || secret == nil {
+			ttl = 0
+			continue
+		}
+		if ok, err := secret.TokenIsRenewable(); !ok || err != nil {
+			ttl = 0
+			continue
+		}
+		ttl, err = secret.TokenTTL()
+		if err != nil || ttl == 0 {
+			ttl = 0
+			continue
+		}
 	}
 }

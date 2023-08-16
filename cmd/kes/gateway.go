@@ -12,7 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -142,6 +142,7 @@ func startGateway(cliConfig gatewayConfig) {
 		for {
 			select {
 			case <-ctx.Done():
+				return
 			case <-ticker.C:
 				tlsConfig, err := newTLSConfig(config, cliConfig.TLSAuth)
 				if err != nil {
@@ -526,12 +527,12 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 	if config.Log.Error {
 		rConfig.ErrorLog = log.New(os.Stderr, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
 	} else {
-		rConfig.ErrorLog = log.New(ioutil.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+		rConfig.ErrorLog = log.New(io.Discard, "Error: ", log.Ldate|log.Ltime|log.Lmsgprefix)
 	}
 	if config.Log.Audit {
 		rConfig.AuditLog = log.New(os.Stdout, "", 0)
 	} else {
-		rConfig.AuditLog = log.New(ioutil.Discard, "", 0)
+		rConfig.AuditLog = log.New(io.Discard, "", 0)
 	}
 
 	if len(config.TLS.Proxies) != 0 {
