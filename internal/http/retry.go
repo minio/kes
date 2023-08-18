@@ -186,9 +186,6 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-
 	resp, err := r.Client.Do(req)
 	for N > 0 && (isTemporary(err) || (resp != nil && resp.StatusCode >= http.StatusInternalServerError)) {
 		N--
@@ -202,9 +199,10 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 			delay = Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond
 		}
 
-		timer.Reset(delay)
+		timer := time.NewTimer(delay)
 		select {
 		case <-req.Context().Done():
+			timer.Stop()
 			return nil, &url.Error{
 				Op:  req.Method,
 				URL: req.URL.String(),

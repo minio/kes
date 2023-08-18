@@ -233,7 +233,7 @@ func (c *Cache) Get(ctx context.Context, name string) (key.Key, error) {
 
 // gc executes f periodically until the ctx.Done() channel returns.
 func (c *Cache) gc(ctx context.Context, interval time.Duration, f func()) {
-	if interval == 0 {
+	if interval <= 0 {
 		return
 	}
 
