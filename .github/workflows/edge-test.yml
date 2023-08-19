@@ -22,7 +22,6 @@ jobs:
       env:
         GO111MODULE: on
         GOPROXY: "https://proxy.golang.org,direct"
-        GOPATH: ${{ github.workspace }}
       run: |
          go test ./edge -v -aws.config=/etc/kes/config-aws.yml -run="TestAWS"
   azure-edge-test:
@@ -41,6 +40,5 @@ jobs:
       env:
         GO111MODULE: on
         GOPROXY: "https://proxy.golang.org,direct"
-        GOPATH: ${{ github.workspace }}
       run: |
          go test ./edge -v -azure.config=/etc/kes/config-azure.yml -run="TestAzure"
