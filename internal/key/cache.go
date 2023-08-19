@@ -212,7 +212,7 @@ func (c *Cache) insertOrRefresh(cache map[string]*cacheEntry, name string, key K
 //
 // If t == 0, gc does nothing.
 func (c *Cache) gc(t time.Duration) {
-	if t == 0 {
+	if t <= 0 {
 		return
 	}
 	go func() {

@@ -175,15 +175,7 @@ func (s *Conn) Status(ctx context.Context) (kms.State, error) {
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
 		return kms.State{}, &kms.Unreachable{Err: err}
 	}
-
-	start = time.Now()
-	req := s.client.Client.NewRequest(http.MethodGet, "")
-	if _, err = s.client.Client.RawRequestWithContext(ctx, req); err != nil {
-		return kms.State{}, &kms.Unreachable{Err: err}
-	}
-	return kms.State{
-		Latency: time.Since(start),
-	}, nil
+	return kms.State{}, err
 }
 
 // Create creates the given key-value pair at Vault if and only

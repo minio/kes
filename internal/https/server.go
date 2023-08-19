@@ -113,7 +113,7 @@ func (s *Server) Start(ctx context.Context) error {
 		GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
 			s.lock.RLock()
 			defer s.lock.RUnlock()
-			return s.tlsConfig, nil
+			return s.tlsConfig.Clone(), nil
 		},
 	})
 	if err != nil {
