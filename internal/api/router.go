@@ -6,6 +6,7 @@ package api
 
 import (
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -145,6 +146,13 @@ func NewEdgeRouter(config *EdgeRouterConfig) *Router {
 	for _, a := range r.api {
 		r.handler.Handle(a.Path, proxy(config.Proxy, a))
 	}
+
+	r.handler.HandleFunc("/v1/debug/pprof/", pprof.Index)
+	r.handler.HandleFunc("/v1/debug/pprof/cmdline", pprof.Cmdline)
+	r.handler.HandleFunc("/v1/debug/pprof/profile", pprof.Profile)
+	r.handler.HandleFunc("/v1/debug/pprof/symbol", pprof.Symbol)
+	r.handler.HandleFunc("/v1/debug/pprof/trace", pprof.Trace)
+
 	r.handler.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
 		Fail(w, kes.NewError(http.StatusNotImplemented, "not implemented"))
