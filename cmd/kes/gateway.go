@@ -83,6 +83,7 @@ func startGateway(cliConfig gatewayConfig) {
 		Addr:      config.Addr,
 		Handler:   api.NewEdgeRouter(gwConfig),
 		TLSConfig: tlsConfig,
+		Cancel:    gwConfig.Keys.Stop,
 	})
 	go func(ctx context.Context) {
 		if runtime.GOOS == "windows" {
