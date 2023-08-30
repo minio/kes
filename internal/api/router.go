@@ -147,11 +147,11 @@ func NewEdgeRouter(config *EdgeRouterConfig) *Router {
 		r.handler.Handle(a.Path, proxy(config.Proxy, a))
 	}
 
-	r.handler.HandleFunc("/v1/debug/pprof/", pprof.Index)
-	r.handler.HandleFunc("/v1/debug/pprof/cmdline", pprof.Cmdline)
-	r.handler.HandleFunc("/v1/debug/pprof/profile", pprof.Profile)
-	r.handler.HandleFunc("/v1/debug/pprof/symbol", pprof.Symbol)
-	r.handler.HandleFunc("/v1/debug/pprof/trace", pprof.Trace)
+	r.handler.HandleFunc("/debug/pprof/", pprof.Index)
+	r.handler.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.handler.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.handler.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.handler.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	r.handler.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
