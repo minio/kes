@@ -14,8 +14,10 @@ package vault
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -89,8 +91,37 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		}
 	}
 
-	config := vaultapi.DefaultConfig()
-	config.Address = c.Endpoint
+	// We use a custom Vault Config instead of vaultapi.DefaultConfig()
+	// since the default sets MaxIdleConnsPerHost and uses http2.ConfigureTransport.
+	// This may lead to not closing / leaking TCP connections resulting in
+	// a small but constant memory increase until running OOM.
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	config := &vaultapi.Config{
+		Address: c.Endpoint,
+		HttpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				DialContext:           dialer.DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          100,
+				MaxIdleConnsPerHost:   20,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+				TLSClientConfig: &tls.Config{ // Provide a non-nil TLS config. Otherwise, ConfigureTLS will do nothing
+					MinVersion: tls.VersionTLS12,
+				},
+			},
+		},
+		Timeout:      time.Second * 60,
+		MinRetryWait: time.Millisecond * 1000,
+		MaxRetryWait: time.Millisecond * 1500,
+		MaxRetries:   2,
+	}
 	config.ConfigureTLS(tlsConfig)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
