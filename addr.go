@@ -68,11 +68,11 @@ func (a Addr) Equal(addr Addr) bool {
 	return false
 }
 
-func (n Addr) isLoopback() bool {
-	if n.host == "localhost" {
+func (a Addr) isLoopback() bool {
+	if a.host == "localhost" {
 		return true
 	}
 
-	ip := net.ParseIP(n.host)
+	ip := net.ParseIP(a.host)
 	return ip != nil && ip.IsLoopback()
 }

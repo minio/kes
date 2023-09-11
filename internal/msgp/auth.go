@@ -8,6 +8,7 @@ import "time"
 
 //go:generate msgp -io=false
 
+// Identity is the message pack representation of an auth.Identity.
 type Identity struct {
 	Policy    string        `msg:"0"`
 	IsAdmin   bool          `msg:"1"`
@@ -18,6 +19,7 @@ type Identity struct {
 	CreatedBy string        `msg:"6"`
 }
 
+// Policy is the message pack representation of an auth.Policy.
 type Policy struct {
 	Allow     map[string]struct{} `msg:"0"`
 	Deny      map[string]struct{} `msg:"1"`

@@ -16,6 +16,9 @@ import (
 	"github.com/minio/kes-go"
 )
 
+// API paths exposed by KES clusters and KES edge servers.
+// Some APIs are only exposed by KES clusters, not
+// edge servers.
 const (
 	PathVersion  = "/version"
 	PathStatus   = "/v1/status"
@@ -23,10 +26,10 @@ const (
 	PathMetrics  = "/v1/metrics"
 	PathListAPIs = "/v1/api"
 
-	PathEnclaveCreate   = "/v1/enclave/create/"
-	PathEnclaveDescribe = "/v1/enclave/describe/"
-	PathEnclaveDelete   = "/v1/enclave/delete/"
-	PathEnclaveList     = "/v1/enclave/list/"
+	PathEnclaveCreate   = "/v1/enclave/create/"   // cluster only
+	PathEnclaveDescribe = "/v1/enclave/describe/" // cluster only
+	PathEnclaveDelete   = "/v1/enclave/delete/"   // cluster only
+	PathEnclaveList     = "/v1/enclave/list/"     // cluster only
 
 	PathSecretKeyCreate   = "/v1/key/create/"
 	PathSecretKeyImport   = "/v1/key/import/"
@@ -37,37 +40,37 @@ const (
 	PathSecretKeyEncrypt  = "/v1/key/encrypt/"
 	PathSecretKeyDecrypt  = "/v1/key/decrypt/"
 
-	PathSecretCreate   = "/v1/secret/create/"
-	PathSecretDescribe = "/v1/secret/describe/"
-	PathSecretRead     = "/v1/secret/read/"
-	PathSecretDelete   = "/v1/secret/delete/"
-	PathSecretList     = "/v1/secret/list"
+	PathSecretCreate   = "/v1/secret/create/"   // cluster only
+	PathSecretDescribe = "/v1/secret/describe/" // cluster only
+	PathSecretRead     = "/v1/secret/read/"     // cluster only
+	PathSecretDelete   = "/v1/secret/delete/"   // cluster only
+	PathSecretList     = "/v1/secret/list"      // cluster only
 
-	PathPolicyCreate   = "/v1/policy/create/"
-	PathPolicyAssign   = "/v1/policy/assign/"
+	PathPolicyCreate   = "/v1/policy/create/" // cluster only
+	PathPolicyAssign   = "/v1/policy/assign/" // cluster only
 	PathPolicyDescribe = "/v1/policy/describe/"
 	PathPolicyRead     = "/v1/policy/read/"
-	PathPolicyDelete   = "/v1/policy/delete/"
+	PathPolicyDelete   = "/v1/policy/delete/" // cluster only
 	PathPolicyList     = "/v1/policy/list/"
 
-	PathIdentityCreate       = "/v1/identity/create/"
+	PathIdentityCreate       = "/v1/identity/create/" // cluster only
 	PathIdentityDescribe     = "/v1/identity/describe/"
 	PathIdentityList         = "/v1/identity/list/"
-	PathIdentityDelete       = "/v1/identity/delete/"
+	PathIdentityDelete       = "/v1/identity/delete/" // cluster only
 	PathIdentitySelfDescribe = "/v1/identity/self/describe"
 
 	PathLogError = "/v1/log/error"
 	PathLogAudit = "/v1/log/audit"
 
-	PathClusterExpand   = "/v1/cluster/expand"
-	PathClusterDescribe = "/v1/cluster/describe"
-	PathClusterShrink   = "/v1/cluster/shrink"
-	PathClusterBackup   = "/v1/cluster/backup"
-	PathClusterRestore  = "/v1/cluster/restore"
+	PathClusterExpand   = "/v1/cluster/expand"   // cluster only
+	PathClusterDescribe = "/v1/cluster/describe" // cluster only
+	PathClusterShrink   = "/v1/cluster/shrink"   // cluster only
+	PathClusterBackup   = "/v1/cluster/backup"   // cluster only
+	PathClusterRestore  = "/v1/cluster/restore"  // cluster only
 
-	PathClusterRPCReplicate = "/v1/cluster/rpc/replicate"
-	PathClusterRPCForward   = "/v1/cluster/rpc/forward"
-	PathClusterRPCVote      = "/v1/cluster/rpc/vote"
+	PathClusterRPCReplicate = "/v1/cluster/rpc/replicate" // cluster only
+	PathClusterRPCForward   = "/v1/cluster/rpc/forward"   // cluster only
+	PathClusterRPCVote      = "/v1/cluster/rpc/vote"      // cluster only
 )
 
 func Failf(w http.ResponseWriter, code int, format string, a ...any) {

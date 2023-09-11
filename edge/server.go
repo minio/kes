@@ -54,21 +54,21 @@ func (s *Server) State() State {
 	}
 }
 
-func (n *Server) Update(store KeyStore, config *Config) error {
-	if n.shutdown.Load() {
+func (s *Server) Update(store KeyStore, config *Config) error {
+	if s.shutdown.Load() {
 		return kes.ErrStopped
 	}
-	if !n.started.Load() {
+	if !s.started.Load() {
 		return errors.New("kes: server not started")
 	}
-	return n.update(store, config)
+	return s.update(store, config)
 }
 
-func (n *Server) Start(ctx context.Context, store KeyStore, config *Config) error {
-	if n.shutdown.Load() {
+func (s *Server) Start(ctx context.Context, store KeyStore, config *Config) error {
+	if s.shutdown.Load() {
 		return kes.ErrStopped
 	}
-	if !n.starting.CompareAndSwap(false, true) {
+	if !s.starting.CompareAndSwap(false, true) {
 		return errors.New("edge: server already started")
 	}
 
@@ -84,7 +84,7 @@ func (n *Server) Start(ctx context.Context, store KeyStore, config *Config) erro
 
 		NextProtos: []string{"h2", "http/1.1"}, // Prefer HTTP/2 but also support HTTP/1.1
 		GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-			return n.state.Load().TLS, nil
+			return s.state.Load().TLS, nil
 		},
 	})
 	if err != nil {
@@ -92,20 +92,20 @@ func (n *Server) Start(ctx context.Context, store KeyStore, config *Config) erro
 	}
 	defer listener.Close()
 
-	n.addr, err = kes.ParseAddr(listener.Addr().String())
+	s.addr, err = kes.ParseAddr(listener.Addr().String())
 	if err != nil {
 		return err
 	}
-	n.ctx, n.stop = context.WithCancelCause(ctx)
-	n.startTime = time.Now()
-	n.metrics = metric.New()
-	n.signals = make(chan kes.Signal, 1)
-	if err := n.update(store, config); err != nil {
+	s.ctx, s.stop = context.WithCancelCause(ctx)
+	s.startTime = time.Now()
+	s.metrics = metric.New()
+	s.signals = make(chan kes.Signal, 1)
+	if err := s.update(store, config); err != nil {
 		return err
 	}
 
 	srv := &http.Server{
-		Handler:           &n.state,
+		Handler:           &s.state,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      0 * time.Second, // explicitly set no write timeout - we use http.ResponseController
 		IdleTimeout:       90 * time.Second,
@@ -115,19 +115,19 @@ func (n *Server) Start(ctx context.Context, store KeyStore, config *Config) erro
 	}
 	srvCh := make(chan error, 1)
 	go func() { srvCh <- srv.Serve(listener) }()
-	go n.notifyOnSignal()
+	go s.notifyOnSignal()
 
-	n.started.Store(true)
-	trySend(n.signals, kes.SigStart)
+	s.started.Store(true)
+	trySend(s.signals, kes.SigStart)
 
 	select {
 	case err := <-srvCh:
 		return err
 	case <-ctx.Done():
-		n.shutdown.Store(true)
-		trySend(n.signals, kes.SigStop)
+		s.shutdown.Store(true)
+		trySend(s.signals, kes.SigStop)
 
-		if state := n.state.Load(); state != nil && state.Keys != nil {
+		if state := s.state.Load(); state != nil && state.Keys != nil {
 			state.Keys.Stop()
 		}
 

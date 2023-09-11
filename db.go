@@ -384,7 +384,7 @@ func deleteIdentity(b *bolt.Bucket, enclaveKey crypto.SecretKey, enclave string,
 	if err = msgp.Unmarshal(plaintext, &id); err != nil {
 		return err
 	}
-	for child := range id.Children.Values() {
+	for child := range id.Children.Elements() {
 		if err = deleteIdentity(b, enclaveKey, enclave, child); err != nil {
 			return err
 		}

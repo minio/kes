@@ -2,90 +2,115 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
+// Package hashset provides the generic container type Set.
 package hashset
 
-func NewSet[T comparable](n int) Set[T] {
+import "maps"
+
+// New returns a new Set with an initial capacity of n.
+//
+// In certain cases, it may be more performant to
+// create a Set with an initial capacity than creating
+// an empty Set.
+func New[T comparable](n int) Set[T] {
 	return Set[T]{
-		values: make(map[T]struct{}, n),
+		elems: make(map[T]struct{}, n),
 	}
 }
 
-func FromSlice[T comparable](values ...T) Set[T] {
-	set := NewSet[T](len(values))
-	for _, value := range values {
+// FromSlice returns a new Set from a slice of
+// elements. Duplicate elements in the slice
+// are added to the Set only once.
+func FromSlice[T comparable](elems ...T) Set[T] {
+	set := New[T](len(elems))
+	for _, value := range elems {
 		set.Set(value)
 	}
 	return set
 }
 
+// A Set is a container type that contains a set
+// of comparable elements. A Set can contain one
+// specific element at most once.
 type Set[T comparable] struct {
-	values map[T]struct{}
+	elems map[T]struct{}
 }
 
-func (s Set[_]) Len() int { return len(s.values) }
+// Len returns the number of elements in the Set.
+func (s Set[_]) Len() int { return len(s.elems) }
 
-func (s Set[T]) Contains(value T) bool {
-	_, ok := s.values[value]
+// Contains reports whether the Set contains the element.
+func (s Set[T]) Contains(elem T) bool {
+	_, ok := s.elems[elem]
 	return ok
 }
 
-func (s *Set[T]) Set(value T) {
-	if s.values == nil {
-		s.values = make(map[T]struct{})
+// Set inserts the element into the Set.
+func (s *Set[T]) Set(elem T) {
+	if s.elems == nil {
+		s.elems = make(map[T]struct{})
 	}
-	s.values[value] = struct{}{}
+	s.elems[elem] = struct{}{}
 }
 
-func (s *Set[T]) Add(value T) bool {
-	if _, ok := s.values[value]; ok {
+// Add inserts the given element into the Set if, and
+// only if, it isn't part of the Set already. It reports
+// whether the element got added.
+func (s *Set[T]) Add(elem T) bool {
+	if _, ok := s.elems[elem]; ok {
 		return false
 	}
 
-	s.Set(value)
+	s.Set(elem)
 	return true
 }
 
-func (s Set[T]) Delete(value T) {
-	if s.values != nil {
-		delete(s.values, value)
+// Delete removes the element from the Set, if present.
+func (s Set[T]) Delete(elem T) {
+	if s.elems != nil {
+		delete(s.elems, elem)
 	}
 }
 
+// Clone returns a deep copy of the Set.
 func (s Set[T]) Clone() Set[T] {
-	if s.values == nil {
+	if s.elems == nil {
 		return Set[T]{}
 	}
-	clone := make(map[T]struct{}, len(s.values))
-	for v := range s.values {
-		clone[v] = struct{}{}
-	}
-	return Set[T]{values: clone}
+
+	return Set[T]{elems: maps.Clone(s.elems)}
 }
 
-func (s Set[T]) DeleteAll() {
-	if s.values == nil {
+// Clear removes all elements from the Set.
+func (s Set[T]) Clear() {
+	if len(s.elems) == 0 {
 		return
 	}
-	for v := range s.values {
-		delete(s.values, v)
+
+	for v := range s.elems {
+		delete(s.elems, v)
 	}
 }
 
-func (s Set[T]) Values() map[T]struct{} {
-	if s.values == nil {
+// Elements returns the underlying map containing
+// the Set's elements. Adding or removing elements
+// also modifies the Set.
+func (s Set[T]) Elements() map[T]struct{} {
+	if s.elems == nil {
 		return map[T]struct{}{}
 	}
-	return s.values
+	return s.elems
 }
 
+// Slice returns a slice of all elements within the Set.
 func (s Set[T]) Slice() []T {
-	if len(s.values) == 0 {
+	if len(s.elems) == 0 {
 		return []T{}
 	}
 
-	values := make([]T, 0, len(s.values))
-	for value := range s.values {
-		values = append(values, value)
+	elems := make([]T, 0, len(s.elems))
+	for elem := range s.elems {
+		elems = append(elems, elem)
 	}
-	return values
+	return elems
 }

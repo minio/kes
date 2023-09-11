@@ -55,7 +55,7 @@ type Identity struct {
 
 func (i *Identity) MarshalMsg() (msgp.Identity, error) {
 	children := make([]string, 0, i.Children.Len())
-	for child := range i.Children.Values() {
+	for child := range i.Children.Elements() {
 		children = append(children, child.String())
 	}
 	return msgp.Identity{
@@ -70,7 +70,7 @@ func (i *Identity) MarshalMsg() (msgp.Identity, error) {
 }
 
 func (i *Identity) UnmarshalMsg(v *msgp.Identity) error {
-	children := hashset.NewSet[kes.Identity](len(v.Children))
+	children := hashset.New[kes.Identity](len(v.Children))
 	for _, child := range v.Children {
 		children.Add(kes.Identity(child))
 	}
