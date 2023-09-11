@@ -13,7 +13,6 @@ import (
 
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/edge/kv"
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/auth"
 	"github.com/minio/kes/internal/cpu"
@@ -293,7 +292,7 @@ func (s *serverState) handleReady(w http.ResponseWriter, r *http.Request, v api.
 
 	_, err := s.Keys.Status(r.Context())
 	if err != nil {
-		if _, ok := kv.IsUnreachable(err); ok {
+		if _, ok := IsUnreachable(err); ok {
 			api.Failf(w, http.StatusGatewayTimeout, err.Error())
 		} else {
 			api.Failf(w, http.StatusBadGateway, err.Error())
@@ -327,7 +326,7 @@ func (s *serverState) handleStatus(w http.ResponseWriter, r *http.Request, v api
 	state, err := s.Keys.Status(r.Context())
 	if err != nil {
 		response.KeyStoreUnavailable = true
-		_, response.KeyStoreUnreachable = kv.IsUnreachable(err)
+		_, response.KeyStoreUnreachable = IsUnreachable(err)
 	} else {
 		latency := state.Latency.Round(time.Millisecond)
 		if latency == 0 { // Make sure we actually send a latency even if the key store respond time is < 1ms.

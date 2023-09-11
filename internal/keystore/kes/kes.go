@@ -13,7 +13,6 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 	"github.com/minio/kes/internal/mtls"
 )
 
@@ -103,10 +102,10 @@ func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	latency := time.Since(start)
 
 	if connErr, ok := kes.IsConnError(err); ok {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: connErr}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: connErr}
 	}
 	if err != nil {
-		return edge.KeyStoreState{}, &kv.Unavailable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unavailable{Err: err}
 	}
 	return edge.KeyStoreState{
 		Latency: latency,

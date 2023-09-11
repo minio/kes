@@ -18,7 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 )
 
 // Credentials represents static AWS credentials:
@@ -113,7 +112,7 @@ func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: err}
 	}
 	return edge.KeyStoreState{
 		Latency: time.Since(start),

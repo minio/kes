@@ -138,14 +138,13 @@ func main() {
 
 		bold := tui.NewStyle().Bold(true)
 		var buf cli.Buffer
-		buf.Sprintln("Your soft HSM key:").Sprintln()
+		buf.Sprintln("Your software HSM key:").Sprintln()
 		buf.Styleln(bold, "  ", hsm.String()).Sprintln()
 		buf.Sprintln("This is the only time it is shown. Keep it secret and secure!").Sprintln()
-		buf.Sprintln("The HSM protects your KES cluster as unseal mechanism by")
-		buf.Sprintln("decrypting the internal root key ring.")
-		buf.Sprintln("Please store it at a secure location. For example your password")
-		buf.Sprintln("manager. Without your HSM key you cannot decrypt any data within")
-		buf.Sprintln("your KES cluster.")
+		buf.Sprintln("The HSM protects your KES cluster as unseal mechanism by decrypting the")
+		buf.Sprintln("internal root encryption key ring.")
+		buf.Sprintln("Please store it at a secure location. For example your password manager.")
+		buf.Sprintln("Without your HSM key you cannot decrypt any data within your KES cluster.")
 		cli.Print(buf.String())
 		return
 	}

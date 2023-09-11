@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-// Package mem implements an in-memory key-value store.
+// Package mem implements an in-memory key store.
 package mem
 
 import (

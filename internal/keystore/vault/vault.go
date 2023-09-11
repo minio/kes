@@ -27,7 +27,6 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 )
 
 // Store is a Hashicorp Vault secret store.
@@ -157,15 +156,15 @@ func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	if err == nil {
 		switch {
 		case !health.Initialized:
-			return edge.KeyStoreState{}, &kv.Unavailable{Err: errors.New("vault: not initialized")}
+			return edge.KeyStoreState{}, &edge.Unavailable{Err: errors.New("vault: not initialized")}
 		case health.Sealed:
-			return edge.KeyStoreState{}, &kv.Unavailable{Err: errSealed}
+			return edge.KeyStoreState{}, &edge.Unavailable{Err: errSealed}
 		default:
 			return edge.KeyStoreState{Latency: time.Since(start)}, nil
 		}
 	}
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: err}
 	}
 	return edge.KeyStoreState{}, err
 }

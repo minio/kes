@@ -23,7 +23,6 @@ import (
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 	xhttp "github.com/minio/kes/internal/http"
 )
 
@@ -130,7 +129,7 @@ func (kc *KeyControl) Status(ctx context.Context) (edge.KeyStoreState, error) {
 	start := time.Now()
 	resp, err := kc.client.Do(req)
 	if err != nil {
-		return edge.KeyStoreState{}, &kv.Unreachable{
+		return edge.KeyStoreState{}, &edge.Unreachable{
 			Err: fmt.Errorf("keycontrol: failed to fetch status: %v", err),
 		}
 	}

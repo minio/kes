@@ -16,7 +16,6 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 )
 
 // Credentials are Azure client credentials to authenticate an application
@@ -54,7 +53,7 @@ func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: err}
 	}
 	return edge.KeyStoreState{
 		Latency: time.Since(start),

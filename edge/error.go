@@ -2,7 +2,7 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kv
+package edge
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 )
 
 // Unreachable is an error that indicates that the
-// Store is not reachable - for example due to a
+// key store is not reachable - for example due to a
 // a network error.
 type Unreachable struct {
 	Err error
@@ -29,9 +29,9 @@ func IsUnreachable(err error) (*Unreachable, bool) {
 
 func (e *Unreachable) Error() string {
 	if e.Err == nil {
-		return "kv: not reachable"
+		return "keystore: not reachable"
 	}
-	return "kv: not reachable: " + e.Err.Error()
+	return "keystore: not reachable: " + e.Err.Error()
 }
 
 // Unwrap returns the Unreachable's underlying error,
@@ -49,7 +49,7 @@ func (e *Unreachable) Timeout() bool {
 }
 
 // Unavailable is an error that indicates that the
-// Store is reachable over the network but not ready
+// key store is reachable over the network but not ready
 // to process requests - e.g. the Store might not be
 // initialized.
 type Unavailable struct {
@@ -69,9 +69,9 @@ func IsUnavailable(err error) (*Unavailable, bool) {
 
 func (e *Unavailable) Error() string {
 	if e.Err == nil {
-		return "kv: not available"
+		return "keystore: not available"
 	}
-	return "kv: not available: " + e.Err.Error()
+	return "keystore: not available: " + e.Err.Error()
 }
 
 // Unwrap returns the Unavailable's underlying error,

@@ -21,7 +21,6 @@ import (
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 )
 
 // New returns a new Store that reads
@@ -67,7 +66,7 @@ func (s *FS) Path() string { return s.dir }
 func (s *FS) Status(context.Context) (edge.KeyStoreState, error) {
 	start := time.Now()
 	if _, err := os.Stat(s.dir); err != nil {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: err}
 	}
 	return edge.KeyStoreState{
 		Latency: time.Since(start),

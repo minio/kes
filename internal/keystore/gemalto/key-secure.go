@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -26,7 +25,6 @@ import (
 	"aead.dev/mem"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/edge"
-	"github.com/minio/kes/edge/kv"
 	xhttp "github.com/minio/kes/internal/http"
 )
 
@@ -120,7 +118,7 @@ func (s *Store) Status(ctx context.Context) (edge.KeyStoreState, error) {
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return edge.KeyStoreState{}, &kv.Unreachable{Err: err}
+		return edge.KeyStoreState{}, &edge.Unreachable{Err: err}
 	}
 	return edge.KeyStoreState{
 		Latency: time.Since(start),
@@ -419,7 +417,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		return rootCAs, err
 	}
 	if !stat.IsDir() {
-		bytes, err := ioutil.ReadAll(f)
+		bytes, err := io.ReadAll(f)
 		if err != nil {
 			return rootCAs, err
 		}
@@ -439,7 +437,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		}
 
 		name := filepath.Join(path, file.Name())
-		bytes, err := ioutil.ReadFile(name)
+		bytes, err := os.ReadFile(name)
 		if err != nil {
 			return rootCAs, err
 		}
