@@ -280,7 +280,6 @@ func (c *leaveClusterCmd) Apply(s *Server, tx *bolt.Tx) error {
 		return nil
 	}
 
-	s.id = id
 	s.cluster = cluster
 	notify(s.signals, SigLeave)
 	return nil
