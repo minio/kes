@@ -13,34 +13,6 @@ import (
 	"github.com/minio/kes/internal/sys"
 )
 
-func version(config *RouterConfig) API {
-	const (
-		Method  = http.MethodGet
-		APIPath = "/version"
-		MaxBody = 0
-		Timeout = 15 * time.Second
-		Verify  = false
-	)
-	type Response struct {
-		Version string `json:"version"`
-		Commit  string `json:"commit"`
-	}
-	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(Response{
-			Version: sys.BinaryInfo().Version,
-			Commit:  sys.BinaryInfo().CommitID,
-		})
-	}
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-		Verify:  Verify,
-		Handler: config.Metrics.Count(config.Metrics.Latency(audit.Log(config.AuditLog, handler))),
-	}
-}
-
 func edgeVersion(config *EdgeRouterConfig) API {
 	const (
 		Method  = http.MethodGet

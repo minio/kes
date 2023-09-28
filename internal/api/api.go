@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/internal/sys"
 )
 
 // Config is a structure for configuring
@@ -166,19 +165,6 @@ func verifyPattern(pattern string) error {
 		}
 	}
 	return nil
-}
-
-// enclaveFromRequest parses the enclave name from the request URL
-// and returns the corresponding enclave present at the vault.
-func enclaveFromRequest(vault *sys.Vault, req *http.Request) (*sys.Enclave, error) {
-	name := req.URL.Query().Get("enclave")
-	if name == "" {
-		name = sys.DefaultEnclaveName
-	}
-	if err := verifyName(name); err != nil {
-		return nil, err
-	}
-	return vault.GetEnclave(req.Context(), name)
 }
 
 // Sync calls f while holding the given lock and
