@@ -34,6 +34,8 @@ type Config struct {
 
 	// TLSConfig provides the TLS configuration.
 	TLSConfig *tls.Config
+
+	Cancel context.CancelFunc
 }
 
 // NewServer returns a new HTTPS server from
@@ -56,6 +58,7 @@ type Server struct {
 	addr      string
 	handler   *muxHandler
 	tlsConfig *tls.Config
+	cancel    context.CancelFunc
 
 	lock sync.RWMutex
 }
@@ -71,8 +74,13 @@ func (s *Server) Update(config *Config) error {
 		return fmt.Errorf("https: failed to update server: '%s' does match existing server address", config.Addr)
 	}
 
+	if s.cancel != nil {
+		s.cancel()
+	}
+
 	s.tlsConfig = config.TLSConfig.Clone()
 	s.handler.Handler = config.Handler
+	s.cancel = config.Cancel
 	if s.handler.Handler == nil {
 		s.handler.Handler = http.NewServeMux()
 	}

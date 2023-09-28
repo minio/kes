@@ -339,6 +339,9 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	}, nil
 }
 
+// Close closes the Store.
+func (s *Store) Close() error { return nil }
+
 // ConnectWithCredentials tries to establish a connection to a Azure KeyVault
 // instance using Azure client credentials.
 func ConnectWithCredentials(_ context.Context, endpoint string, creds Credentials) (*Store, error) {

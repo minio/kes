@@ -247,6 +247,9 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	}, nil
 }
 
+// Close closes the Store.
+func (s *Store) Close() error { return nil }
+
 type iter struct {
 	ch  <-chan string
 	ctx context.Context

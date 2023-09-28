@@ -88,6 +88,9 @@ func (s *Store) List(context.Context) (kv.Iter[string], error) {
 	}, nil
 }
 
+// Close closes the Store.
+func (s *Store) Close() error { return nil }
+
 type iterator struct {
 	values []string
 }

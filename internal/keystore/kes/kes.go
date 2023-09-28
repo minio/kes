@@ -162,6 +162,9 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	return &iter{i}, nil
 }
 
+// Close closes the Store.
+func (s *Store) Close() error { return nil }
+
 type iter struct {
 	*kes.SecretIter
 }

@@ -9,6 +9,7 @@ package kv
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 )
 
@@ -75,6 +76,8 @@ type Store[K comparable, V any] interface {
 	// List returns an Iter enumerating the stored
 	// entries.
 	List(context.Context) (Iter[K], error)
+
+	io.Closer
 }
 
 // State describes the state of a Store.

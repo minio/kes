@@ -62,6 +62,7 @@ type Config struct {
 type Store struct {
 	config Config
 	client *client
+	stop   context.CancelFunc
 }
 
 var _ kv.Store[string, []byte] = (*Store)(nil)
@@ -102,10 +103,13 @@ func Connect(ctx context.Context, config *Config) (c *Store, err error) {
 	if err = client.Authenticate(ctx, config.Endpoint, config.Login); err != nil {
 		return nil, err
 	}
-	go client.RenewAuthToken(context.Background(), config.Endpoint, config.Login)
+
+	ctx, cancel := context.WithCancel(ctx)
+	go client.RenewAuthToken(ctx, config.Endpoint, config.Login)
 	return &Store{
 		config: *config,
 		client: client,
+		stop:   cancel,
 	}, nil
 }
 
@@ -365,6 +369,12 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 		ctx:    ctx,
 		cancel: cancel,
 	}, nil
+}
+
+// Close closes the Store. It stops any authentication renewal in the background.
+func (s *Store) Close() error {
+	s.stop()
+	return nil
 }
 
 type iter struct {
