@@ -12,43 +12,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-func metrics(config *RouterConfig) API {
-	const (
-		Method  = http.MethodGet
-		APIPath = "/v1/metrics"
-		MaxBody = 0
-		Timeout = 15 * time.Second
-		Verify  = true
-	)
-	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := Sync(config.Vault.RLocker(), func() error {
-			enclave, err := enclaveFromRequest(config.Vault, r)
-			if err != nil {
-				return err
-			}
-			return Sync(enclave.RLocker(), func() error {
-				return enclave.VerifyRequest(r)
-			})
-		}); err != nil {
-			Fail(w, err)
-			return
-		}
-
-		contentType := expfmt.Negotiate(r.Header)
-		w.Header().Set("Content-Type", string(contentType))
-		w.WriteHeader(http.StatusOK)
-		config.Metrics.EncodeTo(expfmt.NewEncoder(w, contentType))
-	}
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-		Verify:  Verify,
-		Handler: handler,
-	}
-}
-
 func edgeMetrics(config *EdgeRouterConfig) API {
 	var (
 		Method  = http.MethodGet

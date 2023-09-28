@@ -13,47 +13,6 @@ import (
 	"github.com/minio/kes/internal/log"
 )
 
-func errorLog(config *RouterConfig) API {
-	const (
-		Method      = http.MethodGet
-		APIPath     = "/v1/log/error"
-		MaxBody     = 0
-		Timeout     = 0 * time.Second // No timeout
-		Verify      = true
-		ContentType = "application/x-ndjson"
-	)
-
-	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := Sync(config.Vault.RLocker(), func() error {
-			enclave, err := enclaveFromRequest(config.Vault, r)
-			if err != nil {
-				return err
-			}
-			return Sync(enclave.RLocker(), func() error { return enclave.VerifyRequest(r) })
-		}); err != nil {
-			Fail(w, err)
-			return
-		}
-
-		w.Header().Set("Content-Type", ContentType)
-		w.WriteHeader(http.StatusOK)
-
-		out := log.NewErrEncoder(https.FlushOnWrite(w))
-		config.ErrorLog.Add(out)
-		defer config.ErrorLog.Remove(out)
-
-		<-r.Context().Done() // Wait for the client to close the connection
-	}
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-		Verify:  Verify,
-		Handler: config.Metrics.Count(config.Metrics.Latency(handler)),
-	}
-}
-
 func edgeErrorLog(config *EdgeRouterConfig) API {
 	var (
 		Method      = http.MethodGet
@@ -81,47 +40,6 @@ func edgeErrorLog(config *EdgeRouterConfig) API {
 		out := log.NewErrEncoder(https.FlushOnWrite(w))
 		config.ErrorLog.Add(out)
 		defer config.ErrorLog.Remove(out)
-
-		<-r.Context().Done() // Wait for the client to close the connection
-	}
-	return API{
-		Method:  Method,
-		Path:    APIPath,
-		MaxBody: MaxBody,
-		Timeout: Timeout,
-		Verify:  Verify,
-		Handler: config.Metrics.Count(config.Metrics.Latency(handler)),
-	}
-}
-
-func auditLog(config *RouterConfig) API {
-	const (
-		Method      = http.MethodGet
-		APIPath     = "/v1/log/audit"
-		MaxBody     = 0
-		Timeout     = 0 * time.Second // No timeout
-		Verify      = true
-		ContentType = "application/x-ndjson"
-	)
-
-	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		if err := Sync(config.Vault.RLocker(), func() error {
-			enclave, err := enclaveFromRequest(config.Vault, r)
-			if err != nil {
-				return err
-			}
-			return Sync(enclave.RLocker(), func() error { return enclave.VerifyRequest(r) })
-		}); err != nil {
-			Fail(w, err)
-			return
-		}
-
-		w.Header().Set("Content-Type", ContentType)
-		w.WriteHeader(http.StatusOK)
-
-		out := https.FlushOnWrite(w)
-		config.AuditLog.Add(out)
-		defer config.AuditLog.Remove(out)
 
 		<-r.Context().Done() // Wait for the client to close the connection
 	}

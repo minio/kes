@@ -14,22 +14,7 @@ import (
 	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
-	"github.com/minio/kes/internal/sys"
 )
-
-// RouterConfig is a structure containing the
-// API configuration for a KES server.
-type RouterConfig struct {
-	Vault *sys.Vault
-
-	Metrics *metric.Metrics
-
-	Proxy *auth.TLSProxy
-
-	AuditLog *log.Logger
-
-	ErrorLog *log.Logger
-}
 
 // EdgeRouterConfig is a structure containing the
 // API configuration for a KES edge server.
@@ -49,63 +34,6 @@ type EdgeRouterConfig struct {
 	AuditLog *log.Logger
 
 	ErrorLog *log.Logger
-}
-
-// NewRouter returns a new API Router for a KES
-// server with the given configuration.
-func NewRouter(config *RouterConfig) *Router {
-	r := &Router{
-		handler: http.NewServeMux(),
-	}
-
-	r.api = append(r.api, version(config))
-	r.api = append(r.api, status(config))
-	r.api = append(r.api, metrics(config))
-	r.api = append(r.api, listAPI(r, config))
-
-	r.api = append(r.api, createKey(config))
-	r.api = append(r.api, importKey(config))
-	r.api = append(r.api, describeKey(config))
-	r.api = append(r.api, listKey(config))
-	r.api = append(r.api, deleteKey(config))
-	r.api = append(r.api, encryptKey(config))
-	r.api = append(r.api, generateKey(config))
-	r.api = append(r.api, decryptKey(config))
-	r.api = append(r.api, bulkDecryptKey(config))
-
-	r.api = append(r.api, createSecret(config))
-	r.api = append(r.api, describeSecret(config))
-	r.api = append(r.api, readSecret(config))
-	r.api = append(r.api, deleteSecret(config))
-	r.api = append(r.api, listSecret(config))
-
-	r.api = append(r.api, assignPolicy(config))
-	r.api = append(r.api, describePolicy(config))
-	r.api = append(r.api, readPolicy(config))
-	r.api = append(r.api, writePolicy(config))
-	r.api = append(r.api, deletePolicy(config))
-	r.api = append(r.api, listPolicy(config))
-
-	r.api = append(r.api, describeIdentity(config))
-	r.api = append(r.api, selfDescribeIdentity(config))
-	r.api = append(r.api, listIdentity(config))
-	r.api = append(r.api, deleteIdentity(config))
-
-	r.api = append(r.api, createEnclave(config))
-	r.api = append(r.api, describeEnclave(config))
-	r.api = append(r.api, deleteEnclave(config))
-
-	r.api = append(r.api, errorLog(config))
-	r.api = append(r.api, auditLog(config))
-
-	for _, a := range r.api {
-		r.handler.Handle(a.Path, proxy(config.Proxy, a))
-	}
-	r.handler.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
-		Fail(w, kes.NewError(http.StatusNotImplemented, "not implemented"))
-	}))
-	return r
 }
 
 // NewEdgeRouter returns a new API Router for a KES edge

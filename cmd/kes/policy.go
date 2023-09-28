@@ -25,8 +25,6 @@ const policyCmdUsage = `Usage:
     kes policy <command>
 
 Commands:
-    create                   Create a new policy.
-    assign                   Assign a policy to identities.
     info                     Get information about a policy.
     ls                       List policies.
     rm                       Remove a policy.
@@ -41,12 +39,10 @@ func policyCmd(args []string) {
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, policyCmdUsage) }
 
 	subCmds := commands{
-		"create": createPolicyCmd,
-		"assign": assignPolicyCmd,
-		"info":   infoPolicyCmd,
-		"ls":     lsPolicyCmd,
-		"rm":     rmPolicyCmd,
-		"show":   showPolicyCmd,
+		"info": infoPolicyCmd,
+		"ls":   lsPolicyCmd,
+		"rm":   rmPolicyCmd,
+		"show": showPolicyCmd,
 	}
 	if len(args) < 2 {
 		cmd.Usage()
@@ -67,122 +63,6 @@ func policyCmd(args []string) {
 	}
 	cmd.Usage()
 	os.Exit(2)
-}
-
-const createPolicyCmdUsage = `Usage:
-    kes policy create [options] <name> <path>
-
-Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
-
-    -h, --help               Print command line options.
-
-Examples:
-    $ kes policy add my-policy ./policy.json
-`
-
-func createPolicyCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, createPolicyCmdUsage) }
-
-	var (
-		insecureSkipVerify bool
-		enclaveName        string
-	)
-	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
-	if err := cmd.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(2)
-		}
-		cli.Fatalf("%v. See 'kes policy create --help'", err)
-	}
-
-	switch {
-	case cmd.NArg() == 0:
-		cli.Fatal("no policy name specified. See 'kes policy create --help'")
-	case cmd.NArg() == 1:
-		cli.Fatal("no policy file specified. See 'kes policy create --help'")
-	case cmd.NArg() > 2:
-		cli.Fatal("too many arguments. See 'kes policy create --help'")
-	}
-
-	name := cmd.Arg(0)
-	filename := cmd.Arg(1)
-	b, err := os.ReadFile(filename)
-	if err != nil {
-		cli.Fatalf("failed to read %q: %v", filename, err)
-	}
-
-	var policy kes.Policy
-	if err = json.Unmarshal(b, &policy); err != nil {
-		cli.Fatalf("failed to read %q: %v", filename, err)
-	}
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	if err := enclave.SetPolicy(ctx, name, &policy); err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to create policy %q: %v", name, err)
-	}
-}
-
-const assignPolicyCmdUsage = `Usage:
-    kes policy assign [options] <policy> <identity>...
-
-Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
-
-    -h, --help               Print command line options.
-
-Examples:
-    $ kes policy assign my-policy 032dc24c353f1baf782660635ade933c601095ba462a44d1484a511c4271e212
-`
-
-func assignPolicyCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, assignPolicyCmdUsage) }
-
-	var (
-		insecureSkipVerify bool
-		enclaveName        string
-	)
-	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
-	if err := cmd.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(2)
-		}
-		cli.Fatalf("%v. See 'kes policy assign --help'", err)
-	}
-
-	if cmd.NArg() == 0 {
-		cli.Fatal("no policy name specified. See 'kes policy assign --help'")
-	}
-	if cmd.NArg() == 1 {
-		cli.Fatal("no identity specified. See 'kes policy assign --help'")
-	}
-
-	policy := cmd.Arg(0)
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
-	for _, identity := range cmd.Args()[1:] { // cmd.Arg(0) is the policy
-		if err := enclave.AssignPolicy(ctx, policy, kes.Identity(identity)); err != nil {
-			if errors.Is(err, context.Canceled) {
-				os.Exit(1)
-			}
-			cli.Fatalf("failed to assign policy %q to %q: %v", policy, identity, err)
-		}
-	}
 }
 
 const lsPolicyCmdUsage = `Usage:
