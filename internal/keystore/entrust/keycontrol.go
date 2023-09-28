@@ -84,7 +84,9 @@ func Login(ctx context.Context, config *Config) (*KeyControl, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	go kc.refreshToken(ctx, time.Until(expiresAt))
+	kc.stop = cancel
 
 	return kc, nil
 }
@@ -94,6 +96,7 @@ type KeyControl struct {
 	config *Config
 	token  atomic.Pointer[string]
 	client xhttp.Retry
+	stop   context.CancelFunc
 }
 
 var _ kv.Store[string, []byte] = (*KeyControl)(nil)
@@ -306,6 +309,13 @@ func (kc *KeyControl) List(ctx context.Context) (kv.Iter[string], error) {
 		}
 	}
 	return &iter{names: names}, nil
+}
+
+// Close closes the KeyControl client. It stops any
+// authentication renewal in the background.
+func (kc *KeyControl) Close() error {
+	kc.stop()
+	return nil
 }
 
 func (kc *KeyControl) list(ctx context.Context, prefix string, n int) ([]string, string, error) {

@@ -119,6 +119,7 @@ func startGateway(cliConfig gatewayConfig) {
 					Addr:      config.Addr,
 					Handler:   api.NewEdgeRouter(gwConfig),
 					TLSConfig: tlsConfig,
+					Cancel:    func() { gwConfig.Keys.Close() },
 				})
 				if err != nil {
 					log.Printf("failed to update server configuration: %v", err)

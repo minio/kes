@@ -160,6 +160,9 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	return NewIter(ctx, dir), nil
 }
 
+// Close closes the Store.
+func (s *Store) Close() error { return nil }
+
 func (s *Store) create(filename string, value []byte) error {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {

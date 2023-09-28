@@ -31,6 +31,7 @@ import (
 type Store struct {
 	client *client
 	config *Config
+	stop   context.CancelFunc
 }
 
 // Connect connects to a Hashicorp Vault server with
@@ -124,11 +125,13 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	}
 	client.SetToken(token)
 
+	ctx, cancel := context.WithCancel(ctx)
 	go client.CheckStatus(ctx, c.StatusPingAfter)
 	go client.RenewToken(ctx, authenticate, ttl, retry)
 	return &Store{
 		config: c,
 		client: client,
+		stop:   cancel,
 	}, nil
 }
 
@@ -434,4 +437,10 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 		return nil, fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
 	}
 	return &iterator{values: values}, nil
+}
+
+// Close closes the Store. It stops any authentication renewal in the background.
+func (s *Store) Close() error {
+	s.stop()
+	return nil
 }
