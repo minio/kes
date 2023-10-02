@@ -33,7 +33,6 @@ func TestGatewayFS(t *testing.T) {
 	t.Run("GenerateKey", func(t *testing.T) { testGenerateKey(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("EncryptKey", func(t *testing.T) { testEncryptKey(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("DecryptKey", func(t *testing.T) { testDecryptKey(ctx, store, t, RandString(ranStringLength)) })
-	t.Run("DecryptKeyAll", func(t *testing.T) { testDecryptKeyAll(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("DescribePolicy", func(t *testing.T) { testDescribePolicy(ctx, store, t) })
 	t.Run("GetPolicy", func(t *testing.T) { testGetPolicy(ctx, store, t) })
 	t.Run("SelfDescribe", func(t *testing.T) { testSelfDescribe(ctx, store, t) })

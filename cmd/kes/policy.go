@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"time"
 
@@ -110,64 +110,46 @@ func lsPolicyCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes policy ls --help'")
 	}
 
-	pattern := "*"
+	prefix := "*"
 	if cmd.NArg() == 1 {
-		pattern = cmd.Arg(0)
+		prefix = cmd.Arg(0)
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	policies, err := enclave.ListPolicies(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to list policies: %v", err)
+	iter := &kes.ListIter[string]{
+		NextFunc: enclave.ListPolicies,
 	}
-	defer policies.Close()
+
+	var names []string
+	for id, err := iter.SeekTo(ctx, prefix); err != io.EOF; id, err = iter.Next(ctx) {
+		if err != nil {
+			cli.Fatalf("failed to list keys: %v", err)
+		}
+		names = append(names, id)
+	}
 
 	if jsonFlag {
-		if _, err = policies.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
-		}
-		if err = policies.Close(); err != nil {
-			cli.Fatal(err)
-		}
-	} else {
-		sortedInfos, err := policies.Values(0)
-		if err != nil {
-			cli.Fatalf("failed to list policies: %v", err)
-		}
-		if len(sortedInfos) > 0 {
-			sort.Slice(sortedInfos, func(i, j int) bool {
-				return strings.Compare(sortedInfos[i].Name, sortedInfos[j].Name) < 0
-			})
-
-			headerStyle := tui.NewStyle()
-			dateStyle := tui.NewStyle()
-			if colorFlag.Colorize() {
-				const ColorDate tui.Color = "#5f8700"
-				headerStyle = headerStyle.Underline(true).Bold(true)
-				dateStyle = dateStyle.Foreground(ColorDate)
-			}
-
-			fmt.Println(
-				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
-				headerStyle.Render("Policy"),
-			)
-			for _, info := range sortedInfos {
-				year, month, day := info.CreatedAt.Local().Date()
-				hour, min, sec := info.CreatedAt.Local().Clock()
-
-				fmt.Printf("%s %s\n",
-					dateStyle.Render(fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)),
-					info.Name,
-				)
-			}
+		if err := json.NewEncoder(os.Stdout).Encode(names); err != nil {
+			cli.Fatalf("failed to list keys: %v", err)
 		}
 	}
+	if len(names) == 0 {
+		return
+	}
+
+	var (
+		style = tui.NewStyle().Underline(colorFlag.Colorize())
+		buf   = &strings.Builder{}
+	)
+	fmt.Fprintln(buf, style.Render("Key"))
+	for _, name := range names {
+		buf.WriteString(name)
+		buf.WriteByte('\n')
+	}
+	fmt.Print(buf)
 }
 
 const rmPolicyCmdUsage = `Usage:
@@ -354,10 +336,10 @@ func showPolicyCmd(args []string) {
 	}
 	if !isTerm(os.Stdout) || jsonFlag {
 		type Response struct {
-			Allow     []string     `json:"allow,omitempty"`
-			Deny      []string     `json:"deny,omitempty"`
-			CreatedAt time.Time    `json:"created_at,omitempty"`
-			CreatedBy kes.Identity `json:"created_by,omitempty"`
+			Allow     map[string]kes.Rule `json:"allow,omitempty"`
+			Deny      map[string]kes.Rule `json:"deny,omitempty"`
+			CreatedAt time.Time           `json:"created_at,omitempty"`
+			CreatedBy kes.Identity        `json:"created_by,omitempty"`
 		}
 		encoder := json.NewEncoder(os.Stdout)
 		if isTerm(os.Stdout) {
@@ -366,8 +348,8 @@ func showPolicyCmd(args []string) {
 		err = encoder.Encode(Response{
 			Allow:     policy.Allow,
 			Deny:      policy.Deny,
-			CreatedAt: policy.Info.CreatedAt,
-			CreatedBy: policy.Info.CreatedBy,
+			CreatedAt: policy.CreatedAt,
+			CreatedBy: policy.CreatedBy,
 		})
 		if err != nil {
 			cli.Fatalf("failed to show policy '%s': %v", name, err)
@@ -381,7 +363,7 @@ func showPolicyCmd(args []string) {
 		if len(policy.Allow) > 0 {
 			header := tui.NewStyle().Bold(true).Foreground(Green)
 			fmt.Println(header.Render("Allow:"))
-			for _, rule := range policy.Allow {
+			for rule := range policy.Allow {
 				fmt.Println("  · " + rule)
 			}
 		}
@@ -391,20 +373,20 @@ func showPolicyCmd(args []string) {
 			}
 			header := tui.NewStyle().Bold(true).Foreground(Red)
 			fmt.Println(header.Render("Deny:"))
-			for _, rule := range policy.Deny {
+			for rule := range policy.Deny {
 				fmt.Println("  · " + rule)
 			}
 		}
 
 		fmt.Println()
 		header := tui.NewStyle().Bold(true).Foreground(Cyan)
-		if !policy.Info.CreatedAt.IsZero() {
-			year, month, day := policy.Info.CreatedAt.Local().Date()
-			hour, min, sec := policy.Info.CreatedAt.Local().Clock()
+		if !policy.CreatedAt.IsZero() {
+			year, month, day := policy.CreatedAt.Local().Date()
+			hour, min, sec := policy.CreatedAt.Local().Clock()
 			fmt.Printf("\n%s %04d-%02d-%02d %02d:%02d:%02d\n", header.Render("Created at:"), year, month, day, hour, min, sec)
 		}
-		if !policy.Info.CreatedBy.IsUnknown() {
-			fmt.Println(header.Render("Created by:"), policy.Info.CreatedBy)
+		if !policy.CreatedBy.IsUnknown() {
+			fmt.Println(header.Render("Created by:"), policy.CreatedBy)
 		} else {
 			fmt.Println(header.Render("Created by:"), "<unknown>")
 		}

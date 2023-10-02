@@ -11,13 +11,15 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -416,8 +418,8 @@ func infoIdentityCmd(args []string) {
 			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Created By")), info.CreatedBy)
 		}
 		if info.Policy != "" {
-			year, month, day := policy.Info.CreatedAt.Date()
-			hour, min, sec := policy.Info.CreatedAt.Clock()
+			year, month, day := policy.CreatedAt.Date()
+			hour, min, sec := policy.CreatedAt.Clock()
 
 			fmt.Println()
 			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Policy")), policyStyle.Render(info.Policy))
@@ -513,71 +515,47 @@ func lsIdentityCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes identity ls --help'")
 	}
 
-	pattern := "*"
+	var prefix string
 	if cmd.NArg() == 1 {
-		pattern = cmd.Arg(0)
+		prefix = cmd.Arg(0)
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	identities, err := enclave.ListIdentities(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to list identities: %v", err)
+	iter := &kes.ListIter[kes.Identity]{
+		NextFunc: enclave.ListIdentities,
 	}
-	defer identities.Close()
 
-	if jsonFlag {
-		if _, err = identities.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
-		}
-		if err = identities.Close(); err != nil {
-			cli.Fatal(err)
-		}
-	} else {
-		sortedInfos, err := identities.Values(0)
+	var ids []kes.Identity
+	for id, err := iter.SeekTo(ctx, prefix); err != io.EOF; id, err = iter.Next(ctx) {
 		if err != nil {
 			cli.Fatalf("failed to list identities: %v", err)
 		}
-		if len(sortedInfos) > 0 {
-			sort.Slice(sortedInfos, func(i, j int) bool {
-				return strings.Compare(sortedInfos[i].Policy, sortedInfos[j].Policy) < 0
-			})
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
 
-			headerStyle := tui.NewStyle()
-			dateStyle := tui.NewStyle()
-			policyStyle := tui.NewStyle()
-			if colorFlag.Colorize() {
-				const (
-					ColorDate   tui.Color = "#5f8700"
-					ColorPolicy tui.Color = "#2E42D1"
-				)
-				headerStyle = headerStyle.Underline(true).Bold(true)
-				dateStyle = dateStyle.Foreground(ColorDate)
-				policyStyle = policyStyle.Foreground(ColorPolicy)
-			}
-
-			fmt.Printf("%s %s %s\n",
-				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
-				headerStyle.Render(fmt.Sprintf("%-64s", "Identity")),
-				headerStyle.Render("Policy"),
-			)
-			for _, info := range sortedInfos {
-				year, month, day := info.CreatedAt.Local().Date()
-				hour, min, sec := info.CreatedAt.Local().Clock()
-
-				fmt.Printf("%s %s %s\n",
-					dateStyle.Render(fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)),
-					fmt.Sprintf("%-64s", info.Identity.String()),
-					policyStyle.Render(fmt.Sprintf("%-15s", info.Policy)),
-				)
-			}
+	if jsonFlag {
+		if err := json.NewEncoder(os.Stdout).Encode(ids); err != nil {
+			cli.Fatalf("failed to list identities: %v", err)
 		}
 	}
+	if len(ids) == 0 {
+		return
+	}
+
+	var (
+		style = tui.NewStyle().Underline(colorFlag.Colorize())
+		buf   = &strings.Builder{}
+	)
+	fmt.Fprintln(buf, style.Render("Identity"))
+	for _, id := range ids {
+		buf.WriteString(id.String())
+		buf.WriteByte('\n')
+	}
+	fmt.Print(buf)
 }
 
 const rmIdentityCmdUsage = `Usage:

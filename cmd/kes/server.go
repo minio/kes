@@ -71,11 +71,7 @@ func serverCmd(args []string) {
 		cli.Fatalf("%v. See 'kes server --help'", err)
 	}
 
-	if cmd.NArg() == 0 {
-		cmd.Usage()
-		os.Exit(2)
-	}
-	if cmd.NArg() > 1 {
+	if cmd.NArg() > 0 {
 		cli.Fatal("too many arguments. See 'kes server --help'")
 	}
 

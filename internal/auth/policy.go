@@ -5,10 +5,7 @@
 package auth
 
 import (
-	"bytes"
 	"context"
-	"encoding"
-	"encoding/gob"
 	"net/http"
 	"path"
 	"time"
@@ -79,11 +76,11 @@ type PolicyIterator interface {
 type Policy struct {
 	// Allow is a list of glob patterns that are matched
 	// against the URL path of incoming requests.
-	Allow []string
+	Allow map[string]kes.Rule
 
 	// Deny is a list of glob patterns that are matched
 	// against the URL path of incoming requests.
-	Deny []string
+	Deny map[string]kes.Rule
 
 	// CreatedAt is the point in time when the policy
 	// has been created.
@@ -91,47 +88,6 @@ type Policy struct {
 
 	// CreatedBy is the identity that created the policy.
 	CreatedBy kes.Identity
-}
-
-var (
-	_ encoding.BinaryMarshaler   = Policy{}
-	_ encoding.BinaryUnmarshaler = (*Policy)(nil)
-)
-
-// MarshalBinary returns the Policy's binary representation.
-func (p Policy) MarshalBinary() ([]byte, error) {
-	type GOB struct {
-		Allow     []string
-		Deny      []string
-		CreatedAt time.Time
-		CreatedBy kes.Identity
-	}
-
-	var buffer bytes.Buffer
-	if err := gob.NewEncoder(&buffer).Encode(GOB(p)); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
-}
-
-// UnmarshalBinary unmarshals the Policy's binary representation.
-func (p *Policy) UnmarshalBinary(b []byte) error {
-	type GOB struct {
-		Allow     []string
-		Deny      []string
-		CreatedAt time.Time
-		CreatedBy kes.Identity
-	}
-
-	var value GOB
-	if err := gob.NewDecoder(bytes.NewReader(b)).Decode(&value); err != nil {
-		return err
-	}
-	p.Allow = value.Allow
-	p.Deny = value.Deny
-	p.CreatedAt = value.CreatedAt
-	p.CreatedBy = value.CreatedBy
-	return nil
 }
 
 // Verify reports whether the given HTTP request is allowed.
@@ -142,12 +98,12 @@ func (p *Policy) UnmarshalBinary(b []byte) error {
 //
 // Otherwise, Verify returns ErrNotAllowed.
 func (p *Policy) Verify(r *http.Request) error {
-	for _, pattern := range p.Deny {
+	for pattern := range p.Deny {
 		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
 			return kes.ErrNotAllowed
 		}
 	}
-	for _, pattern := range p.Allow {
+	for pattern := range p.Allow {
 		if ok, err := path.Match(pattern, r.URL.Path); ok && err == nil {
 			return nil
 		}

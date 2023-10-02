@@ -10,9 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 
 	tui "github.com/charmbracelet/lipgloss"
@@ -174,7 +175,7 @@ func importKeyCmd(args []string) {
 	defer cancel()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	if err = enclave.ImportKey(ctx, name, key); err != nil {
+	if err = enclave.ImportKey(ctx, name, &kes.ImportKeyRequest{Key: key}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
 		}
@@ -248,46 +249,15 @@ func describeKeyCmd(args []string) {
 		return
 	}
 
-	var faint, nameStyle tui.Style
-	if colorFlag.Colorize() {
-		const ColorName tui.Color = "#2e42d1"
-		faint = faint.Faint(true).Bold(true)
-		nameStyle = nameStyle.Foreground(ColorName)
-	}
 	year, month, day := info.CreatedAt.Date()
 	hour, min, sec := info.CreatedAt.Clock()
 
-	fmt.Println(
-		faint.Render(fmt.Sprintf("%-11s", "Name")),
-		nameStyle.Render(info.Name),
-	)
-	if info.ID != "" {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "ID")),
-			info.ID,
-		)
-	}
-	if info.Algorithm != kes.KeyAlgorithmUndefined {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Algorithm")),
-			info.Algorithm,
-		)
-	}
-	fmt.Println(
-		faint.Render(fmt.Sprintf("%-11s", "Created At")),
-		fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
-	)
-	if info.CreatedBy.IsUnknown() {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Created By")),
-			"<unknown>",
-		)
-	} else {
-		fmt.Println(
-			faint.Render(fmt.Sprintf("%-11s", "Created By")),
-			info.CreatedBy,
-		)
-	}
+	buf := &strings.Builder{}
+	fmt.Fprintf(buf, "%-11s %s\n", "Name", info.Name)
+	fmt.Fprintf(buf, "%-11s %s\n", "Algorithm", info.Algorithm)
+	fmt.Fprintf(buf, "%-11s %04d-%02d-%02d %02d:%02d:%02d\n", "Date", year, month, day, hour, min, sec)
+	fmt.Fprintf(buf, "%-11s %s", "Owner", info.CreatedBy)
+	fmt.Print(buf)
 }
 
 const lsKeyCmdUsage = `Usage:
@@ -335,71 +305,47 @@ func lsKeyCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes key ls --help'")
 	}
 
-	pattern := "*"
+	prefix := "*"
 	if cmd.NArg() == 1 {
-		pattern = cmd.Arg(0)
+		prefix = cmd.Arg(0)
 	}
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
 	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	iterator, err := enclave.ListKeys(ctx, pattern)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		}
-		cli.Fatalf("failed to list keys: %v", err)
+	iter := &kes.ListIter[string]{
+		NextFunc: enclave.ListKeys,
 	}
-	defer iterator.Close()
 
-	if jsonFlag {
-		if _, err = iterator.WriteTo(os.Stdout); err != nil {
-			cli.Fatal(err)
-		}
-		if err = iterator.Close(); err != nil {
-			cli.Fatal(err)
-		}
-	} else {
-		keys, err := iterator.Values(0)
+	var names []string
+	for id, err := iter.SeekTo(ctx, prefix); err != io.EOF; id, err = iter.Next(ctx) {
 		if err != nil {
 			cli.Fatalf("failed to list keys: %v", err)
 		}
-		if err = iterator.Close(); err != nil {
+		names = append(names, id)
+	}
+	slices.Sort(names)
+
+	if jsonFlag {
+		if err := json.NewEncoder(os.Stdout).Encode(names); err != nil {
 			cli.Fatalf("failed to list keys: %v", err)
 		}
-
-		if len(keys) > 0 {
-			sort.Slice(keys, func(i, j int) bool {
-				return strings.Compare(keys[i].Name, keys[j].Name) < 0
-			})
-
-			headerStyle := tui.NewStyle()
-			dateStyle := tui.NewStyle()
-			if colorFlag.Colorize() {
-				const ColorDate tui.Color = "#5f8700"
-				headerStyle = headerStyle.Underline(true).Bold(true)
-				dateStyle = dateStyle.Foreground(ColorDate)
-			}
-
-			fmt.Println(
-				headerStyle.Render(fmt.Sprintf("%-19s", "Date Created")),
-				headerStyle.Render("Key"),
-			)
-			for _, key := range keys {
-				var date string
-				if key.CreatedAt.IsZero() {
-					date = fmt.Sprintf("%5s%s%5s", " ", "<unknown>", " ")
-				} else {
-					year, month, day := key.CreatedAt.Local().Date()
-					hour, min, sec := key.CreatedAt.Local().Clock()
-					date = fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec)
-				}
-				fmt.Printf("%s %s\n", dateStyle.Render(date), key.Name)
-			}
-		}
-
 	}
+	if len(names) == 0 {
+		return
+	}
+
+	var (
+		style = tui.NewStyle().Underline(colorFlag.Colorize())
+		buf   = &strings.Builder{}
+	)
+	fmt.Fprintln(buf, style.Render("Key"))
+	for _, name := range names {
+		buf.WriteString(name)
+		buf.WriteByte('\n')
+	}
+	fmt.Print(buf)
 }
 
 const rmKeyCmdUsage = `Usage:

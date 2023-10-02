@@ -216,9 +216,18 @@ func policySetFromConfig(config *edge.ServerConfig) (auth.PolicySet, error) {
 			return nil, fmt.Errorf("policy %q already exists", name)
 		}
 
+		allow := make(map[string]kes.Rule, len(policy.Allow))
+		for _, pattern := range policy.Allow {
+			allow[pattern] = kes.Rule{}
+		}
+		deny := make(map[string]kes.Rule, len(policy.Deny))
+		for _, pattern := range policy.Deny {
+			deny[pattern] = kes.Rule{}
+		}
+
 		policies.policies[name] = &auth.Policy{
-			Allow:     policy.Allow,
-			Deny:      policy.Deny,
+			Allow:     allow,
+			Deny:      deny,
 			CreatedAt: time.Now().UTC(),
 			CreatedBy: config.Admin,
 		}
@@ -593,9 +602,9 @@ func newGatewayConfig(ctx context.Context, config *edge.ServerConfig, tlsConfig 
 	for _, k := range config.Keys {
 		var algorithm kes.KeyAlgorithm
 		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = kes.AES256_GCM_SHA256
+			algorithm = kes.AES256
 		} else {
-			algorithm = kes.XCHACHA20_POLY1305
+			algorithm = kes.ChaCha20
 		}
 
 		key, err := key.Random(algorithm, config.Admin)

@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/minio/kes-go"
@@ -154,26 +155,36 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new kms.Iter over all stored entries.
 func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	enclave := s.client.Enclave(s.enclave)
-	i, err := enclave.ListSecrets(ctx, "*")
-	if err != nil {
-		return nil, err
-	}
-	return &iter{i}, nil
+	return &iter{
+		ctx: ctx,
+		iter: &kes.ListIter[string]{
+			NextFunc: s.client.Enclave(s.enclave).ListSecrets,
+		},
+	}, nil
 }
 
 // Close closes the Store.
 func (s *Store) Close() error { return nil }
 
 type iter struct {
-	*kes.SecretIter
+	ctx  context.Context
+	iter *kes.ListIter[string]
+	err  error
 }
 
 func (i *iter) Next() (string, bool) {
-	if i.SecretIter.Next() {
-		return i.Name(), true
+	if i.err != nil {
+		return "", false
 	}
-	return "", false
+
+	next, err := i.iter.Next(i.ctx)
+	i.err = err
+	return next, err == nil
 }
 
-func (i *iter) Close() error { return i.SecretIter.Close() }
+func (i *iter) Close() error {
+	if i.err == io.EOF {
+		return nil
+	}
+	return i.err
+}
