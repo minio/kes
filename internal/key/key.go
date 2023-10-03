@@ -17,10 +17,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/minio/kes-go"
-	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -46,13 +46,12 @@ func Parse(b []byte) (Key, error) {
 // Len returns the length of keys for the given Algorithm in bytes.
 func Len(a kes.KeyAlgorithm) int {
 	switch a {
-	case kes.AES256_GCM_SHA256:
+	case kes.AES256:
 		return 256 / 8
-	case kes.XCHACHA20_POLY1305:
+	case kes.ChaCha20:
 		return 256 / 8
-	case kes.KeyAlgorithmUndefined:
-		return 256 / 8 // For generic/unknown keys, return 256 bit.
 	default:
+		fmt.Println(int(a))
 		return -1
 	}
 }
@@ -235,13 +234,6 @@ func (k *Key) Wrap(plaintext, associatedData []byte) ([]byte, error) {
 	}
 
 	algorithm := k.Algorithm()
-	if algorithm == kes.KeyAlgorithmUndefined {
-		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = kes.AES256_GCM_SHA256
-		} else {
-			algorithm = kes.XCHACHA20_POLY1305
-		}
-	}
 	cipher, err := newAEAD(algorithm, k.bytes, iv)
 	if err != nil {
 		return nil, err
@@ -272,13 +264,6 @@ func (k *Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
 		return nil, kes.ErrDecrypt
 	}
 
-	if text.ID != "" && text.ID != k.ID() { // Ciphertexts generated in the past may not contain a key ID
-		return nil, kes.ErrDecrypt
-	}
-	if k.algorithm != kes.KeyAlgorithmUndefined && text.Algorithm != k.Algorithm() {
-		return nil, kes.ErrDecrypt
-	}
-
 	cipher, err := newAEAD(text.Algorithm, k.bytes, text.IV)
 	if err != nil {
 		return nil, kes.ErrDecrypt
@@ -294,7 +279,7 @@ func (k *Key) Unwrap(ciphertext, associatedData []byte) ([]byte, error) {
 // algorithm and is initialized with the given key and iv.
 func newAEAD(algorithm kes.KeyAlgorithm, Key, IV []byte) (cipher.AEAD, error) {
 	switch algorithm {
-	case kes.AES256_GCM_SHA256:
+	case kes.AES256:
 		mac := hmac.New(sha256.New, Key)
 		mac.Write(IV)
 		sealingKey := mac.Sum(nil)
@@ -304,7 +289,7 @@ func newAEAD(algorithm kes.KeyAlgorithm, Key, IV []byte) (cipher.AEAD, error) {
 			return nil, err
 		}
 		return cipher.NewGCM(block)
-	case kes.XCHACHA20_POLY1305:
+	case kes.ChaCha20:
 		if fips.Enabled {
 			return nil, kes.ErrDecrypt
 		}

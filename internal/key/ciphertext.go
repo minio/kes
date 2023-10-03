@@ -160,9 +160,9 @@ func (c *ciphertext) UnmarshalJSON(text []byte) error {
 	}
 
 	if value.Algorithm == AES256GCM {
-		c.Algorithm = kes.AES256_GCM_SHA256
+		c.Algorithm = kes.AES256
 	} else {
-		c.Algorithm = kes.XCHACHA20_POLY1305
+		c.Algorithm = kes.ChaCha20
 	}
 	c.ID = value.ID
 	c.IV = value.IV

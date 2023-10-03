@@ -80,10 +80,10 @@ func edgeReadPolicy(config *EdgeRouterConfig) API {
 		}
 	}
 	type Response struct {
-		Allow     []string     `json:"allow,omitempty"`
-		Deny      []string     `json:"deny,omitempty"`
-		CreatedAt time.Time    `json:"created_at,omitempty"`
-		CreatedBy kes.Identity `json:"created_by,omitempty"`
+		Allow     map[string]kes.Rule `json:"allow,omitempty"`
+		Deny      map[string]kes.Rule `json:"deny,omitempty"`
+		CreatedAt time.Time           `json:"created_at,omitempty"`
+		CreatedBy kes.Identity        `json:"created_by,omitempty"`
 	}
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)

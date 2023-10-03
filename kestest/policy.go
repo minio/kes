@@ -48,7 +48,11 @@ func (p *PolicySet) Add(name string, policy *kes.Policy) {
 // Allow is a shorthand for first creating a KES Policy
 // and then adding it to the PolicySet.
 func (p *PolicySet) Allow(name string, patterns ...string) {
-	p.Add(name, &kes.Policy{Allow: patterns})
+	allow := make(map[string]kes.Rule, len(patterns))
+	for _, pattern := range patterns {
+		allow[pattern] = kes.Rule{}
+	}
+	p.Add(name, &kes.Policy{Allow: allow})
 }
 
 // Assign assigns the KES policy with the given name to

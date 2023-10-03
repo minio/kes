@@ -44,9 +44,9 @@ func edgeCreateKey(config *EdgeRouterConfig) API {
 
 		var algorithm kes.KeyAlgorithm
 		if fips.Enabled || cpu.HasAESGCM() {
-			algorithm = kes.AES256_GCM_SHA256
+			algorithm = kes.AES256
 		} else {
-			algorithm = kes.XCHACHA20_POLY1305
+			algorithm = kes.ChaCha20
 		}
 
 		key, err := key.Random(algorithm, auth.Identify(r))
@@ -84,8 +84,8 @@ func edgeImportKey(config *EdgeRouterConfig) API {
 		}
 	}
 	type Request struct {
-		Bytes     []byte           `json:"bytes"`
-		Algorithm kes.KeyAlgorithm `json:"algorithm"`
+		Bytes     []byte `json:"key"`
+		Algorithm string `json:"cipher"`
 	}
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		name, err := nameFromRequest(r, APIPath)
@@ -100,10 +100,15 @@ func edgeImportKey(config *EdgeRouterConfig) API {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			return kes.NewError(http.StatusBadRequest, err.Error())
 		}
-		if len(req.Bytes) != key.Len(req.Algorithm) {
+
+		var algorithm kes.KeyAlgorithm
+		if err := algorithm.UnmarshalText([]byte(req.Algorithm)); err != nil {
+			return kes.NewError(http.StatusBadRequest, err.Error())
+		}
+		if len(req.Bytes) != key.Len(algorithm) {
 			return kes.NewError(http.StatusBadRequest, "invalid key size")
 		}
-		key, err := key.New(req.Algorithm, req.Bytes, auth.Identify(r))
+		key, err := key.New(algorithm, req.Bytes, auth.Identify(r))
 		if err != nil {
 			return err
 		}

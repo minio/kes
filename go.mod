@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.7.1
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.9.2
-	github.com/minio/kes-go v0.1.0
+	github.com/minio/kes-go v0.2.0
 	github.com/minio/selfupdate v0.4.0
 	github.com/muesli/termenv v0.15.2
 	github.com/prometheus/client_golang v1.16.0

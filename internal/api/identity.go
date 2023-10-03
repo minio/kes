@@ -83,20 +83,15 @@ func edgeSelfDescribeIdentity(config *EdgeRouterConfig) API {
 			Timeout = c.Timeout
 		}
 	}
-	type InlinePolicy struct {
-		Allow     []string     `json:"allow,omitempty"`
-		Deny      []string     `json:"deny,omitempty"`
+	type Response struct {
+		Identity  kes.Identity `json:"identity"`
+		IsAdmin   bool         `json:"admin,omitempty"`
 		CreatedAt time.Time    `json:"created_at,omitempty"`
 		CreatedBy kes.Identity `json:"created_by,omitempty"`
-	}
-	type Response struct {
-		Identity   kes.Identity `json:"identity"`
-		IsAdmin    bool         `json:"admin,omitempty"`
-		PolicyName string       `json:"policy_name,omitempty"`
-		CreatedAt  time.Time    `json:"created_at,omitempty"`
-		CreatedBy  kes.Identity `json:"created_by,omitempty"`
 
-		Policy InlinePolicy `json:"policy"`
+		Policy string              `json:"policy,omitempty"`
+		Allow  map[string]kes.Rule `json:"allow,omitempty"`
+		Deny   map[string]kes.Rule `json:"deny,omitempty"`
 	}
 	var handler HandlerFunc = func(w http.ResponseWriter, r *http.Request) error {
 		identity := auth.Identify(r)
@@ -115,17 +110,13 @@ func edgeSelfDescribeIdentity(config *EdgeRouterConfig) API {
 		w.Header().Set("Content-Type", ContentType)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Response{
-			Identity:   identity,
-			PolicyName: info.Policy,
-			IsAdmin:    info.IsAdmin,
-			CreatedAt:  info.CreatedAt,
-			CreatedBy:  info.CreatedBy,
-			Policy: InlinePolicy{
-				Allow:     policy.Allow,
-				Deny:      policy.Deny,
-				CreatedAt: policy.CreatedAt,
-				CreatedBy: policy.CreatedBy,
-			},
+			Identity:  identity,
+			IsAdmin:   info.IsAdmin,
+			CreatedAt: info.CreatedAt,
+			CreatedBy: info.CreatedBy,
+			Policy:    info.Policy,
+			Allow:     policy.Allow,
+			Deny:      policy.Deny,
 		})
 		return nil
 	}
