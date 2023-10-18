@@ -160,7 +160,8 @@ func updateCmd(args []string) {
 		version = v
 	}
 
-	if cv, err := time.Parse(releaseTagFormat, sys.BinaryInfo().Version); err == nil {
+	info, _ := sys.ReadBinaryInfo()
+	if cv, err := time.Parse(releaseTagFormat, info.Version); err == nil {
 		switch version.After(cv) {
 		case true:
 			cli.Println(fmt.Sprintf("Upgrading from '%v' to '%v'", cv, version))

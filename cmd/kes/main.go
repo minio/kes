@@ -12,8 +12,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
+	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/https"
@@ -95,15 +98,28 @@ func main() {
 	if cmd.NArg() > 1 {
 		cli.Fatalf("%q is not a kes command. See 'kes --help'", cmd.Arg(1))
 	}
+
 	if showVersion {
-		buildInfo := sys.BinaryInfo()
-		cli.Printf("kes %s (commit=%s)\n", buildInfo.Version, buildInfo.CommitID)
+		info, err := sys.ReadBinaryInfo()
+		if err != nil {
+			cli.Fatal(err)
+		}
+
+		faint := tui.NewStyle().Faint(true)
+		buf := &strings.Builder{}
+		fmt.Fprintf(buf, "Version    %-22s %s\n", info.Version, faint.Render("commit="+info.CommitID))
+		fmt.Fprintf(buf, "Runtime    %-22s %s\n", fmt.Sprintf("%s %s/%s", info.Runtime, runtime.GOOS, runtime.GOARCH), faint.Render("compiler="+info.Compiler))
+		fmt.Fprintf(buf, "License    %-22s %s\n", "AGPLv3", faint.Render("https://www.gnu.org/licenses/agpl-3.0.html"))
+		fmt.Fprintf(buf, "Copyright  %-22s %s\n", fmt.Sprintf("2015-%d MinIO Inc.", time.Now().Year()), faint.Render("https://min.io"))
+		fmt.Print(buf.String())
 		return
 	}
+
 	if autoCompletion {
 		installAutoCompletion()
 		return
 	}
+
 	cmd.Usage()
 	os.Exit(2)
 }

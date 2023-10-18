@@ -189,9 +189,9 @@ func rmPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 	for _, name := range cmd.Args() {
-		if err := enclave.DeletePolicy(ctx, name); err != nil {
+		if err := client.DeletePolicy(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
@@ -247,8 +247,8 @@ func infoPolicyCmd(args []string) {
 	defer cancelCtx()
 
 	name := cmd.Arg(0)
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	info, err := enclave.DescribePolicy(ctx, name)
+	client := newClient(insecureSkipVerify)
+	info, err := client.DescribePolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -322,12 +322,12 @@ func showPolicyCmd(args []string) {
 	}
 
 	name := cmd.Arg(0)
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	policy, err := enclave.GetPolicy(ctx, name)
+	policy, err := client.GetPolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)

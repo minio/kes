@@ -340,7 +340,6 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
-    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -392,9 +391,9 @@ func infoIdentityCmd(args []string) {
 		dotDenyStyle = dotDenyStyle.Foreground(ColorDotDeny)
 	}
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 	if cmd.NArg() == 0 {
-		info, policy, err := enclave.DescribeSelf(ctx)
+		info, policy, err := client.DescribeSelf(ctx)
 		if err != nil {
 			cli.Fatal(err)
 		}
@@ -441,7 +440,7 @@ func infoIdentityCmd(args []string) {
 			}
 		}
 	} else {
-		info, err := enclave.DescribeIdentity(ctx, kes.Identity(cmd.Arg(0)))
+		info, err := client.DescribeIdentity(ctx, kes.Identity(cmd.Arg(0)))
 		if err != nil {
 			cli.Fatal(err)
 		}
@@ -591,12 +590,12 @@ func rmIdentityCmd(args []string) {
 		cli.Fatal("no identity specified. See 'kes identity rm --help'")
 	}
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	for _, identity := range cmd.Args() {
-		if err := enclave.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
+		if err := client.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}

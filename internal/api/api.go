@@ -5,187 +5,251 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net/http"
+	"net/netip"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/headers"
 )
 
-// Config is a structure for configuring
-// a KES server API.
-type Config struct {
-	// Timeout is the duration after which a request
-	// times out. If Timeout <= 0 the API default
-	// is used.
-	Timeout time.Duration
+// API paths exposed by KES servers.
+const (
+	PathVersion  = "/version"
+	PathStatus   = "/v1/status"
+	PathReady    = "/v1/ready"
+	PathMetrics  = "/v1/metrics"
+	PathListAPIs = "/v1/api"
 
-	// InsecureSkipAuth controls whether the API verifies
-	// client identities. If InsecureSkipAuth is true,
-	// the API accepts requests from arbitrary identities.
-	// In this mode, the API can be used by anyone who can
-	// communicate to the KES server over HTTPS.
-	// This should only be set for testing or in certain
-	// cases for APIs that don't expose sensitive information,
-	// like metrics.
-	InsecureSkipAuth bool
+	PathKeyCreate   = "/v1/key/create/"
+	PathKeyImport   = "/v1/key/import/"
+	PathKeyDescribe = "/v1/key/describe/"
+	PathKeyDelete   = "/v1/key/delete/"
+	PathKeyList     = "/v1/key/list/"
+	PathKeyGenerate = "/v1/key/generate/"
+	PathKeyEncrypt  = "/v1/key/encrypt/"
+	PathKeyDecrypt  = "/v1/key/decrypt/"
+
+	PathPolicyDescribe = "/v1/policy/describe/"
+	PathPolicyRead     = "/v1/policy/read/"
+	PathPolicyList     = "/v1/policy/list/"
+
+	PathIdentityDescribe     = "/v1/identity/describe/"
+	PathIdentityList         = "/v1/identity/list/"
+	PathIdentitySelfDescribe = "/v1/identity/self/describe"
+
+	PathLogError = "/v1/log/error"
+	PathLogAudit = "/v1/log/audit"
+)
+
+// Route represents an API route handling a client request.
+type Route struct {
+	Method  string        // The HTTP method (GET, PUT, DELETE, ...)
+	Path    string        // The API Path
+	MaxBody mem.Size      // The max. size of a request body
+	Timeout time.Duration // Timeout after which the request gets aborted
+	Auth    Authenticator // The authentication method for this API route
+	Handler Handler       // The API handler implementing the server-side logic
 }
 
-// API describes a KES server API.
-type API struct {
-	Method  string        // The HTTP method
-	Path    string        // The URI API path
-	MaxBody int64         // The max. body size the API accepts
-	Timeout time.Duration // The duration after which an API request times out. 0 means no timeout
-	Verify  bool          // Whether the API verifies the client identity
+// ServeHTTP implements the http.Handler for Route and handles an incoming
+// client request as following:
+//   - Verify that the request method matches Route.Method.
+//   - Verify that the request got routed correctly, i.e. Route.Path is a
+//     prefix of the request path.
+//   - Limit the request body to Route.MaxBody.
+//   - Apply Route.Timeout and timeout the request if generating a response
+//     takes longer.
+//   - Authenticate the request. If Route.Auth.Authenticate returns an error
+//     the error is sent to the client and the route handler is not invoked.
+//   - Handle the request. The Route.Handler.ServeAPI is invoked with the
+//     authenticated request.
+func (ro Route) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp := &Response{
+		ResponseWriter: w,
+	}
+	received := time.Now()
 
-	// Handler implements the API.
-	//
-	// When invoked by the API's ServeHTTP method, the handler
-	// can rely upon:
-	//  - the request method matching the API's HTTP method.
-	//  - the API path being a prefix of the request URL.
-	//  - the request body being limited to the API's MaxBody size.
-	//  - the request timing out after the duration specified for the API.
-	Handler http.Handler
+	if r.Method != ro.Method {
+		if !(r.Method == http.MethodPost && ro.Method == http.MethodPut) {
+			w.Header().Set(headers.Accept, ro.Method)
+			resp.Failf(http.StatusMethodNotAllowed, "received method '%s' expected '%s'", r.Method, ro.Method)
+			return
+		}
+	}
 
-	_ [0]int
-}
-
-// ServerHTTP takes an HTTP Request and ResponseWriter and executes the
-// API's Handler.
-func (a API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != a.Method {
-		w.Header().Set("Accept", a.Method)
-		Fail(w, kes.NewError(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)))
+	// URL path is not guaranteed to start with a leading '/'
+	// Hence, we add it for a canonical representation.
+	if len(r.URL.Path) > 0 && r.URL.Path[0] != '/' {
+		r.URL.Path = "/" + r.URL.Path
+	}
+	resource, ok := strings.CutPrefix(r.URL.Path, ro.Path)
+	if !ok {
+		resp.Failf(http.StatusInternalServerError, "routing error: request '%s' handled by route '%s'", r.URL.Path, ro.Path)
 		return
 	}
-	if !strings.HasPrefix(r.URL.Path, a.Path) {
-		Fail(w, fmt.Errorf("api: patch mismatch: received '%s' - expected '%s'", r.URL.Path, a.Path))
+
+	// Limit request bodies such that handlers can read from it securely.
+	if ro.MaxBody >= 0 {
+		if r.ContentLength < 0 || r.ContentLength > int64(ro.MaxBody) {
+			r.ContentLength = int64(ro.MaxBody)
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, r.ContentLength)
+	}
+
+	// Set a timeout.
+	if ro.Timeout > 0 {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(ro.Timeout)); err != nil {
+			if errors.Is(err, http.ErrNotSupported) {
+				Failf(resp, http.StatusInternalServerError, "route '%s' does not support timeouts", ro.Path)
+				return
+			}
+			resp.Failf(http.StatusInternalServerError, "failed to set timeout on route '%s'", ro.Path)
+			return
+		}
+	}
+
+	req, err := ro.Auth.Authenticate(r)
+	if err != nil {
+		resp.Failr(err)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, a.MaxBody)
 
-	if a.Timeout > 0 {
-		switch err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(a.Timeout)); {
-		case errors.Is(err, http.ErrNotSupported):
-			Fail(w, errors.New("internal error: HTTP connection does not accept a timeout"))
-			return
-		case err != nil:
-			Fail(w, fmt.Errorf("internal error: %v", err))
-			return
-		}
-	}
-	a.Handler.ServeHTTP(w, r)
+	req.Resource = resource
+	req.Received = received
+	ro.Handler.ServeAPI(resp, req)
 }
 
-// nameFromRequest strips the API path from the request URL, verifies
-// that the remaining path is a valid name, via verifyName, and returns
-// the remaining path.
-func nameFromRequest(r *http.Request, apiPath string) (string, error) {
-	name := strings.TrimPrefix(r.URL.Path, apiPath)
-	if len(name) == len(r.URL.Path) {
-		return "", fmt.Errorf("api: patch mismatch: received '%s' - expected '%s'", r.URL.Path, apiPath)
-	}
-	if err := verifyName(name); err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
-// patternFromRequest strips the API path from the request URL, verifies
-// that the remaining path is a valid pattern, via verifyPattern, and returns
-// the remaining path.
-func patternFromRequest(r *http.Request, apiPath string) (string, error) {
-	pattern := strings.TrimPrefix(r.URL.Path, apiPath)
-	if len(pattern) == len(r.URL.Path) {
-		return "", fmt.Errorf("api: patch mismatch: received '%s' - expected '%s'", r.URL.Path, apiPath)
-	}
-	if err := verifyPattern(pattern); err != nil {
-		return "", err
-	}
-	return pattern, nil
-}
-
-// verifyName reports whether the name is valid.
+// A Handler responds to an API request.
 //
-// A valid name must only contain numbers (0-9),
-// letters (a-z and A-Z) and '-' as well as '_'
-// characters.
-func verifyName(name string) error {
-	const MaxLength = 80 // Some arbitrary but reasonable limit
-
-	if name == "" {
-		return kes.NewError(http.StatusBadRequest, "invalid argument: name is empty")
-	}
-	if len(name) > MaxLength {
-		return kes.NewError(http.StatusBadRequest, "invalid argument: name is too long")
-	}
-	for _, r := range name { // Valid characters are: [ 0-9 , A-Z , a-z , - , _ ]
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'A' && r <= 'Z':
-		case r >= 'a' && r <= 'z':
-		case r == '-':
-		case r == '_':
-		default:
-			return kes.NewError(http.StatusBadRequest, "invalid argument: name contains invalid character")
-		}
-	}
-	return nil
+// ServeAPI should either reply to the client or fail the request and
+// then return.The Response type provides methods to do so. Returning
+// signals that the request is finished; it is not valid to send a
+// Response or read from the Request.Body after or concurrently with
+// the completion of the ServeAPI call.
+//
+// If ServeAPI panics, the HTTP server assumes that the effect of the
+// panic was isolated to the active request. It recovers the panic,
+// logs a stack trace to the server error log, and either closes the
+// network connection or sends an HTTP/2 RST_STREAM, depending on the
+// HTTP protocol. To abort a handler so the client sees an interrupted
+// response but the server doesn't log an error, panic with the value
+// http.ErrAbortHandler.
+type Handler interface {
+	ServeAPI(*Response, *Request)
 }
 
-// verifyPattern reports whether the pattern is valid.
-//
-// A valid pattern must only contain numbers (0-9),
-// letters (a-z and A-Z) and '-', '_' as well as '*'
-// characters.
-func verifyPattern(pattern string) error {
-	const MaxLength = 80 // Some arbitrary but reasonable limit
+// The HandlerFunc type is an adapter to allow the use of
+// ordinary functions as API handlers. If f is a function
+// with the appropriate signature, HandlerFunc(f) is a
+// Handler that calls f.
+type HandlerFunc func(*Response, *Request)
 
-	if pattern == "" {
-		return kes.NewError(http.StatusBadRequest, "invalid argument: pattern is empty")
-	}
-	if len(pattern) > MaxLength {
-		return kes.NewError(http.StatusBadRequest, "invalid argument: pattern is too long")
-	}
-	for _, r := range pattern { // Valid characters are: [ 0-9 , A-Z , a-z , - , _ , * ]
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'A' && r <= 'Z':
-		case r >= 'a' && r <= 'z':
-		case r == '-':
-		case r == '_':
-		case r == '*':
-		default:
-			return kes.NewError(http.StatusBadRequest, "invalid argument: pattern contains invalid character")
-		}
-	}
-	return nil
+// ServeAPI calls f with the given request and response.
+func (f HandlerFunc) ServeAPI(resp *Response, req *Request) {
+	f(resp, req)
 }
 
-// Sync calls f while holding the given lock and
-// releases the lock once f has been finished.
+// An Authenticator authenticates HTTP requests.
 //
-// Sync returns the error returned by f, if  any.
-func Sync(locker sync.Locker, f func() error) error {
-	locker.Lock()
-	defer locker.Unlock()
-
-	return f()
+// Authenticate should verify an incoming HTTP request
+// and return either an authenticated API request or
+// an API error.
+type Authenticator interface {
+	Authenticate(*http.Request) (*Request, Error)
 }
 
-// VSync calls f while holding the given lock and
-// releases the lock once f has been finished.
-//
-// VSync returns the result of f and its error
-// if  any.
-func VSync[V any](locker sync.Locker, f func() (V, error)) (V, error) {
-	locker.Lock()
-	defer locker.Unlock()
+// InsecureSkipVerify is an Authenticator that does not verify
+// incoming HTTP requests in any way. It should only be used
+// for routes that do neither wish to authenticate requests nor
+// care about the client identity.
+var InsecureSkipVerify Authenticator = insecureSkipVerify{}
 
-	return f()
+type insecureSkipVerify struct{}
+
+func (insecureSkipVerify) Authenticate(r *http.Request) (*Request, Error) {
+	return &Request{Request: r}, nil
+}
+
+// Request is an authenticated HTTP request.
+type Request struct {
+	*http.Request
+
+	Identity kes.Identity
+
+	Resource string
+
+	Received time.Time
+}
+
+// LogValue returns the requests logging representation.
+func (r *Request) LogValue() slog.Value {
+	var identity string
+	if r.Identity.IsUnknown() {
+		identity = "<unknown>"
+	} else {
+		identity = r.Identity.String()
+	}
+	ip, _ := netip.ParseAddrPort(r.RemoteAddr)
+	return slog.GroupValue(
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.String("ip", ip.Addr().String()),
+		slog.String("identity", identity),
+	)
+}
+
+// Response is an API response.
+type Response struct {
+	http.ResponseWriter
+}
+
+// Reply is a shorthand for api.Reply. It sends just sends an
+// HTTP status code to the client. The response body is empty.
+func (r *Response) Reply(code int) { Reply(r, code) }
+
+// Fail is a shorthand for api.Fail. It responds to the client
+// with the given status code and error message.
+func (r *Response) Fail(code int, msg string) error { return Fail(r, code, msg) }
+
+// Failf is a shorthand for api.Failf. Failf responds to the
+// client with the given status code and formatted error message.
+func (r *Response) Failf(code int, format string, v ...any) error {
+	return Failf(r, code, format, v...)
+}
+
+// Failr is a shorthand for api.Failr. Failr responds to the
+// client with err.
+func (r *Response) Failr(err Error) error { return Failr(r, err) }
+
+// Reply sends just sends an HTTP status code to the client.
+// The response body is empty.
+func Reply(r *Response, code int) {
+	r.Header().Set(headers.ContentLength, strconv.Itoa(0))
+	r.WriteHeader(code)
+}
+
+// ReplyWith sends an HTTP status code and the data as response
+// body to the client. The data format is selected automatically
+// based on the response content encoding.
+func ReplyWith(r *Response, code int, data any) error {
+	r.Header().Set(headers.ContentType, headers.ContentTypeJSON)
+	r.WriteHeader(code)
+	return json.NewEncoder(r).Encode(data)
+}
+
+// ReadBody reads the request body into v using the
+// request content encoding.
+//
+// ReadBody assumes that the request body is limited to a
+// reasonable size. It may return an error if it cannot
+// determine the request content length before decoding.
+func ReadBody(r *Request, v any) error {
+	return json.NewDecoder(r.Body).Decode(v)
 }

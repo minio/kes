@@ -2,11 +2,13 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package auth
+package https
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"net"
 	"net/http"
@@ -135,7 +137,7 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 	}
 	req.TLS.PeerCertificates = peerCertificates
 
-	identity := Identify(req)
+	identity := identify(req)
 	if identity.IsUnknown() {
 		return kes.ErrNotAllowed
 	}
@@ -211,6 +213,39 @@ func ForwardedIPFromContext(ctx context.Context) net.IP {
 		return nil
 	}
 	return v.(net.IP)
+}
+
+// Identify computes the identity of the given HTTP request.
+//
+// If the request was not sent over TLS or no client
+// certificate has been provided, Identify returns
+// IdentityUnknown.
+func identify(req *http.Request) kes.Identity {
+	if req.TLS == nil {
+		return kes.IdentityUnknown
+	}
+
+	var cert *x509.Certificate
+	for _, c := range req.TLS.PeerCertificates {
+		if c.IsCA {
+			continue // Ignore CA certificates
+		}
+
+		if cert != nil {
+			// There is more than one client certificate
+			// that is not a CA certificate. Hence, we
+			// cannot compute an non-ambiguous identity.
+			// Therefore, we return IdentityUnknown.
+			return kes.IdentityUnknown
+		}
+		cert = c
+	}
+	if cert == nil {
+		return kes.IdentityUnknown
+	}
+
+	h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return kes.Identity(hex.EncodeToString(h[:]))
 }
 
 // getClientCertificate tries to extract an URL-escaped and ANS.1-encoded
