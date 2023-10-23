@@ -5,13 +5,14 @@
 package vault
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
 
 func TestCloneConfig(t *testing.T) {
 	for i, a := range cloneConfigTests {
-		if b := a.Clone(); *a != *b {
+		if b := a.Clone(); !reflect.DeepEqual(a, b) {
 			t.Fatalf("Test %d: cloned config does not match original", i)
 		}
 	}
@@ -34,6 +35,10 @@ var cloneConfigTests = []*Config{
 			Engine: "auth",
 			Role:   "kes",
 			JWT:    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+		},
+		Transit: &Transit{
+			Engine:  "transit",
+			KeyName: "my-key",
 		},
 		StatusPingAfter: 15 * time.Second,
 		PrivateKey:      "/tmp/kes/vault.key",
