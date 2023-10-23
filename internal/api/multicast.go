@@ -34,7 +34,7 @@ func (m *Multicast) Num() int {
 // Add adds w to m. Future writes to m will also reach w.
 // If w is already part of m, Add does nothing.
 func (m *Multicast) Add(w io.Writer) {
-	if m == nil {
+	if w == nil {
 		return
 	}
 
