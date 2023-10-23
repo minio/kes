@@ -83,7 +83,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 			return nil, errors.New("vault: no authentication method specified")
 		}
 		if (c.AppRole.ID != "" || c.AppRole.Secret != "") && (c.K8S.JWT != "" || c.K8S.Role != "") {
-			return nil, errors.New("vault: ambigious authentication: approle and kubernetes method specified")
+			return nil, errors.New("vault: more than one authentication method specified: approle and kubernetes configuration is present")
 		}
 	}
 	if c.Transit != nil {
