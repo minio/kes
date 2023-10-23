@@ -260,6 +260,9 @@ keystore:
     version: ""   # The K/V engine version - either "v1" or "v2". The "v1" engine is recommended.
     namespace: "" # An optional Vault namespace. See: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
     prefix: ""    # An optional K/V prefix. The server will store keys under this prefix.
+    transit:      # Optionally encrypt keys stored on the K/V engine with a Vault-managed key.
+      engine: ""  # The path of the transit engine - e.g. "my-transit". If empty, defaults to: transit (Vault default)
+      key: ""     # The key name that should be used to encrypt entries stored on the K/V engine.
     approle:    # AppRole credentials. See: https://www.vaultproject.io/docs/auth/approle.html
       engine: ""  # The path of the AppRole engine - e.g. authenticate. If empty, defaults to: approle. (Vault default)
       id: ""      # Your AppRole Role ID

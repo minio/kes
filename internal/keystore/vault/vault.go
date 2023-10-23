@@ -14,11 +14,13 @@ package vault
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"aead.dev/mem"
@@ -45,17 +47,26 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	if c.APIVersion == "" {
 		c.APIVersion = APIv1
 	}
-	if c.AppRole.Retry == 0 {
-		c.AppRole.Retry = 5 * time.Second
+	if c.AppRole != nil {
+		if c.AppRole.Retry == 0 {
+			c.AppRole.Retry = 5 * time.Second
+		}
+		if c.AppRole.Engine == "" {
+			c.AppRole.Engine = EngineAppRole
+		}
 	}
-	if c.AppRole.Engine == "" {
-		c.AppRole.Engine = EngineAppRole
+	if c.K8S != nil {
+		if c.K8S.Engine == "" {
+			c.K8S.Engine = EngineKubernetes
+		}
+		if c.K8S.Retry == 0 {
+			c.K8S.Retry = 5 * time.Second
+		}
 	}
-	if c.K8S.Engine == "" {
-		c.K8S.Engine = EngineKubernetes
-	}
-	if c.K8S.Retry == 0 {
-		c.K8S.Retry = 5 * time.Second
+	if c.Transit != nil {
+		if c.Transit.Engine == "" {
+			c.Transit.Engine = EngineTransit
+		}
 	}
 	if c.StatusPingAfter == 0 {
 		c.StatusPingAfter = 15 * time.Second
@@ -67,11 +78,18 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	if c.APIVersion != APIv1 && c.APIVersion != APIv2 {
 		return nil, fmt.Errorf("vault: invalid engine API version '%s'", c.APIVersion)
 	}
-	if (c.AppRole.ID == "" || c.AppRole.Secret == "") && (c.K8S.JWT == "" || c.K8S.Role == "") {
-		return nil, errors.New("vault: no authentication method specified")
+	if c.AppRole != nil && c.K8S != nil {
+		if (c.AppRole.ID == "" || c.AppRole.Secret == "") && (c.K8S.JWT == "" || c.K8S.Role == "") {
+			return nil, errors.New("vault: no authentication method specified")
+		}
+		if (c.AppRole.ID != "" || c.AppRole.Secret != "") && (c.K8S.JWT != "" || c.K8S.Role != "") {
+			return nil, errors.New("vault: ambigious authentication: approle and kubernetes method specified")
+		}
 	}
-	if (c.AppRole.ID != "" || c.AppRole.Secret != "") && (c.K8S.JWT != "" || c.K8S.Role != "") {
-		return nil, errors.New("vault: ambigious authentication: approle and kubernetes method specified")
+	if c.Transit != nil {
+		if c.Transit.KeyName == "" {
+			return nil, errors.New("vault: transit key name is empty")
+		}
 	}
 
 	tlsConfig := &vaultapi.TLSConfig{
@@ -236,6 +254,44 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 		return fmt.Errorf("vault: failed to create '%s': %v", location, err)
 	}
 
+	if s.config.Transit != nil {
+		encLocation := path.Join(s.config.Transit.Engine, "encrypt", s.config.Transit.KeyName)
+		req := s.client.Client.NewRequest(http.MethodPost, "/v1/"+encLocation)
+		if err := req.SetJSONBody(map[string]any{
+			"plaintext": base64.StdEncoding.EncodeToString(value),
+		}); err != nil {
+			return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: %v", location, err)
+		}
+
+		resp, err := s.client.Client.RawRequestWithContext(ctx, req)
+		if err != nil {
+			return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: %v", location, err)
+		}
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if resp.StatusCode != http.StatusOK {
+			if _, err = vaultapi.ParseSecret(resp.Body); err != nil {
+				return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: %v", location, err)
+			}
+			return fmt.Errorf("vault: failed to create '%s': server responded with: %s (%d)", location, resp.Status, resp.StatusCode)
+		}
+
+		secret, err := vaultapi.ParseSecret(resp.Body)
+		if err != nil {
+			return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: %v", location, err)
+		}
+		ciphertext, ok := secret.Data["ciphertext"]
+		if !ok {
+			return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: no ciphertext in vault response", location)
+		}
+		v, ok := ciphertext.(string)
+		if !ok || !strings.HasPrefix(v, "vault:v1:") {
+			return fmt.Errorf("vault: failed to create '%s': failed to encrypt key: invalid vault response", location)
+		}
+		value = []byte(v)
+	}
+
 	// Finally, we create the value since it seems that it
 	// doesn't exist. However, this is just an assumption since
 	// another key server may have created that key in the meantime.
@@ -297,7 +353,7 @@ func (s *Store) Set(ctx context.Context, name string, value []byte) error {
 
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
-func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
+func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	if s.client.Sealed() {
 		return nil, errSealed
 	}
@@ -340,6 +396,49 @@ func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 	value, ok := v.(string)
 	if !ok {
 		return nil, fmt.Errorf("vault: failed to read '%s': invalid K/V format", location)
+	}
+
+	// Handle transit encrypted K/V entries
+	if strings.HasPrefix(value, "vault:v1:") {
+		if s.config.Transit == nil {
+			return nil, fmt.Errorf("vault: failed to read '%s': key is encrypted with vault transit key", location)
+		}
+
+		decLocation := path.Join(s.config.Transit.Engine, "decrypt", s.config.Transit.KeyName)
+		req := s.client.Client.NewRequest(http.MethodPost, "/v1/"+decLocation)
+		if err := req.SetJSONBody(map[string]any{
+			"ciphertext": value,
+		}); err != nil {
+			return nil, fmt.Errorf("vault: failed to read '%s': failed to decrypt key: %v", location, err)
+		}
+
+		resp, err := s.client.Client.RawRequestWithContext(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("vault: failed to read '%s': failed to decrypt key: %v", location, err)
+		}
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if resp.StatusCode != http.StatusOK {
+			if _, err = vaultapi.ParseSecret(resp.Body); err != nil {
+				return nil, fmt.Errorf("vault: failed to read '%s': failed to encrypt key: %v", location, err)
+			}
+			return nil, fmt.Errorf("vault: failed to read '%s': server responded with: %s (%d)", location, resp.Status, resp.StatusCode)
+		}
+
+		secret, err := vaultapi.ParseSecret(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("vault: failed to read '%s': failed to decrypt key: %v", location, err)
+		}
+		plaintext, ok := secret.Data["plaintext"]
+		if !ok {
+			return nil, fmt.Errorf("vault: failed to read '%s': failed to decrypt key: no plaintext in vault response", location)
+		}
+		value, ok = plaintext.(string)
+		if !ok {
+			return nil, fmt.Errorf("vault: failed to read '%s': failed to decrypt key: invalid vault response", location)
+		}
+		return base64.StdEncoding.DecodeString(value)
 	}
 	return []byte(value), nil
 }

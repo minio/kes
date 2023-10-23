@@ -24,13 +24,13 @@ var cloneConfigTests = []*Config{
 		APIVersion: APIv2,
 		Namespace:  "ns-1",
 		Prefix:     "my-prefix",
-		AppRole: AppRole{
+		AppRole: &AppRole{
 			Engine: "auth",
 			ID:     "be7f3c83-9733-4d65-adaa-7eeb6e14e922",
 			Secret: "ba8d68af-23c4-4199-a516-e37cebdaab48",
 			Retry:  30 * time.Second,
 		},
-		K8S: Kubernetes{
+		K8S: &Kubernetes{
 			Engine: "auth",
 			Role:   "kes",
 			JWT:    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",

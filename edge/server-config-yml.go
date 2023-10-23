@@ -89,6 +89,11 @@ type yml struct {
 			Namespace  env[string] `yaml:"namespace"`
 			Prefix     env[string] `yaml:"prefix"`
 
+			Transit *struct {
+				Engine  env[string] `yaml:"engine"`
+				KeyName env[string] `yaml:"key"`
+			}
+
 			AppRole *struct {
 				Engine env[string] `yaml:"engine"`
 				ID     env[string] `yaml:"id"`
@@ -448,6 +453,12 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 				y.KeyStore.Vault.Kubernetes.JWT.Value = string(b)
 			}
 		}
+		if y.KeyStore.Vault.Transit != nil {
+			if y.KeyStore.Vault.Transit.KeyName.Value == "" {
+				return nil, errors.New("edge: invalid vault keystore: invalid transit config: no key name specified")
+			}
+		}
+
 		if y.KeyStore.Vault.TLS.PrivateKey.Value != "" && y.KeyStore.Vault.TLS.Certificate.Value == "" {
 			return nil, errors.New("edge: invalid vault keystore: invalid tls config: no TLS certificate provided")
 		}
@@ -477,6 +488,12 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 				Engine: y.KeyStore.Vault.Kubernetes.Engine.Value,
 				JWT:    y.KeyStore.Vault.Kubernetes.JWT.Value,
 				Role:   y.KeyStore.Vault.Kubernetes.Role.Value,
+			}
+		}
+		if y.KeyStore.Vault.Transit != nil {
+			s.Transit = &VaultTransit{
+				Engine:  y.KeyStore.Vault.Transit.Engine.Value,
+				KeyName: y.KeyStore.Vault.Transit.KeyName.Value,
 			}
 		}
 		keystore = s
