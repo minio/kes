@@ -39,7 +39,6 @@ func (v *verifyIdentity) Authenticate(req *http.Request) (*api.Request, api.Erro
 		s.Log.DebugContext(req.Context(), err.Error(), "req", req)
 		return nil, err
 	}
-	
 	if identity == s.Admin {
 		return &api.Request{
 			Request:  req,
