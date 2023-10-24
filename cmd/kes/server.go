@@ -111,7 +111,7 @@ func serverCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	config, err := readServerConfig(ctx, serverArgs{
+	addr, config, err := readServerConfig(ctx, serverArgs{
 		Address:     addrFlag,
 		ConfigFile:  configFlag,
 		PrivateKey:  tlsKeyFlag,
@@ -136,7 +136,7 @@ func serverCmd(args []string) {
 				return
 			case <-sighup:
 				fmt.Fprintln(os.Stderr, "SIGHUP signal received. Reloading configuration...")
-				config, err := readServerConfig(ctx, serverArgs{
+				_, config, err := readServerConfig(ctx, serverArgs{
 					Address:     addrFlag,
 					ConfigFile:  configFlag,
 					PrivateKey:  tlsKeyFlag,
@@ -177,7 +177,7 @@ func serverCmd(args []string) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				config, err := readServerConfig(ctx, serverArgs{
+				_, config, err := readServerConfig(ctx, serverArgs{
 					Address:     addrFlag,
 					ConfigFile:  configFlag,
 					PrivateKey:  tlsKeyFlag,
@@ -195,7 +195,7 @@ func serverCmd(args []string) {
 		}
 	}(ctx)
 
-	buf, err := printServerStartup(srv, addrFlag, config, memLocked)
+	buf, err := printServerStartup(srv, addr, config, memLocked)
 	if err != nil {
 		cli.Fatal(err)
 	}
@@ -266,19 +266,19 @@ func printServerStartup(srv *kes.Server, addr string, config *kes.Config, memLoc
 	return buf, nil
 }
 
-func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error) {
+func readServerConfig(ctx context.Context, args serverArgs) (string, *kes.Config, error) {
 	file, err := os.Open(args.ConfigFile)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	defer file.Close()
 
 	config, err := edge.ReadServerConfigYAML(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return "", nil, fmt.Errorf("failed to read config file: %v", err)
 	}
 	if err = file.Close(); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	if args.Address != "" {
@@ -304,25 +304,25 @@ func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error)
 
 	// Verify config
 	if config.Admin.IsUnknown() {
-		return nil, errors.New("no admin identity specified")
+		return "", nil, errors.New("no admin identity specified")
 	}
 	if config.TLS.PrivateKey == "" {
-		return nil, errors.New("no TLS private key specified")
+		return "", nil, errors.New("no TLS private key specified")
 	}
 	if config.TLS.Certificate == "" {
-		return nil, errors.New("no TLS certificate specified")
+		return "", nil, errors.New("no TLS certificate specified")
 	}
 
 	certificate, err := https.CertificateFromFile(config.TLS.Certificate, config.TLS.PrivateKey, config.TLS.Password)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read TLS certificate: %v", err)
+		return "", nil, fmt.Errorf("failed to read TLS certificate: %v", err)
 	}
 	if certificate.Leaf != nil {
 		if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
 			// Support for TLS certificates with a subject CN but without any SAN
 			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
 			// Therefore, we require at least one SAN for the server certificate.
-			return nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
+			return "", nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
 		}
 	}
 
@@ -330,7 +330,7 @@ func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error)
 	if config.TLS.CAPath != "" {
 		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
+			return "", nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
 		}
 	}
 
@@ -355,7 +355,7 @@ func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error)
 			}
 
 			if _, ok := apiConfig[k]; ok {
-				return nil, fmt.Errorf("ambiguous API configuration for '%s'", k)
+				return "", nil, fmt.Errorf("ambiguous API configuration for '%s'", k)
 			}
 			apiConfig[k] = kes.RouteConfig{
 				Timeout:          v.Timeout,
@@ -382,12 +382,12 @@ func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error)
 
 	kmsKind, kmsEndpoint, err := description(config)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	store, err := config.KeyStore.Connect(ctx)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	keys := adapter{
@@ -396,7 +396,7 @@ func readServerConfig(ctx context.Context, args serverArgs) (*kes.Config, error)
 		Endpoint: kmsEndpoint,
 	}
 
-	return &kes.Config{
+	return config.Addr, &kes.Config{
 		Admin: config.Admin,
 		TLS: &tls.Config{
 			MinVersion:   tls.VersionTLS12,
