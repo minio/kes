@@ -116,9 +116,9 @@ func createKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 	for _, name := range cmd.Args() {
-		if err := enclave.CreateKey(ctx, name); err != nil {
+		if err := client.CreateKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
@@ -234,8 +234,8 @@ func describeKeyCmd(args []string) {
 	defer cancelCtx()
 
 	name := cmd.Arg(0)
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	info, err := enclave.DescribeKey(ctx, name)
+	client := newClient(insecureSkipVerify)
+	info, err := client.DescribeKey(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -385,9 +385,9 @@ func rmKeyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	client := newClient(insecureSkipVerify)
 	for _, name := range cmd.Args() {
-		if err := enclave.DeleteKey(ctx, name); err != nil {
+		if err := client.DeleteKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
 				os.Exit(1)
 			}
@@ -441,8 +441,8 @@ func encryptKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	ciphertext, err := enclave.Encrypt(ctx, name, []byte(message), nil)
+	client := newClient(insecureSkipVerify)
+	ciphertext, err := client.Encrypt(ctx, name, []byte(message), nil)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -514,8 +514,8 @@ func decryptKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	plaintext, err := enclave.Decrypt(ctx, name, ciphertext, associatedData)
+	client := newClient(insecureSkipVerify)
+	plaintext, err := client.Decrypt(ctx, name, ciphertext, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -580,8 +580,8 @@ func dekCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
-	key, err := enclave.GenerateKey(ctx, name, associatedData)
+	client := newClient(insecureSkipVerify)
+	key, err := client.GenerateKey(ctx, name, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)

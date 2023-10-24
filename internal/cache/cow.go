@@ -211,3 +211,18 @@ func (c *Cow[K, V]) Clone() *Cow[K, V] {
 	cc.ptr.Store(&w)
 	return cc
 }
+
+// Keys returns a slice of all keys of the Cow.
+// It never returns nil.
+func (c *Cow[K, _]) Keys() []K {
+	p := c.ptr.Load()
+	if len(*p) == 0 {
+		return []K{}
+	}
+
+	keys := make([]K, 0, len(*p))
+	for k := range *p {
+		keys = append(keys, k)
+	}
+	return keys
+}

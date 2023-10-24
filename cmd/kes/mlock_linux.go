@@ -11,3 +11,5 @@ import (
 )
 
 func mlockall() error { return unix.Mlockall(syscall.MCL_CURRENT | syscall.MCL_FUTURE) }
+
+func munlockall() error { return unix.Munlockall() }

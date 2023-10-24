@@ -1,6 +1,6 @@
 module github.com/minio/kes
 
-go 1.18
+go 1.20
 
 require (
 	aead.dev/mem v0.2.0

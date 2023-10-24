@@ -5,62 +5,56 @@
 package sys
 
 import (
+	"errors"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
 )
 
-// BuildInfo contains build information
-// about a Go binary.
-type BuildInfo struct {
-	Version  string
-	CommitID string
-	Data     string
+// BinaryInfo contains build information about a Go binary.
+type BinaryInfo struct {
+	Version  string // The version of this binary
+	CommitID string // The git commit hash
+	Runtime  string // The Go runtime version, e.g. go1.21.0
+	Compiler string // The Go compiler used to build this binary
 }
 
-// BinaryInfo returns the BuildInfo of the
-// binary itself.
-//
-// It returns some default information
-// when no build information has been
-// compiled into the binary.
-func BinaryInfo() BuildInfo {
-	readBinaryOnce.Do(func() { binaryInfo = readBinaryInfo() })
-	return binaryInfo
-}
+// ReadBinaryInfo returns the ReadBinaryInfo about this program.
+func ReadBinaryInfo() (BinaryInfo, error) { return readBinaryInfo() }
 
-func readBinaryInfo() BuildInfo {
+var readBinaryInfo = sync.OnceValues[BinaryInfo, error](func() (BinaryInfo, error) {
 	const (
 		DefaultVersion  = "<unknown>"
 		DefaultCommitID = "<unknown>"
+		DefaultCompiler = "<unknown>"
 	)
-	binaryInfo := BuildInfo{
+	binaryInfo := BinaryInfo{
 		Version:  DefaultVersion,
 		CommitID: DefaultCommitID,
+		Runtime:  runtime.Version(),
+		Compiler: DefaultCompiler,
 	}
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return binaryInfo
+		return binaryInfo, errors.New("sys: binary does not contain build info")
 	}
 
 	const (
 		GitTimeKey     = "vcs.time"
 		GitRevisionKey = "vcs.revision"
+		CompilerKey    = "-compiler"
 	)
 	for _, setting := range info.Settings {
-		if setting.Key == GitTimeKey {
+		switch setting.Key {
+		case GitTimeKey:
 			binaryInfo.Version = strings.ReplaceAll(setting.Value, ":", "-")
-		}
-		if setting.Key == GitRevisionKey {
+		case GitRevisionKey:
 			binaryInfo.CommitID = setting.Value
+		case CompilerKey:
+			binaryInfo.Compiler = setting.Value
 		}
 	}
-	binaryInfo.Data = info.String()
-	return binaryInfo
-}
-
-var (
-	readBinaryOnce sync.Once
-	binaryInfo     BuildInfo // protected by the sync.Once above
-)
+	return binaryInfo, nil
+})

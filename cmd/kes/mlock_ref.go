@@ -12,3 +12,9 @@ func mlockall() error {
 	// on linux at the moment.
 	return nil
 }
+
+func munlockall() error {
+	// We only support locking memory pages
+	// on linux at the moment.
+	return nil
+}
