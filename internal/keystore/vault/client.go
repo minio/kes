@@ -69,7 +69,7 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 // from the vault server by using the login AppRole credentials.
 //
 // To renew the auth. token see: client.RenewToken(...).
-func (c *client) AuthenticateWithAppRole(login AppRole) authFunc {
+func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 	return func() (token string, ttl time.Duration, err error) {
 		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role_id":   login.ID,
@@ -99,7 +99,7 @@ func (c *client) AuthenticateWithAppRole(login AppRole) authFunc {
 	}
 }
 
-func (c *client) AuthenticateWithK8S(login Kubernetes) authFunc {
+func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 	return func() (token string, ttl time.Duration, err error) {
 		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role": login.Role,

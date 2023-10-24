@@ -324,6 +324,15 @@ type VaultKeyStore struct {
 	// method credentials.
 	Kubernetes *VaultKubernetesAuth
 
+	// Transit contains the Vault transit encryption engine
+	// configuration for en/decrypting K/V entries with a
+	// key managed by Vault.
+	//
+	// This is an optional and additional layer of encryption.
+	// Since Vault manages and encrypts K/V values in any case,
+	// using the transit engine is usually not necessary.
+	Transit *VaultTransit
+
 	// PrivateKey is an optional path to a
 	// TLS private key file containing a
 	// TLS private key for mTLS authentication.
@@ -357,7 +366,7 @@ type VaultKeyStore struct {
 // VaultAppRoleAuth is a structure containing the configuration
 // for the Hashicorp Vault AppRole authentication method.
 type VaultAppRoleAuth struct {
-	// AppRoleEngine is the AppRole authentication engine path.
+	// Engine is the AppRole authentication engine path.
 	// If empty, defaults to "approle".
 	Engine string
 
@@ -373,7 +382,7 @@ type VaultAppRoleAuth struct {
 // VaultKubernetesAuth is a structure containing the configuration
 // for the Hashicorp Vault Kubernetes authentication method.
 type VaultKubernetesAuth struct {
-	// KubernetesEngine is the Kubernetes authentication engine path.
+	// Engine is the Kubernetes authentication engine path.
 	// If empty, defaults to "kubernetes".
 	Engine string
 
@@ -385,6 +394,17 @@ type VaultKubernetesAuth struct {
 	// the JWT for for authenticating via the kubernetes authentication
 	// method.
 	JWT string
+}
+
+// VaultTransit is a structure containing the configuration
+// for the Hashicorp Vault transit encryption engine.
+type VaultTransit struct {
+	// Engine is the Transit encryption engine path.
+	// If empty, defaults to "transit".
+	Engine string
+
+	// KeyName is the name of the key used for en/decryption.
+	KeyName string
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Hashicorp Vault server.
@@ -407,17 +427,23 @@ func (s *VaultKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], 
 		StatusPingAfter: s.StatusPing,
 	}
 	if s.AppRole != nil {
-		c.AppRole = vault.AppRole{
+		c.AppRole = &vault.AppRole{
 			Engine: s.AppRole.Engine,
 			ID:     s.AppRole.ID,
 			Secret: s.AppRole.Secret,
 		}
 	}
 	if s.Kubernetes != nil {
-		c.K8S = vault.Kubernetes{
+		c.K8S = &vault.Kubernetes{
 			Engine: s.Kubernetes.Engine,
 			Role:   s.Kubernetes.Role,
 			JWT:    s.Kubernetes.JWT,
+		}
+	}
+	if s.Transit != nil {
+		c.Transit = &vault.Transit{
+			Engine:  s.Transit.Engine,
+			KeyName: s.Transit.KeyName,
 		}
 	}
 	return vault.Connect(ctx, c)

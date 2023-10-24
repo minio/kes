@@ -24,6 +24,9 @@ const (
 	// EngineKV is the Hashicorp Vault default KV secret engine path.
 	EngineKV = "kv"
 
+	// EngineTransit is the Hashicorp Vault default transit secret engine path.
+	EngineTransit = "transit"
+
 	// EngineAppRole is the Hashicorp Vault default AppRole authentication
 	// engine path.
 	EngineAppRole = "approle"
@@ -58,6 +61,19 @@ type AppRole struct {
 	Retry time.Duration
 }
 
+// Clone returns a copy of the AppRole auth.
+func (a *AppRole) Clone() *AppRole {
+	if a == nil {
+		return nil
+	}
+	return &AppRole{
+		Engine: a.Engine,
+		ID:     a.ID,
+		Secret: a.Secret,
+		Retry:  a.Retry,
+	}
+}
+
 // Kubernetes contains authentication information
 // for the Hashicorp Vault Kubernetes authentication
 // API.
@@ -81,6 +97,44 @@ type Kubernetes struct {
 	// authentication attempt is performed once
 	// an authentication attempt failed.
 	Retry time.Duration
+}
+
+// Clone returns a copy of the Kubernetes auth.
+func (k *Kubernetes) Clone() *Kubernetes {
+	if k == nil {
+		return nil
+	}
+	return &Kubernetes{
+		Engine: k.Engine,
+		Role:   k.Role,
+		JWT:    k.JWT,
+		Retry:  k.Retry,
+	}
+}
+
+// Transit contains information for using the
+// Hashicorp Vault transit encryption engine.
+//
+// Ref: https://developer.hashicorp.com/vault/api-docs/secret/transit
+type Transit struct {
+	// Engine is the transit engine path.
+	// If empty, defaults to EngineTransit.
+	Engine string
+
+	// KeyName is the name of the transit key
+	// used for en/decrypting K/V entries.
+	KeyName string
+}
+
+// Clone returns a copy of the Transit.
+func (t *Transit) Clone() *Transit {
+	if t == nil {
+		return nil
+	}
+	return &Transit{
+		Engine:  t.Engine,
+		KeyName: t.KeyName,
+	}
 }
 
 // Config is a structure containing configuration
@@ -119,11 +173,16 @@ type Config struct {
 
 	// AppRole contains the Vault AppRole authentication
 	// credentials.
-	AppRole AppRole
+	AppRole *AppRole
 
 	// K8S contains the Vault Kubernetes authentication
 	// credentials.
-	K8S Kubernetes
+	K8S *Kubernetes
+
+	// Transit contains an optional Vault transit engine
+	// configuration for en/decrypting keys at the K/V
+	// engine. It adds an additional layer of encryption.
+	Transit *Transit
 
 	// StatusPingAfter is the duration after which
 	// the KeyStore will check the status of the Vault
@@ -164,8 +223,9 @@ func (c *Config) Clone() *Config {
 		APIVersion:      c.APIVersion,
 		Namespace:       c.Namespace,
 		Prefix:          c.Prefix,
-		AppRole:         c.AppRole,
-		K8S:             c.K8S,
+		AppRole:         c.AppRole.Clone(),
+		K8S:             c.K8S.Clone(),
+		Transit:         c.Transit.Clone(),
 		StatusPingAfter: c.StatusPingAfter,
 		PrivateKey:      c.PrivateKey,
 		Certificate:     c.Certificate,
