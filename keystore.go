@@ -46,7 +46,7 @@ type KeyStore interface {
 	// prefix, and the next prefix from which the listing should
 	// continue.
 	//
-	// It returns all keys with the prefix if n < 0 and less then n
+	// It returns all keys with the prefix if n < 0 and less than n
 	// names if n is greater than the number of keys with the prefix.
 	//
 	// An empty prefix matches any key name. At the end of the listing
@@ -110,7 +110,7 @@ func (ks *MemKeyStore) Get(_ context.Context, name string) ([]byte, error) {
 // List returns the first n key names that start with the given
 // prefix and the next prefix from which to continue the listing.
 //
-// It returns all keys with the prefix if n < 0 and less then n
+// It returns all keys with the prefix if n < 0 and less than n
 // names if n is grater than the number of keys with the prefix.
 //
 // An empty prefix matches any key name. At the end of the listing

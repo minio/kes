@@ -129,7 +129,7 @@ func (ro Route) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // A Handler responds to an API request.
 //
 // ServeAPI should either reply to the client or fail the request and
-// then return.The Response type provides methods to do so. Returning
+// then return. The Response type provides methods to do so. Returning
 // signals that the request is finished; it is not valid to send a
 // Response or read from the Request.Body after or concurrently with
 // the completion of the ServeAPI call.
@@ -210,8 +210,8 @@ type Response struct {
 	http.ResponseWriter
 }
 
-// Reply is a shorthand for api.Reply. It sends just sends an
-// HTTP status code to the client. The response body is empty.
+// Reply is a shorthand for api.Reply. It sends just an HTTP
+// status code to the client. The response body is empty.
 func (r *Response) Reply(code int) { Reply(r, code) }
 
 // Fail is a shorthand for api.Fail. It responds to the client
@@ -228,7 +228,7 @@ func (r *Response) Failf(code int, format string, v ...any) error {
 // client with err.
 func (r *Response) Failr(err Error) error { return Failr(r, err) }
 
-// Reply sends just sends an HTTP status code to the client.
+// Reply sends just an HTTP status code to the client.
 // The response body is empty.
 func Reply(r *Response, code int) {
 	r.Header().Set(headers.ContentLength, strconv.Itoa(0))

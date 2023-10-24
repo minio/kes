@@ -874,7 +874,7 @@ func (s *Server) describePolicy(resp *api.Response, req *api.Request) {
 		resp.Failr(kes.ErrPolicyNotFound)
 		return
 	}
-	api.ReplyWith(resp, http.StatusOK, api.DescribeKeyResponse{
+	api.ReplyWith(resp, http.StatusOK, api.DescribePolicyResponse{
 		Name:      req.Resource,
 		CreatedAt: state.StartTime,
 		CreatedBy: state.Admin.String(),

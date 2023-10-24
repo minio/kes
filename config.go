@@ -83,9 +83,9 @@ type CacheConfig struct {
 	Expiry time.Duration
 
 	// ExpiryUnused is the interval in which a particular
-	// must be accessed to remain in the cache. Keys that
-	// haven't been accessed get evicted from the cache.
-	// The general cache expiry still applies.
+	// key must be accessed to remain in the cache. Keys
+	// that haven't been accessed get evicted from the
+	// cache. The general cache expiry still applies.
 	//
 	// ExpiryUnused does nothing if <= 0 or greater than
 	// Expiry.
@@ -117,7 +117,7 @@ type RouteConfig struct {
 	// If <= 0, timeouts are disabled for the API route.
 	//
 	// Disabling timeouts may leave client/server connections
-	// hang or allow certain types of denial-of-service (DOS)
+	// hung or allow certain types of denial-of-service (DOS)
 	// attacks.
 	Timeout time.Duration
 

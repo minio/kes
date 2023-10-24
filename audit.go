@@ -67,7 +67,7 @@ type AuditHandler interface {
 	// decision.
 	Enabled(context.Context, slog.Level) bool
 
-	// Handle handles the AuditRecord. It will only called when
+	// Handle handles the AuditRecord. It will only be called when
 	// Enabled returns true.
 	//
 	// The context is present for providing AuditHandlers access
