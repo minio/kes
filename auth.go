@@ -33,14 +33,13 @@ type verifyIdentity atomic.Pointer[serverState]
 // server admin or passes the policy assigned to the identity.
 // Otherwise, it returns an error.
 func (v *verifyIdentity) Authenticate(req *http.Request) (*api.Request, api.Error) {
+	s := (*atomic.Pointer[serverState])(v).Load()
 	identity, err := identifyRequest(req.TLS)
 	if err != nil {
-		s := (*atomic.Pointer[serverState])(v).Load()
 		s.Log.DebugContext(req.Context(), err.Error(), "req", req)
 		return nil, err
 	}
-
-	s := (*atomic.Pointer[serverState])(v).Load()
+	
 	if identity == s.Admin {
 		return &api.Request{
 			Request:  req,
