@@ -1,0 +1,21 @@
+FROM golang:1.21-alpine as build
+
+LABEL maintainer="MinIO Inc <dev@min.io>"
+
+ENV GOPATH /go
+ENV CGO_ENABLED 0
+
+RUN  \
+     apk add -U --no-cache ca-certificates && \
+     apk add --no-cache git && \
+     git clone https://github.com/minio/kes && cd kes && \
+     go install -v -trimpath -buildvcs=true -ldflags "-s -w" ./cmd/kes
+
+FROM scratch
+
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /go/bin/kes /kes
+
+EXPOSE 7373
+
+ENTRYPOINT ["/kes"]

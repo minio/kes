@@ -23,11 +23,11 @@ builds:
     goarch:
       - amd64
       - arm64
-      - ppc64le
-      - s390x
     ignore:
       - goos: windows
         goarch: arm64
+      - goos: darwin
+        goarch: amd64
     env:
       - CGO_ENABLED=0
     flags:
@@ -71,7 +71,7 @@ dockers:
 - image_templates:
   - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   use: buildx
-  dockerfile: Dockerfile.release
+  dockerfile: Dockerfile
   extra_files:
     - LICENSE
     - CREDITS
@@ -79,30 +79,10 @@ dockers:
   - '--platform=linux/amd64'
   - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
-  use: buildx
-  dockerfile: Dockerfile.release
-  extra_files:
-    - LICENSE
-    - CREDITS
-  build_flag_templates:
-  - '--platform=linux/ppc64le'
-  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
-- image_templates:
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
-  use: buildx
-  dockerfile: Dockerfile.release
-  extra_files:
-    - LICENSE
-    - CREDITS
-  build_flag_templates:
-  - '--platform=linux/s390x'
-  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
-- image_templates:
   - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
   use: buildx
   goarch: arm64
-  dockerfile: Dockerfile.release
+  dockerfile: Dockerfile
   extra_files:
     - LICENSE
     - CREDITS
@@ -110,40 +90,10 @@ dockers:
   - '--platform=linux/arm64'
   - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
-  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
-  use: buildx
-  dockerfile: Dockerfile.release
-  extra_files:
-    - LICENSE
-    - CREDITS
-  build_flag_templates:
-  - '--platform=linux/amd64'
-  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
-- image_templates:
-  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
-  use: buildx
-  dockerfile: Dockerfile.release
-  extra_files:
-    - LICENSE
-    - CREDITS
-  build_flag_templates:
-  - '--platform=linux/ppc64le'
-  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
-- image_templates:
-  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
-  use: buildx
-  dockerfile: Dockerfile.release
-  extra_files:
-    - LICENSE
-    - CREDITS
-  build_flag_templates:
-  - '--platform=linux/s390x'
-  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
-- image_templates:
   - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
   use: buildx
   goarch: arm64
-  dockerfile: Dockerfile.release
+  dockerfile: Dockerfile
   extra_files:
     - LICENSE
     - CREDITS
@@ -155,17 +105,11 @@ docker_manifests:
   image_templates:
   - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
 - name_template: quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}
   image_templates:
   - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
-  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
-  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
 - name_template: minio/kes:latest
   image_templates:
   - minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
   - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-ppc64le
-  - minio/kes:{{ replace .CommitDate ":" "-" }}-s390x
