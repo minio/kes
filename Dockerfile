@@ -1,23 +1,26 @@
-FROM golang:1.21-alpine as build
+FROM --platform=linux/amd64 registry.access.redhat.com/ubi9/ubi-minimal:9.2 as build
 
-LABEL maintainer="MinIO Inc <dev@min.io>"
+RUN microdnf update --nodocs && microdnf install ca-certificates --nodocs
 
-ENV GOPATH /go
-ENV CGO_ENABLED 0
-ENV GO111MODULE on
+FROM registry.access.redhat.com/ubi9/ubi-micro:9.2
 
-RUN  \
-     apk add --no-cache git && \
-     git clone https://github.com/minio/kes && cd kes && \
-     GOPROXY=$(go env GOPROXY) go install -v -ldflags "-s -w" ./cmd/kes
+ARG TAG
 
-FROM alpine:latest as alpine
-RUN apk add -U --no-cache ca-certificates
+LABEL name="MinIO" \
+      vendor="MinIO Inc <dev@min.io>" \
+      maintainer="MinIO Inc <dev@min.io>" \
+      version="${TAG}" \
+      release="${TAG}" \
+      summary="KES is a cloud-native distributed key management and encryption server designed to build zero-trust infrastructures at scale."
 
-FROM scratch
+# On RHEL the certificate bundle is located at:
+# - /etc/pki/tls/certs/ca-bundle.crt (RHEL 6)
+# - /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem (RHEL 7)
+COPY --from=build /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/pki/ca-trust/extracted/pem/
 
-COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /go/bin/kes /kes
+COPY LICENSE /LICENSE
+COPY CREDITS /CREDITS
+COPY kes /kes
 
 EXPOSE 7373
 
