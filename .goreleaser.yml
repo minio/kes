@@ -79,6 +79,16 @@ dockers:
   - '--platform=linux/amd64'
   - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
 - image_templates:
+  - quay.io/minio/kes:{{ replace .CommitDate ":" "-" }}-amd64
+  use: buildx
+  dockerfile: Dockerfile
+  extra_files:
+    - LICENSE
+    - CREDITS
+  build_flag_templates:
+  - '--platform=linux/amd64'
+  - '--build-arg=TAG={{ replace .CommitDate ":" "-" }}'
+- image_templates:
   - minio/kes:{{ replace .CommitDate ":" "-" }}-arm64
   use: buildx
   goarch: arm64
