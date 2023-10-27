@@ -169,7 +169,7 @@ func serverCmd(args []string) {
 	}(ctx)
 
 	go func(ctx context.Context) {
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 
 		for {
@@ -177,7 +177,7 @@ func serverCmd(args []string) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_, config, err := readServerConfig(ctx, serverArgs{
+				config, err := readServerTLSConfig(serverArgs{
 					Address:     addrFlag,
 					ConfigFile:  configFlag,
 					PrivateKey:  tlsKeyFlag,
@@ -188,7 +188,7 @@ func serverCmd(args []string) {
 					fmt.Fprintf(os.Stderr, "Failed to reload TLS configuration: %v\n", err)
 					continue
 				}
-				if err = srv.UpdateTLS(config.TLS); err != nil {
+				if err = srv.UpdateTLS(config); err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to update TLS configuration: %v\n", err)
 				}
 			}
@@ -264,6 +264,61 @@ func printServerStartup(srv *kes.Server, addr string, config *kes.Config, memLoc
 		fmt.Fprintf(buf, "%-33s %s\n", blue.Render("MLock"), "enabled")
 	}
 	return buf, nil
+}
+
+func readServerTLSConfig(args serverArgs) (*tls.Config, error) {
+	file, err := os.Open(args.ConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	config, err := edge.ReadServerConfigYAML(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
+	}
+	if err = file.Close(); err != nil {
+		return nil, err
+	}
+	if args.PrivateKey != "" {
+		config.TLS.PrivateKey = args.PrivateKey
+	}
+	if args.Certificate != "" {
+		config.TLS.Certificate = args.Certificate
+	}
+	if args.PrivateKey != "" {
+		config.TLS.PrivateKey = args.PrivateKey
+	}
+	if args.Certificate != "" {
+		config.TLS.Certificate = args.Certificate
+	}
+
+	certificate, err := https.CertificateFromFile(config.TLS.Certificate, config.TLS.PrivateKey, config.TLS.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read TLS certificate: %v", err)
+	}
+	if certificate.Leaf != nil {
+		if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
+			// Support for TLS certificates with a subject CN but without any SAN
+			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
+			// Therefore, we require at least one SAN for the server certificate.
+			return nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
+		}
+	}
+
+	var rootCAs *x509.CertPool
+	if config.TLS.CAPath != "" {
+		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
+		}
+	}
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      rootCAs,
+		ClientAuth:   tls.RequestClientCert,
+	}, nil
 }
 
 func readServerConfig(ctx context.Context, args serverArgs) (string, *kes.Config, error) {
