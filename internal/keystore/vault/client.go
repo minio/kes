@@ -135,31 +135,24 @@ func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 // the authentication attempt failed.
 type authFunc func() (token string, ttl time.Duration, err error)
 
-// RenewToken tries to authenticate with the given AppRole
-// credentials if the given ttl is 0. Further, it keeps
-// trying to renew the the client auth. token before its
-// ttl expires until <-ctx.Done() returns.
+// RenewToken tries to renew the Vault auth token periodically
+// based on its TTL. If TTL is zero, RenewToken returns early
+// because tokens without a TTL are long-lived and don't need
+// to be renewed.
 //
-// If the vault server becomes sealed, RenewToken stops
-// and waits until it becomes unsealed again. Therefore,
+// If the vault server gets sealed, RenewToken stops
+// and waits until it is unsealed again. Therefore,
 // a client should have started a client.CheckStatus(...)
 // go routine in the background.
-//
-// If the authentication fails, RenewToken tries to
-// re-authenticate with the given login credentials.
-// Once this re-authentication succeeds, RenewToken
-// starts renewing the received token before its TTL
-// expires.
-// If the re-authentication fails, RenewToken retries
-// the authentication after login.Retry.
-//
-// If login.Retry == 0, RenewToken uses 5s delay by default.
 //
 // Since RenewToken starts a endless for-loop users should
 // usually invoke CheckStatus in a separate go routine:
 //
 //	go client.RenewToken(ctx, login, ttl)
 func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, retry time.Duration) {
+	if ttl == 0 {
+		return // Token has no TTL. Hence, we do not need to renew it. (long-lived)
+	}
 	if retry == 0 {
 		retry = 5 * time.Second
 	}
@@ -184,11 +177,16 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 			continue
 		}
 
-		// If the TTL is 0 we cannot renew the token.
-		// Therefore, we try to re-authenticate and
-		// get a new token. We repeat that until we
-		// successfully authenticate and got a token.
-		if ttl == 0 {
+		// We don't use TTL / 2 to avoid loosing access
+		// if the renewal process fails once.
+		timer := time.NewTimer(ttl / 3)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
 			token, newTTL, err := authenticate()
 			if err != nil || newTTL == 0 {
 				timer := time.NewTimer(retry)
@@ -204,36 +202,6 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, ttl, ret
 				ttl = newTTL
 				c.SetToken(token) // SetToken is safe to call from different go routines
 			}
-			continue
-		}
-
-		// Now the client has a token with a non-zero TTL
-		// such tht we can renew it. We repeat that until
-		// the renewable process fails once. In this case
-		// we try to re-authenticate again.
-		timer := time.NewTimer(ttl / 2)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return
-		case <-timer.C:
-		}
-
-		secret, err := c.Auth().Token().RenewSelfWithContext(ctx, int(ttl.Seconds()))
-		if err != nil || secret == nil {
-			ttl = 0
-			continue
-		}
-		if ok, err := secret.TokenIsRenewable(); !ok || err != nil {
-			ttl = 0
-			continue
-		}
-		ttl, err = secret.TokenTTL()
-		if err != nil || ttl == 0 {
-			ttl = 0
-			continue
 		}
 	}
 }
