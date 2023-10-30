@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 registry.access.redhat.com/ubi9/ubi-minimal:9.2 as build
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.2 as build
 
 RUN microdnf update --nodocs && microdnf install ca-certificates --nodocs
 
@@ -25,3 +25,4 @@ COPY kes /kes
 EXPOSE 7373
 
 ENTRYPOINT ["/kes"]
+CMD ["kes"]
