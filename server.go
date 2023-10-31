@@ -477,27 +477,27 @@ func (s *Server) ready(resp *api.Response, req *api.Request) {
 }
 
 func (s *Server) status(resp *api.Response, req *api.Request) {
-	var (
-		unavailable, unreachable bool
-		latency                  time.Duration
-	)
-	state, err := s.state.Load().Keys.Status(req.Context())
-	if err != nil {
-		unavailable = true
-		_, unreachable = kv.IsUnreachable(err)
-	} else {
-		latency = state.Latency.Round(time.Millisecond)
-		if latency == 0 { // Make sure we actually send a latency even if the key store respond time is < 1ms.
-			latency = 1 * time.Millisecond
-		}
-	}
-
 	info, err := sys.ReadBinaryInfo()
 	if err != nil {
 		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusInternalServerError, "failed to read server version")
 		return
 	}
+
+	var (
+		latency     time.Duration
+		unreachable = true
+	)
+	state, err := s.state.Load().Keys.Status(req.Context())
+	if err == nil {
+		unreachable = false
+		latency = state.Latency.Round(time.Millisecond)
+
+		if latency == 0 { // Make sure we actually send a latency even if the key store respond time is < 1ms.
+			latency = 1 * time.Millisecond
+		}
+	}
+
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
@@ -513,7 +513,6 @@ func (s *Server) status(resp *api.Response, req *api.Request) {
 		StackAlloc: memStats.StackSys,
 
 		KeyStoreLatency:     latency.Milliseconds(),
-		KeyStoreUnavailable: unavailable,
 		KeyStoreUnreachable: unreachable,
 	})
 }

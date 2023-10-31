@@ -26,7 +26,6 @@ type StatusResponse struct {
 	StackAlloc uint64 `json:"mem_stack_used"`
 
 	KeyStoreLatency     int64 `json:"keystore_latency,omitempty"` // In microseconds
-	KeyStoreUnavailable bool  `json:"keystore_unavailable,omitempty"`
 	KeyStoreUnreachable bool  `json:"keystore_unreachable,omitempty"`
 }
 
