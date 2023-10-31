@@ -25,8 +25,9 @@ import (
 
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // Store is a Hashicorp Vault secret store.
@@ -153,20 +154,20 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	}, nil
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
-
 var errSealed = errors.New("vault: key store is sealed")
+
+func (s *Store) String() string { return "Hashicorp Vault: " + s.config.Endpoint }
 
 // Status returns the current state of the Hashicorp Vault instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	// This is a workaround for https://github.com/hashicorp/vault/issues/14934
 	// The Vault SDK should not set the X-Vault-Namespace header
 	// for root-only API paths.
 	// Otherwise, Vault may respond with: 404 - unsupported path
 	client, err := s.client.Clone()
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 	client.ClearNamespace()
 
@@ -175,17 +176,17 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 	if err == nil {
 		switch {
 		case !health.Initialized:
-			return kv.State{}, &kv.Unavailable{Err: errors.New("vault: not initialized")}
+			return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: errors.New("vault: not initialized")}
 		case health.Sealed:
-			return kv.State{}, &kv.Unavailable{Err: errSealed}
+			return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: errSealed}
 		default:
-			return kv.State{Latency: time.Since(start)}, nil
+			return kes.KeyStoreState{Latency: time.Since(start)}, nil
 		}
 	}
 	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{}, err
+	return kes.KeyStoreState{}, err
 }
 
 // Create creates the given key-value pair at Vault if and only
@@ -235,7 +236,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 		if _, ok := secret.Data[name]; !ok {
 			return fmt.Errorf("vault: entry exist but failed to read '%s': invalid K/V v1 format", location)
 		}
-		return kes.ErrKeyExists
+		return kesdk.ErrKeyExists
 	case err == nil && secret != nil && s.config.APIVersion == APIv2 && len(secret.Data) > 0:
 		data := secret.Data
 		v, ok := data["data"]
@@ -249,7 +250,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 		if _, ok := data[name]; !ok {
 			return fmt.Errorf("vault: failed to read '%s': entry exists but no secret key is present", location)
 		}
-		return kes.ErrKeyExists
+		return kesdk.ErrKeyExists
 	case err != nil:
 		return fmt.Errorf("vault: failed to create '%s': %v", location, err)
 	}
@@ -371,7 +372,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
 		if err == nil && entry == nil {
-			return nil, kes.ErrKeyNotFound
+			return nil, kesdk.ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("vault: failed to read '%s': %v", location, err)
 	}
@@ -483,11 +484,19 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// List returns a new Iterator over the names of
-// all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty.
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	if s.client.Sealed() {
-		return nil, errSealed
+		return nil, "", errSealed
 	}
 
 	// We don't use the Vault SDK vault.Logical.List(string) API
@@ -510,7 +519,7 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 
 	resp, err := s.client.RawRequestWithContext(ctx, r)
 	if err != nil {
-		return nil, fmt.Errorf("vault: failed to list '%s': %v", location, err)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
 	defer resp.Body.Close()
 
@@ -521,10 +530,10 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	const MaxBody = 32 * mem.MiB
 	secret, err := vaultapi.ParseSecret(mem.LimitReader(resp.Body, MaxBody))
 	if err != nil {
-		return nil, fmt.Errorf("vault: failed to list '%s': %v", location, err)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
 	if secret == nil { // The secret may be nil even when there was no error.
-		return &iterator{}, nil // We return an empty iterator in this case.
+		return []string{}, "", nil // We return an empty iterator in this case.
 	}
 
 	// Vault returns a generic map that should contain
@@ -533,9 +542,13 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 	// of a dedicated type or []string.
 	values, ok := secret.Data["keys"].([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
+		return nil, "", fmt.Errorf("vault: failed to list '%s': invalid key listing format", location)
 	}
-	return &iterator{values: values}, nil
+	names := make([]string, 0, len(values))
+	for _, v := range values {
+		names = append(names, fmt.Sprint(v))
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store. It stops any authentication renewal in the background.

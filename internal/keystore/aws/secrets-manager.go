@@ -16,8 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // Credentials represents static AWS credentials:
@@ -100,21 +101,21 @@ type Store struct {
 	client *secretsmanager.SecretsManager
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
+func (s *Store) String() string { return "AWS SecretsManager: " + s.config.Addr }
 
 // Status returns the current state of the AWS SecretsManager instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.client.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -141,7 +142,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 		if err, ok := err.(awserr.Error); ok {
 			switch err.Code() {
 			case secretsmanager.ErrCodeResourceExistsException:
-				return kes.ErrKeyExists
+				return kesdk.ErrKeyExists
 			}
 		}
 		return fmt.Errorf("aws: failed to create '%s': %v", name, err)
@@ -175,7 +176,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 			case secretsmanager.ErrCodeDecryptionFailure:
 				return nil, fmt.Errorf("aws: cannot access '%s': %v", name, err)
 			case secretsmanager.ErrCodeResourceNotFoundException:
-				return nil, kes.ErrKeyNotFound
+				return nil, kesdk.ErrKeyNotFound
 			}
 		}
 		return nil, fmt.Errorf("aws: failed to read '%s': %v", name, err)
@@ -210,7 +211,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		}
 		if err, ok := err.(awserr.Error); ok {
 			if err.Code() == secretsmanager.ErrCodeResourceNotFoundException {
-				return kes.ErrKeyNotFound
+				return kesdk.ErrKeyNotFound
 			}
 		}
 		return fmt.Errorf("aws: failed to delete '%s': %v", name, err)
@@ -220,50 +221,33 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	go func() {
-		defer close(values)
-		err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
-			for _, secret := range page.SecretList {
-				values <- *secret.Name
-			}
-
-			// The pagination is stopped once we return false.
-			// If lastPage is true then we reached the end. Therefore,
-			// we return !lastPage which then is false.
-			return !lastPage
-		})
-		if err != nil {
-			cancel(err)
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty.
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	var names []string
+	err := s.client.ListSecretsPagesWithContext(ctx, &secretsmanager.ListSecretsInput{}, func(page *secretsmanager.ListSecretsOutput, lastPage bool) bool {
+		for _, secret := range page.SecretList {
+			names = append(names, *secret.Name)
 		}
-	}()
-	return &iter{
-		ch:  values,
-		ctx: ctx,
-	}, nil
+
+		// The pagination is stopped once we return false.
+		// If lastPage is true then we reached the end. Therefore,
+		// we return !lastPage which then is false.
+		return !lastPage
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store.
 func (s *Store) Close() error { return nil }
-
-type iter struct {
-	ch  <-chan string
-	ctx context.Context
-}
-
-func (i *iter) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
-	}
-}
-
-func (i *iter) Close() error {
-	return context.Cause(i.ctx)
-}

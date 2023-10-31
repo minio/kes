@@ -2,12 +2,15 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge
+package kesconf
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type yml struct {
+type ymlFile struct {
 	Version string `yaml:"version"`
 
 	Addr env[string] `yaml:"address"`
@@ -29,6 +32,7 @@ type yml struct {
 		Certificate env[string] `yaml:"cert"`
 		CAPath      env[string] `yaml:"ca"`
 		Password    env[string] `yaml:"password"`
+		ClientAuth  env[string] `yaml:"auth"`
 
 		Proxy struct {
 			Identities []env[kes.Identity] `yaml:"identities"`
@@ -207,27 +211,27 @@ type yml struct {
 
 func findVersion(root *yaml.Node) (string, error) {
 	if root == nil {
-		return "", errors.New("edge: invalid server config")
+		return "", errors.New("kesconf: invalid config")
 	}
 	if root.Kind != yaml.DocumentNode {
-		return "", errors.New("edge: invalid server config")
+		return "", errors.New("kesconf: invalid config format")
 	}
 	if len(root.Content) != 1 {
-		return "", errors.New("edge: invalid server config")
+		return "", errors.New("kesconf: invalid config format")
 	}
 
 	doc := root.Content[0]
 	for i, n := range doc.Content {
 		if n.Value == "version" {
 			if n.Kind != yaml.ScalarNode {
-				return "", fmt.Errorf("edge: invalid server config version at line '%d'", n.Line)
+				return "", fmt.Errorf("kesconf: invalid config version at line '%d'", n.Line)
 			}
 			if i == len(doc.Content)-1 {
-				return "", fmt.Errorf("edge: invalid server config version at line '%d'", n.Line)
+				return "", fmt.Errorf("kesconf: invalid config version at line '%d'", n.Line)
 			}
 			v := doc.Content[i+1]
 			if v.Kind != yaml.ScalarNode {
-				return "", fmt.Errorf("edge: invalid server config version at line '%d'", v.Line)
+				return "", fmt.Errorf("kesconf: invalid config version at line '%d'", v.Line)
 			}
 			return v.Value, nil
 		}
@@ -235,59 +239,68 @@ func findVersion(root *yaml.Node) (string, error) {
 	return "", nil
 }
 
-func ymlToServerConfig(y *yml) (*ServerConfig, error) {
+func ymlToServerConfig(y *ymlFile) (*File, error) {
 	if y.Version != "" && y.Version != "v1" {
-		return nil, fmt.Errorf("edge: invalid version '%s'", y.Version)
+		return nil, fmt.Errorf("kesconf: invalid config version '%s'", y.Version)
 	}
 	if y.Admin.Identity.Value.IsUnknown() {
-		return nil, errors.New("edge: invalid admin identity: no admin identity")
+		return nil, errors.New("kesconf: invalid admin identity: no admin identity")
 	}
 	if y.TLS.PrivateKey.Value == "" {
-		return nil, errors.New("edge: invalid tls config: no private key")
+		return nil, errors.New("kesconf: invalid tls config: no private key")
 	}
 	if y.TLS.Certificate.Value == "" {
-		return nil, errors.New("edge: invalid tls config: no certificate")
+		return nil, errors.New("kesconf: invalid tls config: no certificate")
+	}
+
+	clientAuth := tls.RequestClientCert
+	if v := strings.ToLower(y.TLS.ClientAuth.Value); v != "" && v != "on" && v != "off" {
+		return nil, fmt.Errorf("kesconf: invalid tls config: invalid auth '%s'", y.TLS.ClientAuth)
+	} else if v == "on" {
+		clientAuth = tls.VerifyClientCertIfGiven
 	}
 
 	for _, proxy := range y.TLS.Proxy.Identities {
 		if proxy.Value == y.Admin.Identity.Value {
-			return nil, fmt.Errorf("edge: invalid tls proxy: identity '%s' is already admin", proxy.Value)
+			return nil, fmt.Errorf("kesconf: invalid tls proxy: identity '%s' is already admin", proxy.Value)
 		}
 	}
 
 	for name, policy := range y.Policies {
 		for _, identity := range policy.Identities {
 			if identity.Value == y.Admin.Identity.Value {
-				return nil, fmt.Errorf("edge: invalid policy '%s': identity '%s' is already admin", name, identity.Value)
+				return nil, fmt.Errorf("kesconf: invalid policy '%s': identity '%s' is already admin", name, identity.Value)
 			}
 			for _, proxy := range y.TLS.Proxy.Identities {
 				if identity.Value == proxy.Value {
-					return nil, fmt.Errorf("edge: invalid policy '%s': identity '%s' is already a TLS proxy", name, identity.Value)
+					return nil, fmt.Errorf("kesconf: invalid policy '%s': identity '%s' is already a TLS proxy", name, identity.Value)
 				}
 			}
 		}
 	}
 
 	if y.Cache.Expiry.Any.Value < 0 {
-		return nil, fmt.Errorf("edge: invalid cache expiry '%v'", y.Cache.Expiry.Any.Value)
+		return nil, fmt.Errorf("kesconf: invalid cache expiry '%v'", y.Cache.Expiry.Any.Value)
 	}
 	if y.Cache.Expiry.Unused.Value < 0 {
-		return nil, fmt.Errorf("edge: invalid cache unused expiry '%v'", y.Cache.Expiry.Unused.Value)
+		return nil, fmt.Errorf("kesconf: invalid cache unused expiry '%v'", y.Cache.Expiry.Unused.Value)
 	}
 	if y.Cache.Expiry.Offline.Value < 0 {
-		return nil, fmt.Errorf("edge: invalid offline cache expiry '%v'", y.Cache.Expiry.Offline.Value)
+		return nil, fmt.Errorf("kesconf: invalid offline cache expiry '%v'", y.Cache.Expiry.Offline.Value)
 	}
 
-	if v := strings.ToLower(strings.TrimSpace(y.Log.Error.Value)); v != "on" && v != "off" && v != "" {
-		return nil, fmt.Errorf("edge: invalid error log config '%v'", y.Log.Error.Value)
+	errLevel, err := parseLogLevel(y.Log.Error.Value)
+	if err != nil {
+		return nil, err
 	}
-	if v := strings.ToLower(strings.TrimSpace(y.Log.Audit.Value)); v != "on" && v != "off" && v != "" {
-		return nil, fmt.Errorf("edge: invalid audit log config '%v'", y.Log.Audit.Value)
+	auditLevel, err := parseLogLevel(y.Log.Audit.Value)
+	if err != nil {
+		return nil, err
 	}
 
 	for path, api := range y.API.Paths {
 		if api.Timeout.Value < 0 {
-			return nil, fmt.Errorf("edge: invalid timeout '%d' for API '%s'", api.Timeout.Value, path)
+			return nil, fmt.Errorf("kesconf: invalid timeout '%d' for API '%s'", api.Timeout.Value, path)
 		}
 	}
 
@@ -295,7 +308,7 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 		names := make(map[string]struct{}, len(y.Keys))
 		for _, key := range y.Keys {
 			if _, ok := names[key.Name.Value]; ok {
-				return nil, fmt.Errorf("edge: invalid key config: key '%s' is defined multiple times", key.Name.Value)
+				return nil, fmt.Errorf("kesconf: invalid key config: key '%s' is defined multiple times", key.Name.Value)
 			}
 			names[key.Name.Value] = struct{}{}
 		}
@@ -306,13 +319,14 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 		return nil, err
 	}
 
-	c := &ServerConfig{
+	c := &File{
 		Addr:  y.Addr.Value,
 		Admin: y.Admin.Identity.Value,
 		TLS: &TLSConfig{
 			PrivateKey:        y.TLS.PrivateKey.Value,
 			Certificate:       y.TLS.Certificate.Value,
 			Password:          y.TLS.Password.Value,
+			ClientAuth:        clientAuth,
 			CAPath:            y.TLS.CAPath.Value,
 			ForwardCertHeader: y.TLS.Proxy.Header.ClientCert.Value,
 		},
@@ -322,8 +336,8 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 			ExpiryOffline: y.Cache.Expiry.Offline.Value,
 		},
 		Log: &LogConfig{
-			Error: strings.TrimSpace(strings.ToLower(y.Log.Error.Value)) != "off", // default is "on" behavior
-			Audit: strings.TrimSpace(strings.ToLower(y.Log.Audit.Value)) == "on",  // default is "off" behavior
+			ErrLevel:   errLevel,
+			AuditLevel: auditLevel,
 		},
 		KeyStore: keystore,
 	}
@@ -361,7 +375,7 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 	}
 	for path, api := range y.API.Paths {
 		if api.Timeout.Value < 0 {
-			return nil, fmt.Errorf("edge: invalid timeout '%d' for API '%s'", api.Timeout.Value, path)
+			return nil, fmt.Errorf("kesconf: invalid timeout '%d' for API '%s'", api.Timeout.Value, path)
 		}
 	}
 	if len(y.Keys) > 0 {
@@ -373,73 +387,44 @@ func ymlToServerConfig(y *yml) (*ServerConfig, error) {
 	return c, nil
 }
 
-func ymlToKeyStore(y *yml) (KeyStore, error) {
+func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 	var keystore KeyStore
 
 	// FS Keystore
 	if y.KeyStore.FS != nil {
 		if y.KeyStore.FS.Path.Value == "" {
-			return nil, errors.New("edge: invalid fs keystore: no path specified")
+			return nil, errors.New("kesconf: invalid fs keystore: no path specified")
 		}
 		keystore = &FSKeyStore{
 			Path: y.KeyStore.FS.Path.Value,
 		}
 	}
 
-	// KES Keystore
-	if y.KeyStore.KES != nil {
-		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
-		}
-		endpoints := make([]string, 0, len(y.KeyStore.KES.Endpoint))
-		for _, endpoint := range y.KeyStore.KES.Endpoint {
-			if e := strings.TrimSpace(endpoint.Value); e != "" {
-				endpoints = append(endpoints, e)
-			}
-		}
-		if len(endpoints) == 0 {
-			return nil, errors.New("edge: invalid kes keystore: no endpoint specified")
-		}
-		if y.KeyStore.KES.TLS.PrivateKey.Value == "" {
-			return nil, errors.New("edge: invalid kes keystore: no TLS private key specified")
-		}
-		if y.KeyStore.KES.TLS.Certificate.Value == "" {
-			return nil, errors.New("edge: invalid kes keystore: no TLS certificate specified")
-		}
-		keystore = &KESKeyStore{
-			Endpoints:       endpoints,
-			Enclave:         y.KeyStore.KES.Enclave.Value,
-			PrivateKeyFile:  y.KeyStore.KES.TLS.PrivateKey.Value,
-			CertificateFile: y.KeyStore.KES.TLS.Certificate.Value,
-			CAPath:          y.KeyStore.KES.TLS.CAPath.Value,
-		}
-	}
-
 	// Hashicorp Vault Keystore
 	if y.KeyStore.Vault != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.Vault.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid vault keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid vault keystore: no endpoint specified")
 		}
 		if y.KeyStore.Vault.AppRole == nil && y.KeyStore.Vault.Kubernetes == nil {
-			return nil, errors.New("edge: invalid vault keystore: no authentication method specified")
+			return nil, errors.New("kesconf: invalid vault keystore: no authentication method specified")
 		}
 		if y.KeyStore.Vault.AppRole != nil && y.KeyStore.Vault.Kubernetes != nil {
-			return nil, errors.New("edge: invalid vault keystore: more than one authentication method specified")
+			return nil, errors.New("kesconf: invalid vault keystore: more than one authentication method specified")
 		}
 		if y.KeyStore.Vault.AppRole != nil {
 			if y.KeyStore.Vault.AppRole.ID.Value == "" {
-				return nil, errors.New("edge: invalid vault keystore: invalid approle config: no approle ID specified")
+				return nil, errors.New("kesconf: invalid vault keystore: invalid approle config: no approle ID specified")
 			}
 			if y.KeyStore.Vault.AppRole.Secret.Value == "" {
-				return nil, errors.New("edge: invalid vault keystore: invalid approle config: no approle secret specified")
+				return nil, errors.New("kesconf: invalid vault keystore: invalid approle config: no approle secret specified")
 			}
 		}
 		if y.KeyStore.Vault.Kubernetes != nil {
 			if y.KeyStore.Vault.Kubernetes.JWT.Value == "" {
-				return nil, errors.New("edge: invalid vault keystore: invalid kubernetes config: no JWT specified")
+				return nil, errors.New("kesconf: invalid vault keystore: invalid kubernetes config: no JWT specified")
 			}
 
 			// If the passed JWT value contains a path separator we assume it's a file.
@@ -448,22 +433,22 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 			if jwt := y.KeyStore.Vault.Kubernetes.JWT.Value; strings.ContainsRune(jwt, '/') || strings.ContainsRune(jwt, os.PathSeparator) {
 				b, err := os.ReadFile(y.KeyStore.Vault.Kubernetes.JWT.Value)
 				if err != nil {
-					return nil, fmt.Errorf("edge: failed to read vault kubernetes JWT from '%s': %v", y.KeyStore.Vault.Kubernetes.JWT.Value, err)
+					return nil, fmt.Errorf("kesconf: failed to read vault kubernetes JWT from '%s': %v", y.KeyStore.Vault.Kubernetes.JWT.Value, err)
 				}
 				y.KeyStore.Vault.Kubernetes.JWT.Value = string(b)
 			}
 		}
 		if y.KeyStore.Vault.Transit != nil {
 			if y.KeyStore.Vault.Transit.KeyName.Value == "" {
-				return nil, errors.New("edge: invalid vault keystore: invalid transit config: no key name specified")
+				return nil, errors.New("kesconf: invalid vault keystore: invalid transit config: no key name specified")
 			}
 		}
 
 		if y.KeyStore.Vault.TLS.PrivateKey.Value != "" && y.KeyStore.Vault.TLS.Certificate.Value == "" {
-			return nil, errors.New("edge: invalid vault keystore: invalid tls config: no TLS certificate provided")
+			return nil, errors.New("kesconf: invalid vault keystore: invalid tls config: no TLS certificate provided")
 		}
 		if y.KeyStore.Vault.TLS.PrivateKey.Value == "" && y.KeyStore.Vault.TLS.Certificate.Value != "" {
-			return nil, errors.New("edge: invalid vault keystore: invalid tls config: no TLS private key provided")
+			return nil, errors.New("kesconf: invalid vault keystore: invalid tls config: no TLS private key provided")
 		}
 		s := &VaultKeyStore{
 			Endpoint:    y.KeyStore.Vault.Endpoint.Value,
@@ -502,13 +487,13 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	// Fortanix SDKMS
 	if y.KeyStore.Fortanix != nil && y.KeyStore.Fortanix.SDKMS != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.Fortanix.SDKMS.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid fortanix SDKMS keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid fortanix SDKMS keystore: no endpoint specified")
 		}
 		if y.KeyStore.Fortanix.SDKMS.Login.APIKey.Value == "" {
-			return nil, errors.New("edge: invalid fortanix SDKMS keystore: no API key specified")
+			return nil, errors.New("kesconf: invalid fortanix SDKMS keystore: no API key specified")
 		}
 		keystore = &FortanixKeyStore{
 			Endpoint: y.KeyStore.Fortanix.SDKMS.Endpoint.Value,
@@ -521,13 +506,13 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	// Thales CipherTrust / Gemalto KeySecure
 	if y.KeyStore.Gemalto != nil && y.KeyStore.Gemalto.KeySecure != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.Gemalto.KeySecure.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid gemalto keysecure keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid gemalto keysecure keystore: no endpoint specified")
 		}
 		if y.KeyStore.Gemalto.KeySecure.Login.Token.Value == "" {
-			return nil, errors.New("edge: invalid gemalto keysecure keystore: no token specified")
+			return nil, errors.New("kesconf: invalid gemalto keysecure keystore: no token specified")
 		}
 		keystore = &KeySecureKeyStore{
 			Endpoint: y.KeyStore.Gemalto.KeySecure.Endpoint.Value,
@@ -540,10 +525,10 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	// GCP SecretManager
 	if y.KeyStore.GCP != nil && y.KeyStore.GCP.SecretManager != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.GCP.SecretManager.ProjectID.Value == "" {
-			return nil, errors.New("edge: invalid GCP secretmanager keystore: no project ID specified")
+			return nil, errors.New("kesconf: invalid GCP secretmanager keystore: no project ID specified")
 		}
 		var scopes []string
 		if len(y.KeyStore.GCP.SecretManager.Scopes) > 0 {
@@ -566,13 +551,13 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	// AWS SecretsManager
 	if y.KeyStore.AWS != nil && y.KeyStore.AWS.SecretsManager != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.AWS.SecretsManager.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid AWS secretsmanager keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid AWS secretsmanager keystore: no endpoint specified")
 		}
 		if y.KeyStore.AWS.SecretsManager.Region.Value == "" {
-			return nil, errors.New("edge: invalid AWS secretsmanager keystore: no region specified")
+			return nil, errors.New("kesconf: invalid AWS secretsmanager keystore: no region specified")
 		}
 		keystore = &AWSSecretsManagerKeyStore{
 			Endpoint:     y.KeyStore.AWS.SecretsManager.Endpoint.Value,
@@ -587,31 +572,31 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	// Azure KeyVault
 	if y.KeyStore.Azure != nil && y.KeyStore.Azure.KeyVault != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.Azure.KeyVault.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid Azure keyvault keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid Azure keyvault keystore: no endpoint specified")
 		}
 		if y.KeyStore.Azure.KeyVault.Credentials == nil && y.KeyStore.Azure.KeyVault.ManagedIdentity == nil {
-			return nil, errors.New("edge: invalid Azure keyvault keystore: no authentication method specified")
+			return nil, errors.New("kesconf: invalid Azure keyvault keystore: no authentication method specified")
 		}
 		if y.KeyStore.Azure.KeyVault.Credentials != nil && y.KeyStore.Azure.KeyVault.ManagedIdentity != nil {
-			return nil, errors.New("edge: invalid Azure keyvault keystore: more than one authentication method specified")
+			return nil, errors.New("kesconf: invalid Azure keyvault keystore: more than one authentication method specified")
 		}
 		if y.KeyStore.Azure.KeyVault.Credentials != nil {
 			if y.KeyStore.Azure.KeyVault.Credentials.TenantID.Value == "" {
-				return nil, errors.New("edge: invalid Azure keyvault keystore: no tenant ID specified")
+				return nil, errors.New("kesconf: invalid Azure keyvault keystore: no tenant ID specified")
 			}
 			if y.KeyStore.Azure.KeyVault.Credentials.ClientID.Value == "" {
-				return nil, errors.New("edge: invalid Azure keyvault keystore: no client ID specified")
+				return nil, errors.New("kesconf: invalid Azure keyvault keystore: no client ID specified")
 			}
 			if y.KeyStore.Azure.KeyVault.Credentials.Secret.Value == "" {
-				return nil, errors.New("edge: invalid Azure keyvault keystore: no client secret specified")
+				return nil, errors.New("kesconf: invalid Azure keyvault keystore: no client secret specified")
 			}
 		}
 		if y.KeyStore.Azure.KeyVault.ManagedIdentity != nil {
 			if y.KeyStore.Azure.KeyVault.ManagedIdentity.ClientID.Value == "" {
-				return nil, errors.New("edge: invalid Azure keyvault keystore: no client ID specified")
+				return nil, errors.New("kesconf: invalid Azure keyvault keystore: no client ID specified")
 			}
 		}
 		s := &AzureKeyVaultKeyStore{
@@ -629,22 +614,22 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	}
 	if y.KeyStore.Entrust != nil && y.KeyStore.Entrust.KeyControl != nil {
 		if keystore != nil {
-			return nil, errors.New("edge: invalid keystore config: more than once keystore specified")
+			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
 		if y.KeyStore.Entrust.KeyControl.Endpoint.Value == "" {
-			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no endpoint specified")
+			return nil, errors.New("kesconf: invalid Entrust KeyControl keystore: no endpoint specified")
 		}
 		if y.KeyStore.Entrust.KeyControl.VaultID.Value == "" {
-			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no vault ID specified")
+			return nil, errors.New("kesconf: invalid Entrust KeyControl keystore: no vault ID specified")
 		}
 		if y.KeyStore.Entrust.KeyControl.BoxID.Value == "" {
-			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no box ID specified")
+			return nil, errors.New("kesconf: invalid Entrust KeyControl keystore: no box ID specified")
 		}
 		if y.KeyStore.Entrust.KeyControl.Login.Username.Value == "" {
-			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no username specified")
+			return nil, errors.New("kesconf: invalid Entrust KeyControl keystore: no username specified")
 		}
 		if y.KeyStore.Entrust.KeyControl.Login.Password.Value == "" {
-			return nil, errors.New("edge: invalid Entrust KeyControl keystore: no password specified")
+			return nil, errors.New("kesconf: invalid Entrust KeyControl keystore: no password specified")
 		}
 		keystore = &EntrustKeyControlKeyStore{
 			Endpoint: y.KeyStore.Entrust.KeyControl.Endpoint.Value,
@@ -657,7 +642,7 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 	}
 
 	if keystore == nil {
-		return nil, errors.New("edge: no keystore specified")
+		return nil, errors.New("kesconf: no keystore specified")
 	}
 	return keystore, nil
 }
@@ -675,7 +660,7 @@ func (r env[T]) MarshalYAML() (any, error) {
 		case !p && !s:
 			return "${" + env + "}", nil
 		default:
-			return nil, fmt.Errorf("edge: invalid env. variable reference '%s'", r.Var)
+			return nil, fmt.Errorf("kesconf: invalid env. variable reference '%s'", r.Var)
 		}
 	}
 	return r.Value, nil
@@ -687,7 +672,7 @@ func (r *env[T]) UnmarshalYAML(node *yaml.Node) error {
 		env = strings.TrimSpace(v[2 : len(v)-1])
 		v, ok := os.LookupEnv(env)
 		if !ok {
-			return fmt.Errorf("edge: line '%d' in YAML document: referenced env. variable '%s' not found", node.Line, env)
+			return fmt.Errorf("kesconf: referenced env. variable '%s' in line '%d' not found", env, node.Line)
 		}
 		node.Value = v
 	}
@@ -699,4 +684,68 @@ func (r *env[T]) UnmarshalYAML(node *yaml.Node) error {
 	r.Var = env
 	r.Value = v
 	return nil
+}
+
+func parseLogLevel(s string) (slog.Level, error) {
+	const (
+		LevelDebug = "DEBUG"
+		LevelInfo  = "INFO"
+		LevelWarn  = "WARN"
+		LevelError = "ERROR"
+
+		// Pseudo-levels for backward compatibility.
+		LevelOn  = "ON"  // Equal to LevelInfo
+		LevelOff = "OFF" // Equal to LevelError+1
+	)
+	if s = strings.TrimSpace(strings.ToUpper(s)); s == "" {
+		return slog.LevelInfo, nil
+	}
+	if s == LevelOn {
+		return slog.LevelInfo, nil
+	}
+	if s == LevelOff {
+		return slog.LevelError + 1, nil
+	}
+
+	parseLevel := func(val string, base slog.Level) (slog.Level, error) {
+		level, suffix, ok := strings.Cut(val, "+")
+		if !ok || strings.TrimSpace(level) != base.String() {
+			return 0, fmt.Errorf("kesconf: invalid log level '%s'", val)
+		}
+
+		n, err := strconv.Atoi(suffix)
+		if err != nil {
+			return 0, fmt.Errorf("kesconf: invalid log level suffix '%s': %v", suffix, err)
+		}
+		return base + slog.Level(n), nil
+	}
+
+	switch {
+	case strings.HasPrefix(s, LevelDebug):
+		if s == LevelDebug {
+			return slog.LevelDebug, nil
+		}
+		return parseLevel(s, slog.LevelDebug)
+	case strings.HasPrefix(s, LevelInfo):
+		if s == LevelInfo {
+			return slog.LevelInfo, nil
+		}
+		return parseLevel(s, slog.LevelInfo)
+	case strings.HasPrefix(s, LevelWarn):
+		if s == LevelWarn {
+			return slog.LevelWarn, nil
+		}
+		return parseLevel(s, slog.LevelWarn)
+	case strings.HasPrefix(s, LevelError):
+		if s == LevelError {
+			return slog.LevelError, nil
+		}
+		return parseLevel(s, slog.LevelError)
+	default:
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, err
+		}
+		return slog.Level(n), nil
+	}
 }

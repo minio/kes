@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // Config is a structure containing the Entrust KeyControl configuration.
@@ -99,11 +100,11 @@ type KeyControl struct {
 	stop   context.CancelFunc
 }
 
-var _ kv.Store[string, []byte] = (*KeyControl)(nil)
+func (kc *KeyControl) String() string { return "Entrust KeyControl: " + kc.config.Endpoint }
 
 // Status returns the current state of the KeyControl instance.
 // In particular, whether it is reachable and the network latency.
-func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
+func (kc *KeyControl) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	const (
 		Method     = http.MethodPost
 		Path       = "/vault/1.0/GetBox/"
@@ -116,15 +117,15 @@ func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
 		BoxID: kc.config.BoxID,
 	})
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return kes.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	url, err := url.JoinPath(kc.config.Endpoint, Path)
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return kes.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, Method, url, xhttp.RetryReader(bytes.NewReader(body)))
 	if err != nil {
-		return kv.State{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
+		return kes.KeyStoreState{}, fmt.Errorf("keycontrol: failed to fetch status: %v", err)
 	}
 	req.ContentLength = int64(len(body))
 	req.Header.Set(VaultToken, *kc.token.Load())
@@ -132,16 +133,16 @@ func (kc *KeyControl) Status(ctx context.Context) (kv.State, error) {
 	start := time.Now()
 	resp, err := kc.client.Do(req)
 	if err != nil {
-		return kv.State{}, &kv.Unreachable{
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{
 			Err: fmt.Errorf("keycontrol: failed to fetch status: %v", err),
 		}
 	}
 	latency := time.Since(start)
 
 	if resp.StatusCode != http.StatusOK {
-		return kv.State{}, parseErrorResponse(resp)
+		return kes.KeyStoreState{}, parseErrorResponse(resp)
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: latency,
 	}, nil
 }
@@ -289,28 +290,6 @@ func (kc *KeyControl) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// List returns a new Iterator over the names of all stored keys.
-func (kc *KeyControl) List(ctx context.Context) (kv.Iter[string], error) {
-	var (
-		names  []string
-		prefix string
-		err    error
-	)
-	for {
-		var ids []string
-		ids, prefix, err = kc.list(ctx, prefix, 250)
-		if err != nil {
-			return nil, err
-		}
-		names = append(names, ids...)
-
-		if prefix == "" || len(ids) == 0 {
-			break
-		}
-	}
-	return &iter{names: names}, nil
-}
-
 // Close closes the KeyControl client. It stops any
 // authentication renewal in the background.
 func (kc *KeyControl) Close() error {
@@ -318,7 +297,21 @@ func (kc *KeyControl) Close() error {
 	return nil
 }
 
-func (kc *KeyControl) list(ctx context.Context, prefix string, n int) ([]string, string, error) {
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty.
+func (kc *KeyControl) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	const N = 256
+	if n <= 0 {
+		n = N
+	}
 	const (
 		Method     = http.MethodPost
 		Path       = "/vault/1.0/ListSecretIds/"
@@ -568,9 +561,9 @@ func parseErrorResponse(resp *http.Response) error {
 		}
 		switch {
 		case resp.StatusCode == http.StatusConflict && response.Error == "Secret already exists":
-			return kes.ErrKeyExists
+			return kesdk.ErrKeyExists
 		case resp.StatusCode == http.StatusNotFound && response.Error == "Secret not found":
-			return kes.ErrKeyNotFound
+			return kesdk.ErrKeyNotFound
 		}
 		return errors.New("keycontrol: " + response.Error)
 	}
@@ -580,19 +573,3 @@ func parseErrorResponse(resp *http.Response) error {
 	}
 	return errors.New("keycontrol: " + resp.Status + ": " + sb.String())
 }
-
-type iter struct {
-	names []string
-}
-
-func (i *iter) Next() (string, bool) {
-	if len(i.names) == 0 {
-		return "", false
-	}
-
-	name := i.names[0]
-	i.names = i.names[1:]
-	return name, true
-}
-
-func (i *iter) Close() error { return nil }

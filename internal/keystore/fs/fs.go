@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,8 +18,9 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // NewStore returns a new Store that reads
@@ -57,18 +57,18 @@ type Store struct {
 	lock sync.RWMutex
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
+func (s *Store) String() string { return "Filesystem: " + s.dir }
 
 // Status returns the current state of the Conn.
 //
 // In particular, it reports whether the underlying
 // filesystem is accessible.
-func (s *Store) Status(context.Context) (kv.State, error) {
+func (s *Store) Status(context.Context) (kes.KeyStoreState, error) {
 	start := time.Now()
 	if _, err := os.Stat(s.dir); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -87,20 +87,12 @@ func (s *Store) Create(_ context.Context, name string, value []byte) error {
 	filename := filepath.Join(s.dir, name)
 	switch err := s.create(filename, value); {
 	case errors.Is(err, os.ErrExist):
-		return kes.ErrKeyExists
+		return kesdk.ErrKeyExists
 	case err != nil:
 		os.Remove(filename)
 		return err
 	}
 	return nil
-}
-
-// Set creates a new file with the given name inside
-// the Conn directory if and only if no such file exists.
-//
-// It returns kes.ErrKeyExists if such a file already exists.
-func (s *Store) Set(ctx context.Context, name string, value []byte) error {
-	return s.Create(ctx, name, value)
 }
 
 // Get reads the content of the named file within the Conn
@@ -117,7 +109,7 @@ func (s *Store) Get(_ context.Context, name string) ([]byte, error) {
 
 	file, err := os.Open(filepath.Join(s.dir, name))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, kes.ErrKeyNotFound
+		return nil, kesdk.ErrKeyNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -143,21 +135,44 @@ func (s *Store) Delete(_ context.Context, name string) error {
 	}
 	switch err := os.Remove(filepath.Join(s.dir, name)); {
 	case errors.Is(err, os.ErrNotExist):
-		return kes.ErrKeyNotFound
+		return kesdk.ErrKeyNotFound
 	default:
 		return err
 	}
 }
 
-// List returns a Iter over the files within the Conn directory.
-// The Iter must be closed to release any filesystem resources
-// back to the OS.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+// List returns a new Iterator over the names of
+// all stored keys.
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	dir, err := os.Open(s.dir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return NewIter(ctx, dir), nil
+	defer dir.Close()
+
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return nil, "", err
+	}
+	select {
+	case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
+		return nil, "", context.Canceled
+	default:
+		return keystore.List(names, prefix, n)
+	}
 }
 
 // Close closes the Store.
@@ -181,87 +196,6 @@ func (s *Store) create(filename string, value []byte) error {
 		return err
 	}
 	return file.Close()
-}
-
-// Iter is an iterator over all files within a
-// directory. It must be closed to release any
-// filesystem resources.
-type Iter struct {
-	ctx    context.Context
-	dir    fs.ReadDirFile
-	names  []fs.DirEntry
-	err    error
-	closed bool
-}
-
-var _ kv.Iter[string] = (*Iter)(nil)
-
-// NewIter returns an Iter all files within the given
-// directory. The Iter does not iterator recursively
-// into subdirectories.
-func NewIter(ctx context.Context, dir fs.ReadDirFile) *Iter {
-	return &Iter{
-		ctx: ctx,
-		dir: dir,
-	}
-}
-
-// Next reports whether there are more directory entries.
-// It returns false when there are no more entries, the
-// Iter got closed or once it encounters an error.
-//
-// The name of the next directory entry is availbale via
-// the Name method.
-func (i *Iter) Next() (string, bool) {
-	if i.closed || i.err != nil {
-		return "", false
-	}
-	if len(i.names) > 0 {
-		entry := i.names[0]
-		i.names = i.names[1:]
-		return entry.Name(), true
-	}
-
-	if i.ctx != nil {
-		select {
-		case <-i.ctx.Done():
-			if i.err = i.ctx.Err(); i.err == nil {
-				i.err = context.Canceled
-			}
-			return "", false
-		default:
-		}
-	}
-
-	const N = 256
-	i.names, i.err = i.dir.ReadDir(N)
-	if errors.Is(i.err, io.EOF) {
-		i.err = nil
-	}
-	if i.err != nil {
-		i.Close()
-		return "", false
-	}
-	if len(i.names) > 0 {
-		entry := i.names[0]
-		i.names = i.names[1:]
-		return entry.Name(), true
-	}
-	return "", false
-}
-
-// Close closes the Iter and releases and filesystem
-// resources back to the OS.
-func (i *Iter) Close() error {
-	if i.closed {
-		return i.err
-	}
-
-	i.closed = true
-	if err := i.dir.Close(); i.err == nil {
-		i.err = err
-	}
-	return i.err
 }
 
 func validName(name string) error {

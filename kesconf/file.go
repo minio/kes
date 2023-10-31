@@ -2,16 +2,22 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge
+package kesconf
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"slices"
 	"time"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
@@ -20,14 +26,53 @@ import (
 	"github.com/minio/kes/internal/keystore/fs"
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
-	kesstore "github.com/minio/kes/internal/keystore/kes"
 	"github.com/minio/kes/internal/keystore/vault"
-	"github.com/minio/kes/kv"
+	yaml "gopkg.in/yaml.v3"
 )
 
-// ServerConfig is a structure that holds configuration
-// for a KES edge server.
-type ServerConfig struct {
+// ReadFile opens the given file and reads the KES configuration
+// from it by calling ReadFrom.
+func ReadFile(filename string) (*File, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() // make sure to close file in case of panic
+
+	file, err := ReadFrom(f)
+	if cErr := f.Close(); err == nil {
+		err = cErr
+	}
+	return file, err
+}
+
+// ReadFrom parses and returns a new KES server configuration file
+// from r.
+func ReadFrom(r io.Reader) (*File, error) {
+	var node yaml.Node
+	if err := yaml.NewDecoder(r).Decode(&node); err != nil {
+		return nil, err
+	}
+
+	version, err := findVersion(&node)
+	if err != nil {
+		return nil, err
+	}
+	const Version = "v1"
+	if version != "" && version != Version {
+		return nil, fmt.Errorf("edge: invalid server config version '%s'", version)
+	}
+
+	var y ymlFile
+	if err := node.Decode(&y); err != nil {
+		return nil, err
+	}
+	return ymlToServerConfig(&y)
+}
+
+// File is a structure that holds the content of a KES server
+// configuration file.
+type File struct {
 	// Addr is the network interface address
 	// and optional port the KES server will
 	// listen on and accept HTTP requests.
@@ -54,6 +99,7 @@ type ServerConfig struct {
 	// Log contains the KES server logging configuration.
 	Log *LogConfig
 
+	// APU contains the KES server API configuration.
 	API *APIConfig
 
 	// Policies contains the KES server policy definitions
@@ -68,8 +114,107 @@ type ServerConfig struct {
 	// The KeyStore manages the keys used by the KES server for
 	// encryption and decryption.
 	KeyStore KeyStore
+}
 
-	_ [0]int // force usage of struct composite literals with field names
+// TLSConfig returns a new TLS configuration as specified by
+// the File. It returns nil and no error if File.TLS is nil.
+func (f *File) TLSConfig() (*tls.Config, error) {
+	if f.TLS == nil {
+		return nil, nil
+	}
+
+	certificate, err := https.CertificateFromFile(f.TLS.Certificate, f.TLS.PrivateKey, f.TLS.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read TLS certificate: %v", err)
+	}
+	if certificate.Leaf != nil {
+		if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
+			// Support for TLS certificates with a subject CN but without any SAN
+			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
+			// Therefore, we require at least one SAN for the server certificate.
+			return nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
+		}
+	}
+
+	var rootCAs *x509.CertPool
+	if f.TLS.CAPath != "" {
+		rootCAs, err = https.CertPoolFromFile(f.TLS.CAPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
+		}
+	}
+
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		ClientAuth:   f.TLS.ClientAuth,
+		Certificates: []tls.Certificate{certificate},
+		NextProtos:   []string{"h2", "http/1.1"},
+		RootCAs:      rootCAs,
+	}, nil
+}
+
+// Config returns a new KES configuration as specified by
+// the File. It connects to the KeyStore using the given
+// context.
+func (f *File) Config(ctx context.Context) (*kes.Config, error) {
+	conf := &kes.Config{
+		Admin: f.Admin,
+	}
+
+	if f.TLS != nil {
+		tlsConf, err := f.TLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		conf.TLS = tlsConf
+	}
+
+	if f.Cache != nil {
+		conf.Cache = &kes.CacheConfig{
+			Expiry:        f.Cache.Expiry,
+			ExpiryUnused:  f.Cache.ExpiryUnused,
+			ExpiryOffline: f.Cache.ExpiryOffline,
+		}
+	}
+
+	if f.API != nil && len(f.API.Paths) > 0 {
+		conf.Routes = make(map[string]kes.RouteConfig, len(f.API.Paths))
+		for path, config := range f.API.Paths {
+			conf.Routes[path] = kes.RouteConfig{
+				Timeout:          config.Timeout,
+				InsecureSkipAuth: config.InsecureSkipAuth,
+			}
+		}
+	}
+
+	var policies map[string]kes.Policy
+	if len(f.Policies) > 0 {
+		policies = make(map[string]kes.Policy, len(f.Policies))
+		for name, policy := range f.Policies {
+			p := kes.Policy{
+				Allow:      make(map[string]kesdk.Rule, len(policy.Allow)),
+				Deny:       make(map[string]kesdk.Rule, len(policy.Deny)),
+				Identities: slices.Clone(policy.Identities),
+			}
+			for _, pattern := range policy.Allow {
+				p.Allow[pattern] = struct{}{}
+			}
+			for _, pattern := range policy.Deny {
+				p.Deny[pattern] = struct{}{}
+			}
+			policies[name] = p
+		}
+		conf.Policies = policies
+	}
+
+	if f.KeyStore != nil {
+		keystore, err := f.KeyStore.Connect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		conf.Keys = keystore
+	}
+	return conf, nil
 }
 
 // TLSConfig is a structure that holds the TLS configuration
@@ -84,6 +229,12 @@ type TLSConfig struct {
 	// Password is an optional password to decrypt the KES server's
 	// private key.
 	Password string
+
+	// ClientAuth is the client authentication type the KES server
+	// uses to verify client certificates.
+	//
+	// Most applications should use tls.RequestClientCert.
+	ClientAuth tls.ClientAuthType
 
 	// CAPath is an optional path to a X.509 certificate or directory
 	// containing X.509 certificates that the KES server uses, in
@@ -105,8 +256,6 @@ type TLSConfig struct {
 	// TLS / HTTPS proxy to forward the actual client certificate
 	// to KES.
 	ForwardCertHeader string
-
-	_ [0]int
 }
 
 // CacheConfig is a structure that holds the Cache configuration
@@ -134,8 +283,6 @@ type CacheConfig struct {
 	// available. As long as the keystore is available, the regular
 	// cache expiry periods apply.
 	ExpiryOffline time.Duration
-
-	_ [0]int
 }
 
 // LogConfig is a structure that holds the logging configuration
@@ -143,13 +290,11 @@ type CacheConfig struct {
 type LogConfig struct {
 	// Error determines whether the KES server logs error events to STDERR.
 	// It does not en/disable error logging in general.
-	Error bool
+	ErrLevel slog.Level
 
 	// Audit determines whether the KES server logs audit events to STDOUT.
 	// It does not en/disable audit logging in general.
-	Audit bool
-
-	_ [0]int
+	AuditLevel slog.Level
 }
 
 // APIConfig is a structure that holds the API configuration
@@ -158,8 +303,6 @@ type APIConfig struct {
 	// Paths contains a set of API paths and there
 	// API configuration.
 	Paths map[string]APIPathConfig
-
-	_ [0]int
 }
 
 // APIPathConfig is a structure that holds the API configuration
@@ -179,8 +322,6 @@ type APIPathConfig struct {
 	// cases for APIs that don't expose sensitive information,
 	// like metrics.
 	InsecureSkipAuth bool
-
-	_ [0]int
 }
 
 // Policy is a structure defining a KES policy.
@@ -204,8 +345,6 @@ type Policy struct {
 	// It must not contain the admin or any
 	// TLS proxy identity.
 	Identities []kes.Identity
-
-	_ [0]int
 }
 
 // Key is a structure defining a cryptographic key
@@ -214,8 +353,6 @@ type Policy struct {
 type Key struct {
 	// Name is the name of the cryptographic key.
 	Name string
-
-	_ [0]int
 }
 
 // KeyStore is a KES keystore configuration.
@@ -225,7 +362,7 @@ type Key struct {
 type KeyStore interface {
 	// Connect establishes and returns a new connection
 	// to the keystore.
-	Connect(ctx context.Context) (kv.Store[string, []byte], error)
+	Connect(ctx context.Context) (kes.KeyStore, error)
 }
 
 // FSKeyStore is a structure containing the configuration
@@ -239,55 +376,11 @@ type FSKeyStore struct {
 	// If the directory does not exist, it
 	// will be created.
 	Path string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs in a path on the filesystem.
-func (s *FSKeyStore) Connect(context.Context) (kv.Store[string, []byte], error) {
+func (s *FSKeyStore) Connect(context.Context) (kes.KeyStore, error) {
 	return fs.NewStore(s.Path)
-}
-
-// KESKeyStore is a structure containing the configuration
-// for using a KES server/cluster as key store.
-type KESKeyStore struct {
-	// Endpoints is a set of KES server endpoints.
-	//
-	// If multiple endpoints are provided, the requests
-	// will be automatically balanced across them.
-	Endpoints []string
-
-	// Enclave is an optional enclave name. If empty,
-	// the default enclave name will be used.
-	Enclave string
-
-	// CertificateFile is a path to a mTLS client
-	// certificate file used to authenticate to
-	// the KES server.
-	CertificateFile string
-
-	// PrivateKeyFile is a path to a mTLS private
-	// key used to authenticate to the KES server.
-	PrivateKeyFile string
-
-	// CAPath is an optional path to the root
-	// CA certificate(s) for verifying the TLS
-	// certificate of the KES server.
-	//
-	// If empty, the OS default root CA set is
-	// used.
-	CAPath string
-}
-
-// Connect returns a kv.Store that stores key-value pairs on a KES server.
-func (s *KESKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
-	return kesstore.Connect(ctx, &kesstore.Config{
-		Endpoints:   s.Endpoints,
-		Enclave:     s.Enclave,
-		Certificate: s.CertificateFile,
-		PrivateKey:  s.PrivateKeyFile,
-		CAPath:      s.CAPath,
-	})
 }
 
 // VaultKeyStore is a structure containing the configuration
@@ -359,8 +452,6 @@ type VaultKeyStore struct {
 	// is checked.
 	// If not set, defaults to 10s.
 	StatusPing time.Duration
-
-	_ [0]int
 }
 
 // VaultAppRoleAuth is a structure containing the configuration
@@ -408,7 +499,7 @@ type VaultTransit struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Hashicorp Vault server.
-func (s *VaultKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *VaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	if s.AppRole == nil && s.Kubernetes == nil {
 		return nil, errors.New("edge: failed to connect to hashicorp vault: no authentication method specified")
 	}
@@ -469,12 +560,10 @@ type FortanixKeyStore struct {
 	// If empty, the OS default root CA set is
 	// used.
 	CAPath string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Fortanix SDKMS server.
-func (s *FortanixKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *FortanixKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return fortanix.Connect(ctx, &fortanix.Config{
 		Endpoint: s.Endpoint,
 		GroupID:  s.GroupID,
@@ -506,12 +595,10 @@ type KeySecureKeyStore struct {
 	// If empty, the OS default root CA set is
 	// used.
 	CAPath string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Gemalto KeySecure instance.
-func (s *KeySecureKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *KeySecureKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return gemalto.Connect(ctx, &gemalto.Config{
 		Endpoint: s.Endpoint,
 		CAPath:   s.CAPath,
@@ -557,12 +644,10 @@ type GCPSecretManagerKeyStore struct {
 	// service account used to access the
 	// SecretManager.
 	Key string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on GCP SecretManager.
-func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return gcp.Connect(ctx, &gcp.Config{
 		Endpoint:  s.Endpoint,
 		ProjectID: s.ProjectID,
@@ -603,12 +688,10 @@ type AWSSecretsManagerKeyStore struct {
 	// SessionToken is an optional session token for authenticating
 	// to AWS.
 	SessionToken string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on AWS SecretsManager.
-func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return aws.Connect(ctx, &aws.Config{
 		Addr:     s.Endpoint,
 		Region:   s.Region,
@@ -641,12 +724,10 @@ type AzureKeyVaultKeyStore struct {
 	// ManagedIdentityClientID is the client ID of the
 	// Azure managed identity that access the KeyVault.
 	ManagedIdentityClientID string
-
-	_ [0]int
 }
 
 // Connect returns a kv.Store that stores key-value pairs on Azure KeyVault.
-func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	if (s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "") && s.ManagedIdentityClientID != "" {
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: more than one authentication method specified")
 	}
@@ -696,7 +777,7 @@ type EntrustKeyControlKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on Entrust KeyControl.
-func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	var rootCAs *x509.CertPool
 	if s.CAPath != "" {
 		ca, err := https.CertPoolFromFile(s.CAPath)

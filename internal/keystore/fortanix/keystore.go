@@ -14,10 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,10 +23,11 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // APIKey is a Fortanix API key for authenticating to
@@ -71,8 +70,6 @@ type Store struct {
 	config Config
 	client xhttp.Retry
 }
-
-var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
 // Connect establishes and returns a Store to a Fortanix SDKMS server
 // using the given config.
@@ -182,19 +179,21 @@ func Connect(ctx context.Context, config *Config) (*Store, error) {
 	}, nil
 }
 
+func (s *Store) String() string { return "Fortanix SDKMS: " + s.config.Endpoint }
+
 // Status returns the current state of the Fortanix SDKMS instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -250,7 +249,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 		case err == nil:
 			return fmt.Errorf("fortanix: failed to create key '%s': %s (%q)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusConflict && err.Error() == "sobject already exists":
-			return kes.ErrKeyExists
+			return kesdk.ErrKeyExists
 		default:
 			return fmt.Errorf("fortanix: failed to create key '%s': %v", name, err)
 		}
@@ -303,7 +302,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		case err == nil:
 			return fmt.Errorf("fortanix: failed to delete '%s': failed fetch key metadata: %s (%d)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusNotFound && err.Error() == "sobject does not exist":
-			return kes.ErrKeyNotFound
+			return kesdk.ErrKeyNotFound
 		default:
 			return fmt.Errorf("fortanix: failed to delete '%s': failed to fetch key metadata: %v", name, err)
 		}
@@ -377,7 +376,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		case err == nil:
 			return nil, fmt.Errorf("fortanix: failed to fetch '%s': %s (%d)", name, resp.Status, resp.StatusCode)
 		case resp.StatusCode == http.StatusNotFound && err.Error() == "sobject does not exist":
-			return nil, kes.ErrKeyNotFound
+			return nil, kesdk.ErrKeyNotFound
 		default:
 			return nil, fmt.Errorf("fortanix: failed to fetch '%s': %v", name, err)
 		}
@@ -401,103 +400,61 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	return value, nil
 }
 
-// List returns a new Iterator over the Fortanix SDKMS keys.
+// List returns a new Iterator over the names of
+// all stored keys.
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
 //
-// The returned iterator may or may not reflect any
-// concurrent changes to the Fortanix SDKMS instance - i.e.
-// creates or deletes. Further, it does not provide any
-// ordering guarantees.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	go func() {
-		defer close(values)
-
-		var start string
-		for {
-			reqURL := endpoint(s.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
-			if start != "" {
-				reqURL += "&start=" + start
-			}
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-			if err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
-				return
-			}
-			req.Header.Set("Authorization", s.config.APIKey.String())
-
-			resp, err := s.client.Do(req)
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancel(err)
-				return
-			}
-			if err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: %v", err))
-				return
-			}
-
-			type Response struct {
-				Name string `json:"name"`
-			}
-			var keys []Response
-			if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
-				cancel(fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err))
-				return
-			}
-			if len(keys) == 0 {
-				return
-			}
-			for _, k := range keys {
-				select {
-				case values <- k.Name:
-				case <-ctx.Done():
-					return
-				}
-			}
-			start = url.QueryEscape(keys[len(keys)-1].Name)
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty.
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	var (
+		names []string
+		start = prefix
+	)
+	for {
+		reqURL := endpoint(s.config.Endpoint, "/crypto/v1/keys") + "?sort=name:asc&limit=100"
+		if start != "" {
+			reqURL += "&start=" + start
 		}
-	}()
-	return &iterator{
-		ch:     values,
-		ctx:    ctx,
-		cancel: cancel,
-	}, nil
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return nil, "", fmt.Errorf("fortanix: failed to list keys: %v", err)
+		}
+		req.Header.Set("Authorization", s.config.APIKey.String())
+
+		resp, err := s.client.Do(req)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, "", err
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("fortanix: failed to list keys: %v", err)
+		}
+
+		type Response struct {
+			Name string `json:"name"`
+		}
+		var keys []Response
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
+			return nil, "", fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err)
+		}
+		if len(keys) == 0 {
+			break
+		}
+		for _, k := range keys {
+			names = append(names, k.Name)
+		}
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store.
 func (s *Store) Close() error { return nil }
-
-type iterator struct {
-	ch     <-chan string
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
-var _ kv.Iter[string] = (*iterator)(nil)
-
-// Next moves the iterator to the next key, if any.
-// This key is available until Next is called again.
-//
-// It returns true if and only if there is a new key
-// available. If there are no more keys or an error
-// has been encountered, Next returns false.
-func (i *iterator) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
-	}
-}
-
-// Err returns the first error, if any, encountered
-// while iterating over the set of keys.
-func (i *iterator) Close() error {
-	i.cancel(context.Canceled)
-	return context.Cause(i.ctx)
-}
 
 // parseErrorResponse returns an error containing
 // the response status code and response body
@@ -515,7 +472,7 @@ func parseErrorResponse(resp *http.Response) error {
 		return nil
 	}
 	if resp.Body == nil {
-		return kes.NewError(resp.StatusCode, resp.Status)
+		return kesdk.NewError(resp.StatusCode, resp.Status)
 	}
 	defer resp.Body.Close()
 
@@ -533,14 +490,14 @@ func parseErrorResponse(resp *http.Response) error {
 		if err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
 		}
-		return kes.NewError(resp.StatusCode, response.Message)
+		return kesdk.NewError(resp.StatusCode, response.Message)
 	}
 
 	var sb strings.Builder
 	if _, err := io.Copy(&sb, mem.LimitReader(resp.Body, size)); err != nil {
 		return err
 	}
-	return kes.NewError(resp.StatusCode, sb.String())
+	return kesdk.NewError(resp.StatusCode, sb.String())
 }
 
 // loadCustomCAs returns a new RootCA certificate pool
@@ -568,7 +525,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		return rootCAs, err
 	}
 	if !stat.IsDir() {
-		bytes, err := ioutil.ReadAll(f)
+		bytes, err := io.ReadAll(f)
 		if err != nil {
 			return rootCAs, err
 		}
@@ -588,7 +545,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		}
 
 		name := filepath.Join(path, file.Name())
-		bytes, err := ioutil.ReadFile(name)
+		bytes, err := os.ReadFile(name)
 		if err != nil {
 			return rootCAs, err
 		}

@@ -6,16 +6,21 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -25,11 +30,9 @@ import (
 	tui "github.com/charmbracelet/lipgloss"
 	"github.com/minio/kes"
 	kesdk "github.com/minio/kes-go"
-	"github.com/minio/kes/edge"
 	"github.com/minio/kes/internal/cli"
-	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/kesconf"
 	flag "github.com/spf13/pflag"
 )
 
@@ -37,43 +40,33 @@ const serverCmdUsage = `Usage:
     kes server [options]
 
 Options:
-    --addr <IP:PORT>         The address of the server (default: 0.0.0.0:7373)
-    --config <PATH>          Path to the server configuration file
+    --addr <[ip]:port>       The network interface the KES server will listen on.
+                             The default is '0.0.0.0:7373' which causes the server
+                             to listen on all available network interfaces.
 
-    --key <PATH>             Path to the TLS private key. It takes precedence over
-                             the config file
-    --cert <PATH>            Path to the TLS certificate. It takes precedence over
-                             the config file
+    --config <file>          Path to the KES server config file.
 
-    --auth {on|off}          Controls how the server handles mTLS authentication.
-                             By default, the server requires a client certificate
-                             and verifies that certificate has been issued by a
-                             trusted CA.
-                             Valid options are:
-                                Require and verify      : --auth=on (default)
-                                Require but don't verify: --auth=off
+    --dev                    Start the KES server in development mode. The server
+                             uses a volatile in-memory key store.
 
     -h, --help               Show list of command-line options
 
-Starts a KES server. The server address can be specified in the config file but
-may be overwritten by the --addr flag. If omitted the IP defaults to 0.0.0.0 and
-the PORT to 7373.
 
-The client TLS verification can be disabled by setting --auth=off. The server then
-accepts arbitrary client certificates but still maps them to policies. So, it disables
-authentication but not authorization.
+MinIO KES is a high-performance distributed key management server.
+It is a stateless, self-contained server that uses a separate key
+store as persistence layer. KES servers can be added or removed at
+any point in time to scale out infinitely.
 
+   Quick Start: https://github.com/minio/kes#quick-start
+   Docs:        https://min.io/docs/kes/
+	
 Examples:
-    $ kes server --config config.yml --auth =off
-`
+  1. Start a new KES server on '127.0.0.1:7373' in development mode.
+     $ kes server --dev
 
-type serverArgs struct {
-	Address     string
-	ConfigFile  string
-	PrivateKey  string
-	Certificate string
-	TLSAuth     string
-}
+  2. Start a new KES server with a confg file on '127.0.0.1:7000'.
+     $ kes server --addr :7000 --config ./kes/config.yml
+`
 
 func serverCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
@@ -85,12 +78,14 @@ func serverCmd(args []string) {
 		tlsKeyFlag   string
 		tlsCertFlag  string
 		mtlsAuthFlag string
+		devFlag      bool
 	)
 	cmd.StringVar(&addrFlag, "addr", "", "The address of the server")
 	cmd.StringVar(&configFlag, "config", "", "Path to the server configuration file")
 	cmd.StringVar(&tlsKeyFlag, "key", "", "Path to the TLS private key")
 	cmd.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
 	cmd.StringVar(&mtlsAuthFlag, "auth", "", "Controls how the server handles mTLS authentication")
+	cmd.BoolVar(&devFlag, "dev", false, "Start the KES server in development mode")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -98,36 +93,126 @@ func serverCmd(args []string) {
 		cli.Fatalf("%v. See 'kes server --help'", err)
 	}
 
+	warnPrefix := tui.NewStyle().Foreground(tui.Color("#ac0000")).Render("WARNING:")
+	if tlsKeyFlag != "" {
+		fmt.Fprintln(os.Stderr, warnPrefix, "'--key' flag is deprecated and no longer honored. Specify the private key in the config file")
+	}
+	if tlsCertFlag != "" {
+		fmt.Fprintln(os.Stderr, warnPrefix, "'--cert' flag is deprecated and no longer honored. Specify the certificate  in the config file")
+	}
+	if mtlsAuthFlag != "" {
+		fmt.Fprintln(os.Stderr, warnPrefix, "'--auth' flag is deprecated and no longer honored. Specify the client certificate verification in the config file")
+	}
+
 	if cmd.NArg() > 0 {
 		cli.Fatal("too many arguments. See 'kes server --help'")
 	}
 
+	if devFlag {
+		if addrFlag == "" {
+			addrFlag = "0.0.0.0:7373"
+		}
+		if configFlag != "" {
+			cli.Fatal("'--config' flag is not supported in development mode")
+		}
+
+		if err := startDevServer(addrFlag); err != nil {
+			cli.Fatal(err)
+		}
+		return
+	}
+
+	if err := startServer(addrFlag, configFlag); err != nil {
+		cli.Fatal(err)
+	}
+}
+
+func startServer(addrFlag, configFlag string) error {
 	var memLocked bool
 	if runtime.GOOS == "linux" {
 		memLocked = mlockall() == nil
 		defer munlockall()
 	}
 
+	info, err := sys.ReadBinaryInfo()
+	if err != nil {
+		return err
+	}
+
+	host, port, err := net.SplitHostPort(addrFlag)
+	if err != nil {
+		return err
+	}
+	ip := net.IPv4zero
+	if host != "" {
+		if ip = net.ParseIP(host); ip == nil {
+			return fmt.Errorf("'%s' is not a valid IP address", host)
+		}
+	}
+	ifaceIPs, err := lookupInterfaceIPs(ip)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	addr, config, err := readServerConfig(ctx, serverArgs{
-		Address:     addrFlag,
-		ConfigFile:  configFlag,
-		PrivateKey:  tlsKeyFlag,
-		Certificate: tlsCertFlag,
-		TLSAuth:     mtlsAuthFlag,
-	})
+	file, err := kesconf.ReadFile(configFlag)
 	if err != nil {
-		cli.Fatal(err)
+		return err
 	}
+	if addrFlag == "" {
+		addrFlag = file.Addr
+	}
+	conf, err := file.Config(ctx)
+	if err != nil {
+		return err
+	}
+	defer conf.Keys.Close()
 
 	srv := &kes.Server{}
-	srv.ErrLevel.Set(slog.LevelWarn)
-
+	if file.Log != nil {
+		srv.ErrLevel.Set(file.Log.ErrLevel)
+		srv.AuditLevel.Set(file.Log.AuditLevel)
+	}
 	sighup := make(chan os.Signal, 10)
 	signal.Notify(sighup, syscall.SIGHUP)
 	defer signal.Stop(sighup)
+
+	startupMessage := func(conf *kes.Config) *strings.Builder {
+		blue := tui.NewStyle().Foreground(tui.Color("#268BD2"))
+		faint := tui.NewStyle().Faint(true)
+
+		buf := &strings.Builder{}
+		fmt.Fprintf(buf, "%-33s %-23s %s\n", blue.Render("Version"), info.Version, faint.Render("commit="+info.CommitID))
+		fmt.Fprintf(buf, "%-33s %-23s %s\n", blue.Render("Runtime"), fmt.Sprintf("%s %s/%s", info.Runtime, runtime.GOOS, runtime.GOARCH), faint.Render("compiler="+info.Compiler))
+		fmt.Fprintf(buf, "%-33s %-23s %s\n", blue.Render("License"), "AGPLv3", faint.Render("https://www.gnu.org/licenses/agpl-3.0.html"))
+		fmt.Fprintf(buf, "%-33s %-12s 2015-%d  %s\n", blue.Render("Copyright"), "MinIO, Inc.", time.Now().Year(), faint.Render("https://min.io"))
+		fmt.Fprintln(buf)
+		fmt.Fprintf(buf, "%-33s %v\n", blue.Render("KMS"), conf.Keys)
+		fmt.Fprintf(buf, "%-33s · https://%s\n", blue.Render("API"), net.JoinHostPort(ifaceIPs[0].String(), port))
+		for _, ifaceIP := range ifaceIPs[1:] {
+			fmt.Fprintf(buf, "%-11s · https://%s\n", " ", net.JoinHostPort(ifaceIP.String(), port))
+		}
+
+		fmt.Fprintln(buf)
+		fmt.Fprintf(buf, "%-33s https://min.io/docs/kes\n", blue.Render("Docs"))
+
+		fmt.Fprintln(buf)
+		if _, err := hex.DecodeString(conf.Admin.String()); err == nil {
+			fmt.Fprintf(buf, "%-33s %s\n", blue.Render("Admin"), conf.Admin)
+		} else {
+			fmt.Fprintf(buf, "%-33s <disabled>\n", blue.Render("Admin"))
+		}
+		fmt.Fprintf(buf, "%-33s error=stderr level=%s\n", blue.Render("Logs"), srv.ErrLevel.Level())
+		if srv.AuditLevel.Level() <= slog.LevelInfo {
+			fmt.Fprintf(buf, "%-11s audit=stdout level=%s\n", " ", srv.AuditLevel.Level())
+		}
+		if memLocked {
+			fmt.Fprintf(buf, "%-33s %s\n", blue.Render("MLock"), "enabled")
+		}
+		return buf
+	}
 
 	go func(ctx context.Context) {
 		for {
@@ -136,34 +221,35 @@ func serverCmd(args []string) {
 				return
 			case <-sighup:
 				fmt.Fprintln(os.Stderr, "SIGHUP signal received. Reloading configuration...")
-				_, config, err := readServerConfig(ctx, serverArgs{
-					Address:     addrFlag,
-					ConfigFile:  configFlag,
-					PrivateKey:  tlsKeyFlag,
-					Certificate: tlsCertFlag,
-					TLSAuth:     mtlsAuthFlag,
-				})
+
+				file, err := kesconf.ReadFile(configFlag)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue
 				}
-				config.Keys = &kes.MemKeyStore{}
+				config, err := file.Config(ctx)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
+					continue
+				}
 
 				closer, err := srv.Update(config)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to update server configuration: %v\n", err)
 					continue
 				}
+				if file.Log != nil {
+					srv.ErrLevel.Set(file.Log.ErrLevel)
+					srv.AuditLevel.Set(file.Log.AuditLevel)
+				}
 
 				if err = closer.Close(); err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to close previous keystore connections: %v\n", err)
 				}
-				buf, err := printServerStartup(srv, addrFlag, config, memLocked)
-				if err == nil {
-					fmt.Fprintln(buf)
-					fmt.Fprintln(buf, "=> Reloading configuration after SIGHUP signal completed.")
-					fmt.Println(buf.String())
-				}
+				buf := startupMessage(config)
+				fmt.Fprintln(buf)
+				fmt.Fprintln(buf, "=> Reloading configuration after SIGHUP signal completed.")
+				fmt.Println(buf.String())
 			}
 		}
 	}(ctx)
@@ -177,60 +263,82 @@ func serverCmd(args []string) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				config, err := readServerTLSConfig(serverArgs{
-					Address:     addrFlag,
-					ConfigFile:  configFlag,
-					PrivateKey:  tlsKeyFlag,
-					Certificate: tlsCertFlag,
-					TLSAuth:     mtlsAuthFlag,
-				})
+				file, err := kesconf.ReadFile(configFlag)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to reload TLS configuration: %v\n", err)
 					continue
 				}
-				if err = srv.UpdateTLS(config); err != nil {
+				conf, err := file.TLSConfig()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to reload TLS configuration: %v\n", err)
+					continue
+				}
+				if err = srv.UpdateTLS(conf); err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to update TLS configuration: %v\n", err)
 				}
 			}
 		}
 	}(ctx)
 
-	buf, err := printServerStartup(srv, addr, config, memLocked)
-	if err != nil {
-		cli.Fatal(err)
-	}
+	buf := startupMessage(conf)
 	fmt.Fprintln(buf)
 	fmt.Fprintln(buf, "=> Server is up and running...")
 	fmt.Println(buf.String())
 
-	if err = srv.ListenAndStart(ctx, addrFlag, config); err != nil {
-		cli.Fatal(err)
+	if err = srv.ListenAndStart(ctx, addrFlag, conf); err != nil {
+		return err
 	}
 	fmt.Println("\n=> Stopping server... Goodbye.")
+	return nil
 }
 
-func printServerStartup(srv *kes.Server, addr string, config *kes.Config, memLocked bool) (*strings.Builder, error) {
+func startDevServer(addr string) error {
 	info, err := sys.ReadBinaryInfo()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	ip := net.IPv4zero
 	if host != "" {
 		if ip = net.ParseIP(host); ip == nil {
-			return nil, fmt.Errorf("'%s' is not a valid IP address", host)
+			return fmt.Errorf("'%s' is not a valid IP address", host)
 		}
 	}
 	ifaceIPs, err := lookupInterfaceIPs(ip)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	srvCert, err := generateDevServerCertificate(ifaceIPs...)
+	if err != nil {
+		return err
 	}
 
-	keys := config.Keys.(adapter)
+	apiKey, err := kesdk.GenerateAPIKey(nil)
+	if err != nil {
+		return err
+	}
+
+	tlsConf := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		NextProtos:   []string{"h2", "http/1.1"},
+		Certificates: []tls.Certificate{srvCert},
+		ClientAuth:   tls.RequestClientCert,
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	conf := &kes.Config{
+		Admin: apiKey.Identity(),
+		TLS:   tlsConf,
+		Cache: &kes.CacheConfig{},
+		Keys:  &kes.MemKeyStore{},
+	}
+	srv := &kes.Server{}
 
 	blue := tui.NewStyle().Foreground(tui.Color("#268BD2"))
 	faint := tui.NewStyle().Faint(true)
@@ -241,351 +349,27 @@ func printServerStartup(srv *kes.Server, addr string, config *kes.Config, memLoc
 	fmt.Fprintf(buf, "%-33s %-23s %s\n", blue.Render("License"), "AGPLv3", faint.Render("https://www.gnu.org/licenses/agpl-3.0.html"))
 	fmt.Fprintf(buf, "%-33s %-12s 2015-%d  %s\n", blue.Render("Copyright"), "MinIO, Inc.", time.Now().Year(), faint.Render("https://min.io"))
 	fmt.Fprintln(buf)
-	fmt.Fprintf(buf, "%-33s %s: %s\n", blue.Render("KMS"), keys.Type, keys.Endpoint)
+	fmt.Fprintf(buf, "%-33s %v\n", blue.Render("KMS"), conf.Keys)
 	fmt.Fprintf(buf, "%-33s · https://%s\n", blue.Render("API"), net.JoinHostPort(ifaceIPs[0].String(), port))
 	for _, ifaceIP := range ifaceIPs[1:] {
 		fmt.Fprintf(buf, "%-11s · https://%s\n", " ", net.JoinHostPort(ifaceIP.String(), port))
 	}
-
 	fmt.Fprintln(buf)
 	fmt.Fprintf(buf, "%-33s https://min.io/docs/kes\n", blue.Render("Docs"))
-
 	fmt.Fprintln(buf)
-	if _, err := hex.DecodeString(config.Admin.String()); err == nil {
-		fmt.Fprintf(buf, "%-33s %s\n", blue.Render("Admin"), config.Admin)
-	} else {
-		fmt.Fprintf(buf, "%-33s <disabled>\n", blue.Render("Admin"))
-	}
+	fmt.Fprintf(buf, "%-33s %s\n", blue.Render("API Key"), apiKey.String())
+	fmt.Fprintf(buf, "%-33s %s\n", blue.Render("Admin"), apiKey.Identity())
 	fmt.Fprintf(buf, "%-33s error=stderr level=%s\n", blue.Render("Logs"), srv.ErrLevel.Level())
-	if srv.AuditLevel.Level() <= slog.LevelInfo {
-		fmt.Fprintf(buf, "%-11s audit=stdout level=%s\n", " ", srv.AuditLevel.Level())
-	}
-	if memLocked {
-		fmt.Fprintf(buf, "%-33s %s\n", blue.Render("MLock"), "enabled")
-	}
-	return buf, nil
-}
+	fmt.Fprintf(buf, "%-11s audit=stdout level=%s\n", " ", srv.AuditLevel.Level())
+	fmt.Fprintln(buf)
+	fmt.Fprintln(buf, "=> Server is up and running...")
+	fmt.Println(buf.String())
 
-func readServerTLSConfig(args serverArgs) (*tls.Config, error) {
-	file, err := os.Open(args.ConfigFile)
-	if err != nil {
-		return nil, err
+	if err := srv.ListenAndStart(ctx, addr, conf); err != nil {
+		return err
 	}
-	defer file.Close()
-
-	config, err := edge.ReadServerConfigYAML(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
-	}
-	if err = file.Close(); err != nil {
-		return nil, err
-	}
-	if args.PrivateKey != "" {
-		config.TLS.PrivateKey = args.PrivateKey
-	}
-	if args.Certificate != "" {
-		config.TLS.Certificate = args.Certificate
-	}
-	if args.PrivateKey != "" {
-		config.TLS.PrivateKey = args.PrivateKey
-	}
-	if args.Certificate != "" {
-		config.TLS.Certificate = args.Certificate
-	}
-
-	certificate, err := https.CertificateFromFile(config.TLS.Certificate, config.TLS.PrivateKey, config.TLS.Password)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read TLS certificate: %v", err)
-	}
-	if certificate.Leaf != nil {
-		if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
-			// Support for TLS certificates with a subject CN but without any SAN
-			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
-			// Therefore, we require at least one SAN for the server certificate.
-			return nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
-		}
-	}
-
-	var rootCAs *x509.CertPool
-	if config.TLS.CAPath != "" {
-		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
-		}
-	}
-	return &tls.Config{
-		MinVersion:   tls.VersionTLS12,
-		Certificates: []tls.Certificate{certificate},
-		RootCAs:      rootCAs,
-		ClientAuth:   tls.RequestClientCert,
-	}, nil
-}
-
-func readServerConfig(ctx context.Context, args serverArgs) (string, *kes.Config, error) {
-	file, err := os.Open(args.ConfigFile)
-	if err != nil {
-		return "", nil, err
-	}
-	defer file.Close()
-
-	config, err := edge.ReadServerConfigYAML(file)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read config file: %v", err)
-	}
-	if err = file.Close(); err != nil {
-		return "", nil, err
-	}
-
-	if args.Address != "" {
-		config.Addr = args.Address
-	}
-	if args.PrivateKey != "" {
-		config.TLS.PrivateKey = args.PrivateKey
-	}
-	if args.Certificate != "" {
-		config.TLS.Certificate = args.Certificate
-	}
-
-	// Set config defaults
-	if config.Addr == "" {
-		config.Addr = "0.0.0.0:7373"
-	}
-	if config.Cache.Expiry == 0 {
-		config.Cache.Expiry = 5 * time.Minute
-	}
-	if config.Cache.ExpiryUnused == 0 {
-		config.Cache.ExpiryUnused = 30 * time.Second
-	}
-
-	// Verify config
-	if config.Admin.IsUnknown() {
-		return "", nil, errors.New("no admin identity specified")
-	}
-	if config.TLS.PrivateKey == "" {
-		return "", nil, errors.New("no TLS private key specified")
-	}
-	if config.TLS.Certificate == "" {
-		return "", nil, errors.New("no TLS certificate specified")
-	}
-
-	certificate, err := https.CertificateFromFile(config.TLS.Certificate, config.TLS.PrivateKey, config.TLS.Password)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read TLS certificate: %v", err)
-	}
-	if certificate.Leaf != nil {
-		if len(certificate.Leaf.DNSNames) == 0 && len(certificate.Leaf.IPAddresses) == 0 {
-			// Support for TLS certificates with a subject CN but without any SAN
-			// has been removed in Go 1.15. Ref: https://go.dev/doc/go1.15#commonname
-			// Therefore, we require at least one SAN for the server certificate.
-			return "", nil, fmt.Errorf("invalid TLS certificate: certificate does not contain any DNS or IP address as SAN")
-		}
-	}
-
-	var rootCAs *x509.CertPool
-	if config.TLS.CAPath != "" {
-		rootCAs, err = https.CertPoolFromFile(config.TLS.CAPath)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to read TLS CA certificates: %v", err)
-		}
-	}
-
-	var errorLog slog.Handler
-	var auditLog kes.AuditHandler
-	if config.Log.Error {
-		errorLog = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
-	}
-	if config.Log.Audit {
-		auditLog = &kes.AuditLogHandler{Handler: slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})}
-	}
-
-	// TODO(aead): support TLS proxies
-
-	var apiConfig map[string]kes.RouteConfig
-	if config.API != nil && len(config.API.Paths) > 0 {
-		apiConfig = make(map[string]kes.RouteConfig, len(config.API.Paths))
-		for k, v := range config.API.Paths {
-			k = strings.TrimSpace(k) // Ensure that the API path starts with a '/'
-			if !strings.HasPrefix(k, "/") {
-				k = "/" + k
-			}
-
-			if _, ok := apiConfig[k]; ok {
-				return "", nil, fmt.Errorf("ambiguous API configuration for '%s'", k)
-			}
-			apiConfig[k] = kes.RouteConfig{
-				Timeout:          v.Timeout,
-				InsecureSkipAuth: v.InsecureSkipAuth,
-			}
-		}
-	}
-
-	policies := make(map[string]kes.Policy, len(config.Policies))
-	for name, policy := range config.Policies {
-		p := kes.Policy{
-			Allow:      make(map[string]kesdk.Rule, len(policy.Allow)),
-			Deny:       make(map[string]kesdk.Rule, len(policy.Deny)),
-			Identities: slices.Clone(policy.Identities),
-		}
-		for _, pattern := range policy.Allow {
-			p.Allow[pattern] = kesdk.Rule{}
-		}
-		for _, pattern := range policy.Deny {
-			p.Deny[pattern] = kesdk.Rule{}
-		}
-		policies[name] = p
-	}
-
-	kmsKind, kmsEndpoint, err := description(config)
-	if err != nil {
-		return "", nil, err
-	}
-
-	store, err := config.KeyStore.Connect(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-
-	keys := adapter{
-		store:    store,
-		Type:     kmsKind,
-		Endpoint: kmsEndpoint,
-	}
-
-	return config.Addr, &kes.Config{
-		Admin: config.Admin,
-		TLS: &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{certificate},
-			RootCAs:      rootCAs,
-			ClientAuth:   tls.RequestClientCert,
-		},
-		Cache: &kes.CacheConfig{
-			Expiry:        config.Cache.Expiry,
-			ExpiryUnused:  config.Cache.ExpiryUnused,
-			ExpiryOffline: config.Cache.ExpiryOffline,
-		},
-		Keys:     keys,
-		Policies: policies,
-		Routes:   apiConfig,
-		ErrorLog: errorLog,
-		AuditLog: auditLog,
-	}, nil
-}
-
-// TODO(aead): temp adapater - remove once keystores are ported to KeyStore interface
-type adapter struct {
-	Type string
-
-	Endpoint string
-
-	store kv.Store[string, []byte]
-}
-
-func (a adapter) Status(ctx context.Context) (kes.KeyStoreState, error) {
-	s, err := a.store.Status(ctx)
-	if err != nil {
-		return kes.KeyStoreState{}, err
-	}
-	return kes.KeyStoreState{
-		Latency: s.Latency,
-	}, nil
-}
-
-func (a adapter) Create(ctx context.Context, name string, value []byte) error {
-	return a.store.Create(ctx, name, value)
-}
-
-func (a adapter) Delete(ctx context.Context, name string) error {
-	return a.store.Delete(ctx, name)
-}
-
-func (a adapter) Get(ctx context.Context, name string) ([]byte, error) {
-	return a.store.Get(ctx, name)
-}
-
-func (a adapter) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	if n == 0 {
-		return []string{}, prefix, nil
-	}
-
-	iter, err := a.store.List(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	defer iter.Close()
-
-	var keys []string
-	for key, ok := iter.Next(); ok; key, ok = iter.Next() {
-		keys = append(keys, key)
-	}
-	if err = iter.Close(); err != nil {
-		return nil, "", err
-	}
-	slices.Sort(keys)
-
-	if prefix == "" {
-		if n < 0 || n >= len(keys) {
-			return keys, "", nil
-		}
-		return keys[:n], keys[n], nil
-	}
-
-	i := slices.IndexFunc(keys, func(key string) bool { return strings.HasPrefix(key, prefix) })
-	if i < 0 {
-		return []string{}, "", nil
-	}
-
-	for j, key := range keys[i:] {
-		if !strings.HasPrefix(key, prefix) {
-			return keys[i : i+j], "", nil
-		}
-		if n > 0 && j == n {
-			return keys[i : i+j], key, nil
-		}
-	}
-	return keys[i:], "", nil
-}
-
-func (a adapter) Close() error { return a.store.Close() }
-
-func description(config *edge.ServerConfig) (kind string, endpoint string, err error) {
-	if config.KeyStore == nil {
-		return "", "", errors.New("no KMS backend specified")
-	}
-
-	switch kms := config.KeyStore.(type) {
-	case *edge.FSKeyStore:
-		kind = "Filesystem"
-		if abs, err := filepath.Abs(kms.Path); err == nil {
-			endpoint = abs
-		} else {
-			endpoint = kms.Path
-		}
-	case *edge.VaultKeyStore:
-		kind = "Hashicorp Vault"
-		endpoint = kms.Endpoint
-	case *edge.FortanixKeyStore:
-		kind = "Fortanix SDKMS"
-		endpoint = kms.Endpoint
-	case *edge.AWSSecretsManagerKeyStore:
-		kind = "AWS SecretsManager"
-		endpoint = kms.Endpoint
-	case *edge.KeySecureKeyStore:
-		kind = "Gemalto KeySecure"
-		endpoint = kms.Endpoint
-	case *edge.GCPSecretManagerKeyStore:
-		kind = "GCP SecretManager"
-		endpoint = "Project: " + kms.ProjectID
-	case *edge.AzureKeyVaultKeyStore:
-		kind = "Azure KeyVault"
-		endpoint = kms.Endpoint
-	case *edge.EntrustKeyControlKeyStore:
-		kind = "Entrust KeyControl"
-		endpoint = kms.Endpoint
-	default:
-		return "", "", fmt.Errorf("unknown KMS backend %T", kms)
-	}
-	return kind, endpoint, nil
+	fmt.Println("\n=> Stopping server... Goodbye.")
+	return nil
 }
 
 // lookupInterfaceIPs returns a list of IP addrs for which a listener
@@ -643,4 +427,52 @@ func lookupInterfaceIPs(listenerIP net.IP) ([]net.IP, error) {
 		return ipv6s, nil
 	}
 	return nil, errors.New("no IPv4 or IPv6 addresses available")
+}
+
+func generateDevServerCertificate(ipSANs ...net.IP) (tls.Certificate, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore: time.Now().UTC(),
+		NotAfter:  time.Now().UTC().Add(90 * 24 * time.Hour), // 90 days
+		KeyUsage:  x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+		},
+		BasicConstraintsValid: true,
+		IPAddresses:           ipSANs,
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, key.Public(), key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	privPKCS8, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	cert, err := tls.X509KeyPair(
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privPKCS8}),
+	)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	if cert.Leaf == nil {
+		cert.Leaf, _ = x509.ParseCertificate(cert.Certificate[0])
+	}
+	return cert, nil
 }

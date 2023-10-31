@@ -2,13 +2,13 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge_test
+package kesconf_test
 
 import (
 	"flag"
 	"testing"
 
-	"github.com/minio/kes/edge"
+	"github.com/minio/kes/kesconf"
 )
 
 var FSPath = flag.String("fs.path", "", "Path used for FS tests")
@@ -17,7 +17,7 @@ func TestFS(t *testing.T) {
 	if *FSPath == "" {
 		t.Skip("FS tests disabled. Use -fs.path=<path> to enable them")
 	}
-	config := edge.FSKeyStore{
+	config := kesconf.FSKeyStore{
 		Path: *FSPath,
 	}
 
@@ -30,7 +30,6 @@ func TestFS(t *testing.T) {
 	}
 
 	t.Run("Create", func(t *testing.T) { testCreate(ctx, store, t, RandString(ranStringLength)) })
-	t.Run("Set", func(t *testing.T) { testSet(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("Get", func(t *testing.T) { testGet(ctx, store, t, RandString(ranStringLength)) })
 	t.Run("Status", func(t *testing.T) { testStatus(ctx, store, t) })
 }

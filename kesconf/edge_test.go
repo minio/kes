@@ -2,23 +2,24 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge_test
+package kesconf_test
 
 import (
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/signal"
 	"testing"
 
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
 )
 
-type SetupFunc func(context.Context, kv.Store[string, []byte], string) error
+type SetupFunc func(context.Context, kes.KeyStore, string) error
 
 const ranStringLength = 8
 
@@ -32,14 +33,14 @@ var createTests = []struct {
 	},
 	{ // 1
 		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+		Setup: func(ctx context.Context, s kes.KeyStore, suffix string) error {
 			return s.Create(ctx, "edge-test-"+suffix, []byte("t"))
 		},
 		ShouldFail: true,
 	},
 }
 
-func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+func testCreate(ctx context.Context, store kes.KeyStore, t *testing.T, seed string) {
 	defer clean(ctx, store, t)
 	for i, test := range createTests {
 		if test.Setup != nil {
@@ -61,45 +62,6 @@ func testCreate(ctx context.Context, store kv.Store[string, []byte], t *testing.
 	}
 }
 
-var setTests = []struct {
-	Args       map[string][]byte
-	Setup      SetupFunc
-	ShouldFail bool
-}{
-	{ // 0
-		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
-	},
-	{ // 1
-		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte], sufffix string) error {
-			return s.Create(ctx, "edge-test-"+sufffix, []byte("t"))
-		},
-		ShouldFail: true,
-	},
-}
-
-func testSet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
-	defer clean(ctx, store, t)
-	for i, test := range setTests {
-		if test.Setup != nil {
-			if err := test.Setup(ctx, store, fmt.Sprintf("%s-%d", seed, i)); err != nil {
-				t.Fatalf("Test %d: failed to setup: %v", i, err)
-			}
-		}
-
-		for key, value := range test.Args {
-			secretKet := fmt.Sprintf("%s-%s-%d", key, seed, i)
-			err := store.Create(ctx, secretKet, value)
-			if err != nil && !test.ShouldFail {
-				t.Errorf("Test %d: failed to set key '%s': %v", i, secretKet, err)
-			}
-			if err == nil && test.ShouldFail {
-				t.Errorf("Test %d: setting key '%s' should have failed: %v", i, secretKet, err)
-			}
-		}
-	}
-}
-
 var getTests = []struct {
 	Args       map[string][]byte
 	Setup      SetupFunc
@@ -107,7 +69,7 @@ var getTests = []struct {
 }{
 	{ // 0
 		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+		Setup: func(ctx context.Context, s kes.KeyStore, suffix string) error {
 			return s.Create(ctx, "edge-test-"+suffix, []byte("edge-test-value"))
 		},
 	},
@@ -117,14 +79,14 @@ var getTests = []struct {
 	},
 	{ // 1
 		Args: map[string][]byte{"edge-test": []byte("edge-test-value")},
-		Setup: func(ctx context.Context, s kv.Store[string, []byte], suffix string) error {
+		Setup: func(ctx context.Context, s kes.KeyStore, suffix string) error {
 			return s.Create(ctx, "edge-test-"+suffix, []byte("edge-test-value2"))
 		},
 		ShouldFail: true,
 	},
 }
 
-func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, seed string) {
+func testGet(ctx context.Context, store kes.KeyStore, t *testing.T, seed string) {
 	defer clean(ctx, store, t)
 	for i, test := range getTests {
 		if test.Setup != nil {
@@ -151,7 +113,7 @@ func testGet(ctx context.Context, store kv.Store[string, []byte], t *testing.T, 
 	}
 }
 
-func testStatus(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
+func testStatus(ctx context.Context, store kes.KeyStore, t *testing.T) {
 	if _, err := store.Status(ctx); err != nil {
 		t.Fatalf("Failed to fetch status: %v", err)
 	}
@@ -167,19 +129,20 @@ func testingContext(t *testing.T) (context.Context, context.CancelFunc) {
 	return context.WithDeadline(osCtx, d)
 }
 
-func clean(ctx context.Context, store kv.Store[string, []byte], t *testing.T) {
-	iter, err := store.List(ctx)
-	if err != nil {
-		t.Fatalf("Cleanup: failed to list keys: %v", err)
+func clean(ctx context.Context, store kes.KeyStore, t *testing.T) {
+	iter := kesdk.ListIter[string]{
+		NextFunc: store.List,
 	}
-	defer iter.Close()
 
 	var names []string
-	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
+	for next, err := iter.Next(ctx); err != io.EOF; next, err = iter.Next(ctx) {
+		if err != nil {
+			t.Errorf("Cleanup: failed to list: %v", err)
+		}
 		names = append(names, next)
 	}
 	for _, name := range names {
-		if err = store.Delete(ctx, name); err != nil && !errors.Is(err, kes.ErrKeyNotFound) {
+		if err := store.Delete(ctx, name); err != nil && !errors.Is(err, kesdk.ErrKeyNotFound) {
 			t.Errorf("Cleanup: failed to delete '%s': %v", name, err)
 		}
 	}
