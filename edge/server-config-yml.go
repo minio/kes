@@ -7,6 +7,7 @@ package edge
 import (
 	"errors"
 	"fmt"
+	"github.com/minio/kes/internal/keystore/credhub"
 	"os"
 	"strings"
 	"time"
@@ -165,7 +166,7 @@ type yml struct {
 			SecretsManager *struct {
 				Endpoint env[string] `yaml:"endpoint"`
 				Region   env[string] `yaml:"region"`
-				KmsKey   env[string] ` yaml:"kmskey"`
+				KmsKey   env[string] `yaml:"kmskey"`
 
 				Login struct {
 					AccessKey    env[string] `yaml:"accesskey"`
@@ -188,6 +189,7 @@ type yml struct {
 				} `yaml:"managed_identity"`
 			} `yaml:"keyvault"`
 		} `yaml:"azure"`
+
 		Entrust *struct {
 			KeyControl *struct {
 				Endpoint env[string] `yaml:"endpoint"`
@@ -202,6 +204,17 @@ type yml struct {
 				} `yaml:"tls"`
 			} `yaml:"keycontrol"`
 		} `yaml:"entrust"`
+
+		CredHub *struct {
+			BaseUrl                   env[string] `yaml:"base_url"`
+			EnableMutualTls           env[bool]   `yaml:"enable_mutual_tls"`
+			ClientCertFilePath        env[string] `yaml:"client_cert_file_path"`
+			ClientKeyFilePath         env[string] `yaml:"client_key_file_path"`
+			ServerCaCertFilePath      env[string] `yaml:"server_ca_cert_file_path"`
+			ServerInsecureSkipVerify  env[bool]   `yaml:"server_insecure_skip_verify"`
+			Namespace                 env[string] `yaml:"namespace"`
+			ForceBase64ValuesEncoding env[bool]   `yaml:"force_base64_values_encoding"`
+		} `yaml:"credhub"`
 	} `yaml:"keystore"`
 }
 
@@ -654,6 +667,29 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 			Password: y.KeyStore.Entrust.KeyControl.Login.Password.Value,
 			CAPath:   y.KeyStore.Entrust.KeyControl.TLS.CAPath.Value,
 		}
+	}
+
+	// CF CredHub
+	if y.KeyStore.CredHub != nil {
+		if keystore != nil {
+			return nil, errors.New("edge: invalid CredHub config: more than once keystore specified")
+		}
+		config := credhub.Config{
+			BaseUrl:                   y.KeyStore.CredHub.BaseUrl.Value,
+			EnableMutualTls:           y.KeyStore.CredHub.EnableMutualTls.Value,
+			ClientCertFilePath:        y.KeyStore.CredHub.ClientCertFilePath.Value,
+			ClientKeyFilePath:         y.KeyStore.CredHub.ClientKeyFilePath.Value,
+			ServerInsecureSkipVerify:  y.KeyStore.CredHub.ServerInsecureSkipVerify.Value,
+			ServerCaCertFilePath:      y.KeyStore.CredHub.ServerCaCertFilePath.Value,
+			Namespace:                 y.KeyStore.CredHub.Namespace.Value,
+			ForceBase64ValuesEncoding: y.KeyStore.CredHub.ForceBase64ValuesEncoding.Value,
+		}
+		_, err := config.Validate()
+
+		if err != nil {
+			return nil, err
+		}
+		keystore = &CredHubKeyStore{Config: &config}
 	}
 
 	if keystore == nil {

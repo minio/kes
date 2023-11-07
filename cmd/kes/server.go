@@ -582,6 +582,9 @@ func description(config *edge.ServerConfig) (kind string, endpoint string, err e
 	case *edge.EntrustKeyControlKeyStore:
 		kind = "Entrust KeyControl"
 		endpoint = kms.Endpoint
+	case *edge.CredHubKeyStore:
+		kind = "CF CredHub"
+		endpoint = kms.DescribeEndpoint()
 	default:
 		return "", "", fmt.Errorf("unknown KMS backend %T", kms)
 	}

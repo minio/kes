@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"github.com/minio/kes/internal/keystore/credhub"
 	"time"
 
 	"github.com/minio/kes-go"
@@ -715,4 +716,18 @@ func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kv.Store[strin
 			RootCAs: rootCAs,
 		},
 	})
+}
+
+// CredHubKeyStore is a structure containing the configuration for CredHub.
+type CredHubKeyStore struct {
+	Config *credhub.Config
+}
+
+func (s *CredHubKeyStore) DescribeEndpoint() string {
+	return s.Config.BaseUrl + "#" + s.Config.Namespace
+}
+
+// Connect returns a kv.Store that stores key-value pairs on CredHub.
+func (s *CredHubKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+	return credhub.NewStore(ctx, s.Config)
 }
