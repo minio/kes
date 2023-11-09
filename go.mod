@@ -1,6 +1,6 @@
 module github.com/minio/kes
 
-go 1.20
+go 1.21
 
 require (
 	aead.dev/mem v0.2.0
@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.9.1
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/vault/api v1.10.0
-	github.com/minio/kes-go v0.2.0
+	github.com/minio/kes-go v0.2.1
 	github.com/minio/selfupdate v0.4.0
 	github.com/muesli/termenv v0.15.2
 	github.com/prometheus/client_golang v1.16.0
