@@ -27,6 +27,7 @@ import (
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/headers"
+	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/metric"
@@ -1071,9 +1072,10 @@ func (s *Server) logAudit(resp *api.Response, req *api.Request) {
 	resp.Header().Set(headers.ContentType, headers.ContentTypeJSONLines)
 	resp.WriteHeader(http.StatusOK)
 
+	w := https.FlushOnWrite(resp.ResponseWriter)
 	auditLog := s.state.Load().Audit
-	auditLog.out.Add(resp.ResponseWriter)
-	defer auditLog.out.Remove(resp.ResponseWriter)
+	auditLog.out.Add(w)
+	defer auditLog.out.Remove(w)
 
 	<-req.Context().Done()
 }
