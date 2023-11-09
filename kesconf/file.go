@@ -99,7 +99,7 @@ type File struct {
 	// Log contains the KES server logging configuration.
 	Log *LogConfig
 
-	// APU contains the KES server API configuration.
+	// API contains the KES server API configuration.
 	API *APIConfig
 
 	// Policies contains the KES server policy definitions

@@ -533,7 +533,7 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
 	if secret == nil { // The secret may be nil even when there was no error.
-		return []string{}, "", nil // We return an empty iterator in this case.
+		return []string{}, "", nil // We return an empty list in this case.
 	}
 
 	// Vault returns a generic map that should contain

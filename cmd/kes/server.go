@@ -157,23 +157,23 @@ func startServer(addrFlag, configFlag string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	file, err := kesconf.ReadFile(configFlag)
+	rawConfig, err := kesconf.ReadFile(configFlag)
 	if err != nil {
 		return err
 	}
 	if addrFlag == "" {
-		addrFlag = file.Addr
+		addrFlag = rawConfig.Addr
 	}
-	conf, err := file.Config(ctx)
+	conf, err := rawConfig.Config(ctx)
 	if err != nil {
 		return err
 	}
 	defer conf.Keys.Close()
 
 	srv := &kes.Server{}
-	if file.Log != nil {
-		srv.ErrLevel.Set(file.Log.ErrLevel)
-		srv.AuditLevel.Set(file.Log.AuditLevel)
+	if rawConfig.Log != nil {
+		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
+		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
 	}
 	sighup := make(chan os.Signal, 10)
 	signal.Notify(sighup, syscall.SIGHUP)
