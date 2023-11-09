@@ -139,13 +139,23 @@ func startServer(addrFlag, configFlag string) error {
 		return err
 	}
 
+	// Read the config file before looking up the
+	// local network interfaces. We may not know the
+	// server addr yet since a user may not specified
+	// one on the command line.
 	rawConfig, err := kesconf.ReadFile(configFlag)
 	if err != nil {
 		return err
 	}
-	if addrFlag == "" {
+	switch {
+	case addrFlag != "":
+		// Nothing to do, addrFlag is set
+	case rawConfig.Addr != "":
 		addrFlag = rawConfig.Addr
+	default:
+		addrFlag = "0.0.0.0:7373"
 	}
+
 	host, port, err := net.SplitHostPort(addrFlag)
 	if err != nil {
 		return err
