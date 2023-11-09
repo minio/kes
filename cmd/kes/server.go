@@ -139,6 +139,13 @@ func startServer(addrFlag, configFlag string) error {
 		return err
 	}
 
+	rawConfig, err := kesconf.ReadFile(configFlag)
+	if err != nil {
+		return err
+	}
+	if addrFlag == "" {
+		addrFlag = rawConfig.Addr
+	}
 	host, port, err := net.SplitHostPort(addrFlag)
 	if err != nil {
 		return err
@@ -157,13 +164,6 @@ func startServer(addrFlag, configFlag string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	rawConfig, err := kesconf.ReadFile(configFlag)
-	if err != nil {
-		return err
-	}
-	if addrFlag == "" {
-		addrFlag = rawConfig.Addr
-	}
 	conf, err := rawConfig.Config(ctx)
 	if err != nil {
 		return err
