@@ -12,8 +12,10 @@ import (
 	"path"
 	"time"
 
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore"
+	gcpiterator "google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,8 +29,6 @@ type Store struct {
 	client *secretmanager.Client
 	config *Config
 }
-
-var _ kv.Store[string, []byte] = (*Store)(nil) // compiler check
 
 // Connect connects and authenticates to a GCP SecretManager
 // server.
@@ -101,19 +101,21 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	return conn, nil
 }
 
+func (s *Store) String() string { return "GCP SecretManager: Project=" + s.config.ProjectID }
+
 // Status returns the current state of the GCP SecretManager instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -142,7 +144,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 			return err
 		}
 		if status.Code(err) == codes.AlreadyExists {
-			return kes.ErrKeyExists
+			return kesdk.ErrKeyExists
 		}
 		return fmt.Errorf("gcp: failed to create '%s': %v", name, err)
 	}
@@ -183,7 +185,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 			return nil, err
 		}
 		if status.Code(err) == codes.NotFound {
-			return nil, kes.ErrKeyNotFound
+			return nil, kesdk.ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("gcp: failed to read '%s': %v", name, err)
 	}
@@ -207,7 +209,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 			return err
 		}
 		if status.Code(err) == codes.NotFound {
-			return kes.ErrKeyNotFound
+			return kesdk.ErrKeyNotFound
 		}
 		return fmt.Errorf("gcp: failed to delete '%s': %v", name, err)
 	}
@@ -216,13 +218,31 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty.
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	location := path.Join("projects", s.config.ProjectID)
-	return &iterator{
-		src: s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
-			Parent: location,
-		}),
-	}, nil
+
+	iter := s.client.ListSecrets(ctx, &secretmanagerpb.ListSecretsRequest{
+		Parent: location,
+	})
+
+	var names []string
+	for resp, err := iter.Next(); err != gcpiterator.Done; resp, err = iter.Next() {
+		if err != nil {
+			return nil, "", err
+		}
+		names = append(names, path.Base(resp.GetName()))
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store.

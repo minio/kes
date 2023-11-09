@@ -2,10 +2,9 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package edge
+package kesconf
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -13,16 +12,10 @@ import (
 func TestReadServerConfigYAML_FS(t *testing.T) {
 	const (
 		Filename = "./testdata/fs.yml"
-
-		FSPath = "/tmp/keys"
+		FSPath   = "/tmp/keys"
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -49,12 +42,7 @@ func TestReadServerConfigYAML_CustomAPI(t *testing.T) {
 		MetricsSkipAuth = true
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -96,12 +84,7 @@ func TestReadServerConfigYAML_VaultWithAppRole(t *testing.T) {
 		AppRoleSecret = "6a174c20-f6de-a53c-74d2-6018fcceff64"
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -148,12 +131,7 @@ func TestReadServerConfigYAML_VaultWithK8S(t *testing.T) {
 		K8SJWT     = "eyJhbGciOiJSUzI1NiIsImtpZCI6IkJQbGNNeTdBeXdLQmZMaGw2N1dFZkJvUmtsdnVvdkxXWGsteTc5TmJPeGMifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJteS1uYW1lc3BhY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoibXktc2VydmljZS1hY2NvdW50LXRva2VuLXA5NWRyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6Im15LXNlcnZpY2UtYWNjb3VudCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjdiYmViZGE2LTViMDUtNGFlNC05Yjg2LTBkODE0NWMwNzdhNSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpteS1uYW1lc3BhY2U6bXktc2VydmljZS1hY2NvdW50In0.dnvJE3LU7L8XxsIOwea3lUZAULdwAjV9_crHFLKBGNxEu70lk3MQmUbGTEFvawryArmxMa1bWF9wbK1GHEsNipDgWAmc0rmBYByP_ahlf9bI2EEzpaGU5s194csB_eG7kvfi1AHED_nkVTfvCjIJM-9oGICCjDJcoNOP1NAXICFmqvWfXl6SY3UoZvtzUOcH9-0hbARY3p6V5pPecW4Dm-yGub9PKZLJNzv7GxChM-uvBvHAt6o0UBIL4iSy6Bx2l91ojB-RSkm_oy0W9gKi9ZFQPgyvcvQnEfjoGdvNGlOEdFEdXvl-dP6iLBPnZ5xwhAk8lK0oOONWvQg6VDNd9w"
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -200,12 +178,7 @@ func TestReadServerConfigYAML_VaultWithK8S_JWTFile(t *testing.T) {
 		K8SJWT     = "eyJhbGciOiJSUzI1NiIsImtpZCI6IkJQbGNNeTdBeXdLQmZMaGw2N1dFZkJvUmtsdnVvdkxXWGsteTc5TmJPeGMifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJteS1uYW1lc3BhY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoibXktc2VydmljZS1hY2NvdW50LXRva2VuLXA5NWRyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6Im15LXNlcnZpY2UtYWNjb3VudCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjdiYmViZGE2LTViMDUtNGFlNC05Yjg2LTBkODE0NWMwNzdhNSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpteS1uYW1lc3BhY2U6bXktc2VydmljZS1hY2NvdW50In0.dnvJE3LU7L8XxsIOwea3lUZAULdwAjV9_crHFLKBGNxEu70lk3MQmUbGTEFvawryArmxMa1bWF9wbK1GHEsNipDgWAmc0rmBYByP_ahlf9bI2EEzpaGU5s194csB_eG7kvfi1AHED_nkVTfvCjIJM-9oGICCjDJcoNOP1NAXICFmqvWfXl6SY3UoZvtzUOcH9-0hbARY3p6V5pPecW4Dm-yGub9PKZLJNzv7GxChM-uvBvHAt6o0UBIL4iSy6Bx2l91ojB-RSkm_oy0W9gKi9ZFQPgyvcvQnEfjoGdvNGlOEdFEdXvl-dP6iLBPnZ5xwhAk8lK0oOONWvQg6VDNd9w"
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -248,12 +221,7 @@ func TestReadServerConfigYAML_AWS(t *testing.T) {
 		Secretkey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}
@@ -291,12 +259,7 @@ func TestReadServerConfigYAML_AWS_NoCredentials(t *testing.T) {
 		SessionToken = ""
 	)
 
-	file, err := os.Open(Filename)
-	if err != nil {
-		t.Fatalf("Failed to access file '%s': %v", Filename, err)
-	}
-
-	config, err := ReadServerConfigYAML(file)
+	config, err := ReadFile(Filename)
 	if err != nil {
 		t.Fatalf("Failed to read file '%s': %v", Filename, err)
 	}

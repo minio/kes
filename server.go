@@ -28,11 +28,16 @@ import (
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/headers"
 	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
-	"github.com/minio/kes/kv"
 	"github.com/prometheus/common/expfmt"
 )
+
+// An Identity should uniquely identify a client and
+// is computed from the X.509 certificate presented
+// by the client during the TLS handshake.
+type Identity = kes.Identity
 
 // ServerShutdownTimeout is the default time period the server
 // waits while trying to shutdown gracefully before forcefully
@@ -463,7 +468,7 @@ func (s *Server) version(resp *api.Response, req *api.Request) {
 
 func (s *Server) ready(resp *api.Response, req *api.Request) {
 	_, err := s.state.Load().Keys.Status(req.Context())
-	if _, ok := kv.IsUnreachable(err); ok {
+	if _, ok := keystore.IsUnreachable(err); ok {
 		s.state.Load().Log.WarnContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusGatewayTimeout, "key store is not reachable")
 		return

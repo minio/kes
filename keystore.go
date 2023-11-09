@@ -16,7 +16,7 @@ import (
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cache"
 	"github.com/minio/kes/internal/key"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // A KeyStore stores key-value pairs. It provides durable storage for a
@@ -71,6 +71,8 @@ type MemKeyStore struct {
 }
 
 var _ KeyStore = (*MemKeyStore)(nil) // compiler check
+
+func (ks *MemKeyStore) String() string { return "In Memory" }
 
 // Status returns the current state of the MemKeyStore.
 // It never returns an error.
@@ -244,7 +246,7 @@ type cacheEntry struct {
 // reachable and offline caching is enabled.
 func (c *keyCache) Status(ctx context.Context) (KeyStoreState, error) {
 	if c.offline.Load() {
-		return KeyStoreState{}, &kv.Unreachable{Err: errors.New("keystore is offline")}
+		return KeyStoreState{}, &keystore.ErrUnreachable{Err: errors.New("keystore is offline")}
 	}
 	return c.store.Status(ctx)
 }

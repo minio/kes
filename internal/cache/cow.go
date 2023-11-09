@@ -216,7 +216,7 @@ func (c *Cow[K, V]) Clone() *Cow[K, V] {
 // It never returns nil.
 func (c *Cow[K, _]) Keys() []K {
 	p := c.ptr.Load()
-	if len(*p) == 0 {
+	if p == nil || len(*p) == 0 {
 		return []K{}
 	}
 

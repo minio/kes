@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -24,9 +23,10 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // Credentials represents a Gemalto KeySecure
@@ -64,8 +64,6 @@ type Store struct {
 	client *client
 	stop   context.CancelFunc
 }
-
-var _ kv.Store[string, []byte] = (*Store)(nil)
 
 // Connect returns a Store to a Gemalto KeySecure
 // server using the given config.
@@ -113,19 +111,21 @@ func Connect(ctx context.Context, config *Config) (c *Store, err error) {
 	}, nil
 }
 
+func (s *Store) String() string { return "Gemalto KeySecure: " + s.config.Endpoint }
+
 // Status returns the current state of the Gemalto KeySecure instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -167,7 +167,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return kes.ErrKeyExists
+		return kesdk.ErrKeyExists
 	}
 	if resp.StatusCode != http.StatusCreated {
 		response, err := parseServerError(resp)
@@ -210,7 +210,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, kes.ErrKeyNotFound
+		return nil, kesdk.ErrKeyNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
 		response, err := parseServerError(resp)
@@ -271,7 +271,17 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	// Response is the JSON response returned by KeySecure.
 	// It only contains the fields that we need to implement
 	// paginated listing. The raw response contains much more
@@ -284,117 +294,71 @@ func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
 		} `json:"resources"`
 	}
 
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	// The following go-routine keeps listing keys (in pages of size 'limit')
-	// and writes the keys names to the Iterator.
-	// If there are so many items such that they don't fit on a single page it
-	// requests another page by making another request and skipping all items
-	// processed so far.
-	go func() {
-		defer close(values)
-
-		const limit = 200 // We limit a listing page to 200. This an arbitrary but reasonable value.
-		var (
-			skip     uint64 // Keep track of the items processed so far and skip them.
-			response Response
-		)
-		for {
-			// We have to tell KeySecure how many items we want to process per page and how many
-			// items we want to skip - resp. how many items we have processed already.
-			url := fmt.Sprintf("%s/api/v1/vault/secrets?limit=%d&skip=%d", s.config.Endpoint, limit, skip)
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-			if err != nil {
-				cancel(fmt.Errorf("gemalto: failed to list keys: %v", err))
-				break
-			}
-			req.Header.Set("Authorization", s.client.AuthToken())
-
-			resp, err := s.client.Do(req)
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancel(err)
-				break
-			}
-			if err != nil {
-				cancel(fmt.Errorf("gemalto: failed to list keys: %v", err))
-				break
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				if response, err := parseServerError(resp); err != nil {
-					cancel(fmt.Errorf("gemalto: %s: failed to parse server response: %v", resp.Status, err))
-				} else {
-					cancel(fmt.Errorf("gemalto: failed to list keys: '%s' (%d)", response.Message, response.Code))
-				}
-				break
-			}
-
-			const MaxBody = 32 * mem.MiB // A page should not be larger than 32 MiB.
-			if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					cancel(err)
-				} else {
-					cancel(fmt.Errorf("gemalto: failed to list keys: listing page too large: %v", err))
-				}
-				break
-			}
-
-			// We check that the invariant that the KeySecure instance has skipped as many items
-			// as we requested is true. If both numbers are off then the KeySecure would either
-			// return items that we've already served to the client or skip items that we haven't
-			// served, yet.
-			if response.Skip != skip {
-				cancel(fmt.Errorf("gemalto: failed to list keys: pagination is out-of-sync: tried to skip %d but skipped %d", skip, response.Skip))
-				break
-			}
-			for _, v := range response.Resources {
-				select {
-				case values <- v.Name:
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			skip += uint64(len(response.Resources))
-			if response.Skip >= response.Total { // Stop once we've reached the end of the listing.
-				break
-			}
+	const limit = 200 // We limit a listing page to 200. This an arbitrary but reasonable value.
+	var (
+		skip     uint64 // Keep track of the items processed so far and skip them.
+		response Response
+		names    []string
+	)
+	for {
+		// We have to tell KeySecure how many items we want to process per page and how many
+		// items we want to skip - resp. how many items we have processed already.
+		url := fmt.Sprintf("%s/api/v1/vault/secrets?limit=%d&skip=%d", s.config.Endpoint, limit, skip)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, "", fmt.Errorf("gemalto: failed to list keys: %v", err)
 		}
-	}()
-	return &iter{
-		ch:     values,
-		ctx:    ctx,
-		cancel: cancel,
-	}, nil
+		req.Header.Set("Authorization", s.client.AuthToken())
+
+		resp, err := s.client.Do(req)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, "", err
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			response, err := parseServerError(resp)
+			if err != nil {
+				return nil, "", fmt.Errorf("gemalto: %s: failed to parse server response: %v", resp.Status, err)
+			}
+			return nil, "", fmt.Errorf("gemalto: failed to list keys: '%s' (%d)", response.Message, response.Code)
+
+		}
+
+		const MaxBody = 32 * mem.MiB // A page should not be larger than 32 MiB.
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, "", err
+			}
+			return nil, "", fmt.Errorf("gemalto: failed to list keys: listing page too large: %v", err)
+		}
+
+		// We check that the invariant that the KeySecure instance has skipped as many items
+		// as we requested is true. If both numbers are off then the KeySecure would either
+		// return items that we've already served to the client or skip items that we haven't
+		// served, yet.
+		if response.Skip != skip {
+			return nil, "", fmt.Errorf("gemalto: failed to list keys: pagination is out-of-sync: tried to skip %d but skipped %d", skip, response.Skip)
+		}
+		for _, v := range response.Resources {
+			names = append(names, v.Name)
+		}
+
+		skip += uint64(len(response.Resources))
+		if response.Skip >= response.Total { // Stop once we've reached the end of the listing.
+			break
+		}
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store. It stops any authentication renewal in the background.
 func (s *Store) Close() error {
 	s.stop()
 	return nil
-}
-
-type iter struct {
-	ch     <-chan string
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
-func (i *iter) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
-	}
-}
-
-func (i *iter) Close() error {
-	i.cancel(context.Canceled)
-	return context.Cause(i.ctx)
 }
 
 // errResponse represents a KeySecure API error
@@ -468,7 +432,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		return rootCAs, err
 	}
 	if !stat.IsDir() {
-		bytes, err := ioutil.ReadAll(f)
+		bytes, err := io.ReadAll(f)
 		if err != nil {
 			return rootCAs, err
 		}
@@ -488,7 +452,7 @@ func loadCustomCAs(path string) (*x509.CertPool, error) {
 		}
 
 		name := filepath.Join(path, file.Name())
-		bytes, err := ioutil.ReadFile(name)
+		bytes, err := os.ReadFile(name)
 		if err != nil {
 			return rootCAs, err
 		}

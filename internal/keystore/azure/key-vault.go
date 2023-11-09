@@ -14,8 +14,9 @@ import (
 
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
-	"github.com/minio/kes-go"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes"
+	kesdk "github.com/minio/kes-go"
+	"github.com/minio/kes/internal/keystore"
 )
 
 // Credentials are Azure client credentials to authenticate an application
@@ -41,21 +42,21 @@ type Store struct {
 	client   client
 }
 
-var _ kv.Store[string, []byte] = (*Store)(nil)
+func (s *Store) String() string { return "Azure KeyVault: " + s.endpoint }
 
 // Status returns the current state of the Azure KeyVault instance.
 // In particular, whether it is reachable and the network latency.
-func (s *Store) Status(ctx context.Context) (kv.State, error) {
+func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.client.Endpoint, nil)
 	if err != nil {
-		return kv.State{}, err
+		return kes.KeyStoreState{}, err
 	}
 
 	start := time.Now()
 	if _, err = http.DefaultClient.Do(req); err != nil {
-		return kv.State{}, &kv.Unreachable{Err: err}
+		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	return kv.State{
+	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil
 }
@@ -89,7 +90,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	}
 	switch {
 	case stat.StatusCode == http.StatusOK:
-		return kes.ErrKeyExists
+		return kesdk.ErrKeyExists
 	case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
 		return fmt.Errorf("azure: failed to create '%s': insufficient permissions to check whether '%s' already exists: %s (%s)", name, name, stat.Message, stat.ErrorCode)
 	case stat.StatusCode != http.StatusNotFound:
@@ -213,7 +214,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("azure: failed to delete '%s': %v", name, err)
 	}
 	if stat.StatusCode != http.StatusNotFound {
-		return kes.ErrKeyNotFound
+		return kesdk.ErrKeyNotFound
 	}
 	if stat.StatusCode != http.StatusOK && stat.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
@@ -274,7 +275,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		return nil, fmt.Errorf("azure: failed to get '%s': failed to list versions: %v", name, err)
 	}
 	if stat.StatusCode == http.StatusNotFound && stat.ErrorCode == "NoObjectVersions" {
-		return nil, kes.ErrKeyNotFound
+		return nil, kesdk.ErrKeyNotFound
 	}
 	if stat.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("azure: failed to get '%s': failed to list versions: %s (%s)", name, stat.Message, stat.ErrorCode)
@@ -295,48 +296,40 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 
 // List returns a new Iterator over the names of
 // all stored keys.
-func (s *Store) List(ctx context.Context) (kv.Iter[string], error) {
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	values := make(chan string, 10)
-
-	go func() {
-		defer close(values)
-
-		var nextLink string
-		for {
-			secrets, link, status, err := s.client.ListSecrets(ctx, nextLink)
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				cancel(err)
-				break
-			}
-			if err != nil {
-				cancel(fmt.Errorf("azure: failed to list keys: %v", err))
-				break
-			}
-			if status.StatusCode != http.StatusOK {
-				cancel(fmt.Errorf("azure: failed to list keys: %s (%s)", status.Message, status.ErrorCode))
-				break
-			}
-
-			nextLink = link
-			for _, secret := range secrets {
-				select {
-				case values <- secret:
-				case <-ctx.Done():
-					return
-				}
-			}
-			if nextLink == "" {
-				break
-			}
+// List returns the first n key names, that start with the given
+// prefix, and the next prefix from which the listing should
+// continue.
+//
+// It returns all keys with the prefix if n < 0 and less than n
+// names if n is greater than the number of keys with the prefix.
+//
+// An empty prefix matches any key name. At the end of the listing
+// or when there are no (more) keys starting with the prefix, the
+// returned prefix is empty
+func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	var (
+		names    []string
+		nextLink string
+	)
+	for {
+		secrets, link, status, err := s.client.ListSecrets(ctx, nextLink)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, "", err
 		}
-	}()
-	return &iter{
-		ch:     values,
-		ctx:    ctx,
-		cancel: cancel,
-	}, nil
+		if err != nil {
+			return nil, "", fmt.Errorf("azure: failed to list keys: %v", err)
+		}
+		if status.StatusCode != http.StatusOK {
+			return nil, "", fmt.Errorf("azure: failed to list keys: %s (%s)", status.Message, status.ErrorCode)
+		}
+
+		nextLink = link
+		names = append(names, secrets...)
+		if nextLink == "" {
+			break
+		}
+	}
+	return keystore.List(names, prefix, n)
 }
 
 // Close closes the Store.
@@ -381,24 +374,4 @@ func ConnectWithIdentity(_ context.Context, endpoint string, msi ManagedIdentity
 			Authorizer: autorest.NewBearerAuthorizer(token),
 		},
 	}, nil
-}
-
-type iter struct {
-	ch     <-chan string
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
-func (i *iter) Next() (string, bool) {
-	select {
-	case v, ok := <-i.ch:
-		return v, ok
-	case <-i.ctx.Done():
-		return "", false
-	}
-}
-
-func (i *iter) Close() error {
-	i.cancel(context.Canceled)
-	return context.Cause(i.ctx)
 }
