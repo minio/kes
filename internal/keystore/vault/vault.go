@@ -132,9 +132,9 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		retry        time.Duration
 	)
 	switch {
-	case c.AppRole.ID != "" || c.AppRole.Secret != "":
+	case c.AppRole != nil && (c.AppRole.ID != "" || c.AppRole.Secret != ""):
 		authenticate, retry = client.AuthenticateWithAppRole(c.AppRole), c.AppRole.Retry
-	case c.K8S.Role != "" || c.K8S.JWT != "":
+	case c.K8S != nil && (c.K8S.Role != "" || c.K8S.JWT != ""):
 		authenticate, retry = client.AuthenticateWithK8S(c.K8S), c.K8S.Retry
 	}
 
