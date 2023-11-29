@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var awsConfigFile = flag.String("aws.config", "", "Path to a KES config file with AWS SecretsManager config")
@@ -18,12 +16,12 @@ func TestAWS(t *testing.T) {
 		t.Skip("AWS SecretsManager tests disabled. Use -aws.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*awsConfigFile)
+	config, err := ReadFile(*awsConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := config.KeyStore.(*kesconf.AWSSecretsManagerKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.AWSSecretsManagerKeyStore{})
+	if _, ok := config.KeyStore.(*AWSSecretsManagerKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &AWSSecretsManagerKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)

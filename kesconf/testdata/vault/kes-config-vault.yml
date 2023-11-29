@@ -1,0 +1,40 @@
+address: 0.0.0.0:7373 # Listen on all network interfaces on port 7373
+
+admin:
+  identity: disabled  # We disable the admin identity since we don't need it in this guide 
+
+tls:
+  key: private.key    # The KES server TLS private key
+  cert: public.crt    # The KES server TLS certificate
+
+policy:
+  my-app:
+    allow:
+    - /v1/key/list/*
+    - /v1/key/generate/*
+    - /v1/key/encrypt/*
+    - /v1/key/decrypt/*
+    - /v1/key/create/*
+    - /v1/identity/describe/*
+    - /v1/identity/list/*
+    - /v1/policy/list/*
+    - /v1/metrics
+    identities:
+    - "" # Use the identity of your client.crt
+
+keystore:
+   vault:
+     endpoint: https://127.0.0.1:8200
+     version:  "v1" # The K/V engine version - either "v1" or "v2".
+     transit:
+       engine: "transit"
+       key: "my-key"
+     approle:
+       id:     "" # Your AppRole ID
+       secret: "" # Your AppRole Secret
+       retry:  15s
+     status:
+       ping: 10s
+     tls:
+       ca: vault.crt # Manually trust the vault certificate since we use self-signed certificates
+

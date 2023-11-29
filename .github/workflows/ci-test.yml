@@ -1,0 +1,29 @@
+name: CI tests
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  valut-ci-test:
+    name: Test Vault
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.21.4
+        check-latest: true
+      id: go
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Deploy Vault
+      run: |
+        ${GITHUB_WORKSPACE}/kesconf/testdata/vault/deploy_vault.sh
+    - name: Test
+      env:
+        GO111MODULE: on
+        GOPROXY: "https://proxy.golang.org,direct"
+      run: |
+         go test ./kesconf -v -vault-ci.config=${GITHUB_WORKSPACE}/kesconf/testdata/vault/kes-config-vault.yml -run="TestVaultCI"

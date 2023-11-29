@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var vaultConfigFile = flag.String("vault.config", "", "Path to a KES config file with Hashicorp Vault config")
@@ -18,13 +16,13 @@ func TestVault(t *testing.T) {
 		t.Skip("Vault tests disabled. Use -vault.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*vaultConfigFile)
+	config, err := ReadFile(*vaultConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*kesconf.VaultKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.VaultKeyStore{})
+	if _, ok := config.KeyStore.(*VaultKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &VaultKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)

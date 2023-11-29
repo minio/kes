@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-var fortanixConfigFile = flag.String("fortanix.config", "", "Path to a KES config file with Fortanix SDKMS config")
+var vaultCfgFile = flag.String("vault-ci.config", "", "Path to a KES config file with Hashicorp Vault config")
 
-func TestFortanix(t *testing.T) {
-	if *fortanixConfigFile == "" {
-		t.Skip("Fortanix tests disabled. Use -fortanix.config=<FILE> to enable them")
+func TestVaultCI(t *testing.T) {
+	if *vaultCfgFile == "" {
+		t.Skip("Vault tests disabled. Use -vault-ci.config=<FILE> to enable them")
 	}
 
-	config, err := ReadFile(*fortanixConfigFile)
+	config, err := ReadFile(*vaultCfgFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*FortanixKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &FortanixKeyStore{})
+	if _, ok := config.KeyStore.(*VaultKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &VaultKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)
