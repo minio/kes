@@ -92,6 +92,12 @@ function setup_vault() {
 	secret_id=$(echo "$secretid_output" | grep "secret_id " | awk -F" " '{print $2}')
 	rlid="${role_id}" yq e -i '.keystore.vault.approle.id = strenv(rlid) | ..style="double"' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	sid="${secret_id}" yq e -i '.keystore.vault.approle.secret = strenv(sid) | ..style="double"' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
+	kes_private_key="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/private.key
+	kes_public_cert="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/public.crt
+	vault_public_cert="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/vault.crt
+	kes_key="${kes_private_key}" yq e -i '.tls.key = strenv(kes_key)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
+	kes_cert="${kes_public_cert}" yq e -i '.tls.cert = strenv(kes_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
+	vault_cert="${vault_public_cert}" yq e -i '.keystore.vault.tls.ca = strenv(vault_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 }
 
 main "$@"
