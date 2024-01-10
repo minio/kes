@@ -55,26 +55,37 @@ function install_kes() {
 
 function setup_vault() {
 	# Create vault certs
+	echo "==================================================================================="
 	echo "Run: kes identity new --key vault.key --cert vault.crt --ip \"127.0.0.1\" localhost"
-	echi ""
+	echo ""
 	kes identity new --key vault.key --cert vault.crt --ip "127.0.0.1" localhost
+	realpath vault.key
+	realpath vault.crt
 	mkdir -p /tmp/vault/file || sudo mkdir -p /tmp/vault/file
 	echo ""
 
 	# Start vault server
+	echo "========================="
 	echo "Starting vault server...."
 	echo "Run: vault server -config \"${GITHUB_WORKSPACE}\"/kesconf/testdata/vault/vault-config.json &"
 	vault server -config "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/vault-config.json &
+	ps -ef | grep vault
 	echo ""
 
 	# Generate certs for KES
+	echo "======================================================================================"
 	echo "Run: kes identity new --ip \"127.0.0.1\" localhost --cert public.crt --key private.key"
 	kes identity new --ip "127.0.0.1" localhost --cert public.crt --key private.key
+	realpath public.crt
+	realpath private.key
 	echo ""
 
 	# Generate certs for client application (to be used by test)
+	echo "=============================================================="
 	echo "Run: kes identity new --key=client.key --cert=client.crt MyApp"
 	kes identity new --key=client.key --cert=client.crt MyApp
+	realpath client.key
+	realpath client.crt
 	echo ""
 
 	client_id=$(kes identity of client.crt | awk '{print $1}')
@@ -104,13 +115,14 @@ function setup_vault() {
 	secret_id=$(echo "$secretid_output" | grep "secret_id " | awk -F" " '{print $2}')
 	rlid="${role_id}" yq e -i '.keystore.vault.approle.id = strenv(rlid) | ..style="double"' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	sid="${secret_id}" yq e -i '.keystore.vault.approle.secret = strenv(sid) | ..style="double"' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
-	kes_private_key="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/private.key
-	kes_public_cert="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/public.crt
-	vault_public_cert="${GITHUB_WORKSPACE}"/kesconf/testdata/vault/vault.crt
+	kes_private_key="${GITHUB_WORKSPACE}"/private.key
+	kes_public_cert="${GITHUB_WORKSPACE}"/public.crt
+	vault_public_cert="${GITHUB_WORKSPACE}"/vault.crt
 	kes_key="${kes_private_key}" yq e -i '.tls.key = strenv(kes_key)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	kes_cert="${kes_public_cert}" yq e -i '.tls.cert = strenv(kes_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	vault_cert="${vault_public_cert}" yq e -i '.keystore.vault.tls.ca = strenv(vault_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 
+	echo "=============================================================================="
 	echo "Content of \"${GITHUB_WORKSPACE}\"/kesconf/testdata/vault/kes-config-vault.yml"
 	cat "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	echo ""
