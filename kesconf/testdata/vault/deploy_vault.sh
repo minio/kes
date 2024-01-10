@@ -26,7 +26,7 @@ function init_setup() {
 	sudo chmod a+x /usr/local/bin/yq
         wget https://releases.hashicorp.com/vault/1.15.2/vault_1.15.2_linux_amd64.zip
 
-	rm -rf /vault/file || sudo rm -rf /vault/file
+	rm -rf /tmp/vault/file || sudo rm -rf /tmp/vault/file
 	pkill -9 vault || sudo pkill -9 vault
 	rm -f client.crt client.key private.key public.crt vault.crt vault.key
 }
@@ -55,17 +55,27 @@ function install_kes() {
 
 function setup_vault() {
 	# Create vault certs
+	echo "Run: kes identity new --key vault.key --cert vault.crt --ip \"127.0.0.1\" localhost"
+	echi ""
 	kes identity new --key vault.key --cert vault.crt --ip "127.0.0.1" localhost
-	mkdir -p /vault/file
+	mkdir -p /tmp/vault/file || sudo mkdir -p /tmp/vault/file
+	echo ""
 
-	# Start vaule server
+	# Start vault server
+	echo "Starting vault server...."
+	echo "Run: vault server -config \"${GITHUB_WORKSPACE}\"/kesconf/testdata/vault/vault-config.json &"
 	vault server -config "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/vault-config.json &
+	echo ""
 
 	# Generate certs for KES
+	echo "Run: kes identity new --ip \"127.0.0.1\" localhost --cert public.crt --key private.key"
 	kes identity new --ip "127.0.0.1" localhost --cert public.crt --key private.key
+	echo ""
 
 	# Generate certs for client application (to be used by test)
+	echo "Run: kes identity new --key=client.key --cert=client.crt MyApp"
 	kes identity new --key=client.key --cert=client.crt MyApp
+	echo ""
 
 	client_id=$(kes identity of client.crt | awk '{print $1}')
 	id="${client_id}" yq e -i '.policy.my-app.identities += [strenv(id)] | ..style="double"' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
@@ -100,6 +110,10 @@ function setup_vault() {
 	kes_key="${kes_private_key}" yq e -i '.tls.key = strenv(kes_key)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	kes_cert="${kes_public_cert}" yq e -i '.tls.cert = strenv(kes_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
 	vault_cert="${vault_public_cert}" yq e -i '.keystore.vault.tls.ca = strenv(vault_cert)' "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
+
+	echo "Content of \"${GITHUB_WORKSPACE}\"/kesconf/testdata/vault/kes-config-vault.yml"
+	cat "${GITHUB_WORKSPACE}"/kesconf/testdata/vault/kes-config-vault.yml
+	echo ""
 }
 
 main "$@"
