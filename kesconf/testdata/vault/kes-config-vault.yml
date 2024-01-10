@@ -4,8 +4,8 @@ admin:
   identity: disabled  # We disable the admin identity since we don't need it in this guide 
 
 tls:
-  key: private.key    # The KES server TLS private key
-  cert: public.crt    # The KES server TLS certificate
+  key: "_"    # The KES server TLS private key
+  cert: "_"   # The KES server TLS certificate
 
 policy:
   my-app:
@@ -20,7 +20,7 @@ policy:
     - /v1/policy/list/*
     - /v1/metrics
     identities:
-    - "" # Use the identity of your client.crt
+    - "51da9df6a350ea93c68d022a90421487d13897d1d808c88f2d03ad795cbdc609" # Use the identity of your client.crt
 
 keystore:
    vault:
@@ -30,8 +30,8 @@ keystore:
        engine: "transit"
        key: "my-key"
      approle:
-       id:     "" # Your AppRole ID
-       secret: "" # Your AppRole Secret
+       id:  ${VAULT_APPROLE_ID} # Your AppRole ID
+       secret: ${VAULT_APPROLE_SECRET} # Your AppRole Secret
        retry:  15s
      status:
        ping: 10s

@@ -26,4 +26,4 @@ jobs:
         GO111MODULE: on
         GOPROXY: "https://proxy.golang.org,direct"
       run: |
-         go test ./kesconf -v -vault-ci.config=${GITHUB_WORKSPACE}/kesconf/testdata/vault/kes-config-vault.yml -run="TestVaultCI"
+         source ${GITHUB_WORKSPACE}/env.sh && go test ./kesconf -v -vault-ci.config=${GITHUB_WORKSPACE}/kesconf/testdata/vault/kes-config-vault.yml -run="TestVaultCI"
