@@ -6,6 +6,8 @@ package kesconf
 
 import (
 	"flag"
+	"fmt"
+	"os"
 	"testing"
 )
 
@@ -21,6 +23,9 @@ func TestVaultCI(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fmt.Println("VAULT_APPROLE_ID=", os.Getenv("VAULT_APPROLE_ID"))
+	fmt.Println("VAULT_APPROLE_SECRET=", os.Getenv("VAULT_APPROLE_SECRET"))
+	fmt.Println("Keystore AppRole: ", config.KeyStore.(*VaultKeyStore).AppRole)
 	if _, ok := config.KeyStore.(*VaultKeyStore); !ok {
 		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &VaultKeyStore{})
 	}

@@ -111,6 +111,8 @@ function setup_vault() {
 export KES_API_KEY=kes:v1:AP6gQlUXjWj5iY1WkqeXKIR0OXTpyoiHa81XTY7ISy3l
 export VAULT_APPROLE_ID=${role_id}
 export VAULT_APPROLE_SECRET=${secret_id}
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
 EOF
 	cat env.sh
 }
