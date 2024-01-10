@@ -54,11 +54,6 @@ type AppRole struct {
 
 	// Secret is the AppRole authentication secret.
 	Secret string
-
-	// Retry is the duration after which another
-	// authentication attempt is performed once
-	// an authentication attempt failed.
-	Retry time.Duration
 }
 
 // Clone returns a copy of the AppRole auth.
@@ -70,7 +65,6 @@ func (a *AppRole) Clone() *AppRole {
 		Engine: a.Engine,
 		ID:     a.ID,
 		Secret: a.Secret,
-		Retry:  a.Retry,
 	}
 }
 
@@ -92,11 +86,6 @@ type Kubernetes struct {
 
 	// JWT is the issued authentication token.
 	JWT string
-
-	// Retry is the duration after which another
-	// authentication attempt is performed once
-	// an authentication attempt failed.
-	Retry time.Duration
 }
 
 // Clone returns a copy of the Kubernetes auth.
@@ -108,7 +97,6 @@ func (k *Kubernetes) Clone() *Kubernetes {
 		Engine: k.Engine,
 		Role:   k.Role,
 		JWT:    k.JWT,
-		Retry:  k.Retry,
 	}
 }
 
