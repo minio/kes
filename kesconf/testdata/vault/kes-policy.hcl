@@ -7,3 +7,6 @@ path "transit/decrypt/my-key" {
 path "kv/*" {
    capabilities = [ "create", "read", "delete", "list" ]
 }
+path "secret/data/*" {
+  capabilities = ["list"]
+}
