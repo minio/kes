@@ -20,12 +20,14 @@ function init_setup() {
 	echo ""
 	echo "Initialize setup....."
 	echo ""
-	apt update -y && apt upgrade -y && apt install wget unzip
+	apt update -y || sudo apt update -y
+	apt upgrade -y || sudo apt upgrade -y
+	apt install wget unzip || sudo apt install wget unzip
 	sudo chmod a+x /usr/local/bin/yq
         wget https://releases.hashicorp.com/vault/1.15.2/vault_1.15.2_linux_amd64.zip
 
-	rm -rf /vault/file
-	pkill -9 vault
+	rm -rf /vault/file || sudo rm -rf /vault/file
+	pkill -9 vault || sudo pkill -9 vault
 	rm -f client.crt client.key private.key public.crt vault.crt vault.key
 }
 
