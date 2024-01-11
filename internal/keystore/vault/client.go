@@ -71,7 +71,15 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 // To renew the auth. token see: client.RenewToken(...).
 func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 	return func() (*vaultapi.Secret, error) {
-		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
+		client := c.Client
+		switch {
+		case login.Namespace == "/": // Treat '/' as the root namespace
+			client = client.WithNamespace("") // Clear namespace
+		case login.Namespace != "":
+			client = client.WithNamespace(login.Namespace)
+		}
+
+		secret, err := client.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role_id":   login.ID,
 			"secret_id": login.Secret,
 		})
@@ -88,7 +96,15 @@ func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 
 func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 	return func() (*vaultapi.Secret, error) {
-		secret, err := c.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
+		client := c.Client
+		switch {
+		case login.Namespace == "/": // Treat '/' as the root namespace
+			client = client.WithNamespace("") // Clear namespace
+		case login.Namespace != "":
+			client = client.WithNamespace(login.Namespace)
+		}
+
+		secret, err := client.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role": login.Role,
 			"jwt":  login.JWT,
 		})
