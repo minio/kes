@@ -99,15 +99,17 @@ type ymlFile struct {
 			}
 
 			AppRole *struct {
-				Engine env[string] `yaml:"engine"`
-				ID     env[string] `yaml:"id"`
-				Secret env[string] `yaml:"secret"`
+				Engine    env[string] `yaml:"engine"`
+				Namespace env[string] `yaml:"namespace"`
+				ID        env[string] `yaml:"id"`
+				Secret    env[string] `yaml:"secret"`
 			} `yaml:"approle"`
 
 			Kubernetes *struct {
-				Engine env[string] `yaml:"engine"`
-				Role   env[string] `yaml:"role"`
-				JWT    env[string] `yaml:"jwt"` // Can be either a JWT or a path to a file containing a JWT
+				Engine    env[string] `yaml:"engine"`
+				Namespace env[string] `yaml:"namespace"`
+				Role      env[string] `yaml:"role"`
+				JWT       env[string] `yaml:"jwt"` // Can be either a JWT or a path to a file containing a JWT
 			} `yaml:"kubernetes"`
 
 			TLS struct {
@@ -463,16 +465,18 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 		}
 		if y.KeyStore.Vault.AppRole != nil {
 			s.AppRole = &VaultAppRoleAuth{
-				Engine: y.KeyStore.Vault.AppRole.Engine.Value,
-				ID:     y.KeyStore.Vault.AppRole.ID.Value,
-				Secret: y.KeyStore.Vault.AppRole.Secret.Value,
+				Engine:    y.KeyStore.Vault.AppRole.Engine.Value,
+				Namespace: y.KeyStore.Vault.AppRole.Namespace.Value,
+				ID:        y.KeyStore.Vault.AppRole.ID.Value,
+				Secret:    y.KeyStore.Vault.AppRole.Secret.Value,
 			}
 		}
 		if y.KeyStore.Vault.Kubernetes != nil {
 			s.Kubernetes = &VaultKubernetesAuth{
-				Engine: y.KeyStore.Vault.Kubernetes.Engine.Value,
-				JWT:    y.KeyStore.Vault.Kubernetes.JWT.Value,
-				Role:   y.KeyStore.Vault.Kubernetes.Role.Value,
+				Engine:    y.KeyStore.Vault.Kubernetes.Engine.Value,
+				Namespace: y.KeyStore.Vault.Kubernetes.Namespace.Value,
+				JWT:       y.KeyStore.Vault.Kubernetes.JWT.Value,
+				Role:      y.KeyStore.Vault.Kubernetes.Role.Value,
 			}
 		}
 		if y.KeyStore.Vault.Transit != nil {

@@ -461,6 +461,19 @@ type VaultAppRoleAuth struct {
 	// If empty, defaults to "approle".
 	Engine string
 
+	// Namespace is the Vault namespace in which the AppRole
+	// authentication is performed. It can be used to authenticate
+	// in a different namespace compared to the secret engine
+	// namespace. For example, authenticate within the root
+	// namespace but use a team-specific namespace for the secret
+	// engine.
+	//
+	// If empty, the VaultKeyStore namespace is used, if set.
+	// A single "/" is treated as alias for the Vault root
+	// namespace such that no namespace header is sent as part
+	// of the request.
+	Namespace string
+
 	// AppRoleID is the AppRole access ID for authenticating
 	// to Hashicorp Vault via the AppRole method.
 	ID string
@@ -476,6 +489,19 @@ type VaultKubernetesAuth struct {
 	// Engine is the Kubernetes authentication engine path.
 	// If empty, defaults to "kubernetes".
 	Engine string
+
+	// Namespace is the Vault namespace in which the Kubernetes
+	// authentication is performed. It can be used to authenticate
+	// in a different namespace compared to the secret engine
+	// namespace. For example, authenticate within the root
+	// namespace but use a team-specific namespace for the secret
+	// engine.
+	//
+	// If empty, the VaultKeyStore namespace is used, if set.
+	// A single "/" is treated as alias for the Vault root
+	// namespace such that no namespace header is sent as part
+	// of the request.
+	Namespace string
 
 	// KubernetesRole is the login role for authenticating via the
 	// kubernetes authentication method.
@@ -519,16 +545,18 @@ func (s *VaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	}
 	if s.AppRole != nil {
 		c.AppRole = &vault.AppRole{
-			Engine: s.AppRole.Engine,
-			ID:     s.AppRole.ID,
-			Secret: s.AppRole.Secret,
+			Engine:    s.AppRole.Engine,
+			Namespace: s.AppRole.Namespace,
+			ID:        s.AppRole.ID,
+			Secret:    s.AppRole.Secret,
 		}
 	}
 	if s.Kubernetes != nil {
 		c.K8S = &vault.Kubernetes{
-			Engine: s.Kubernetes.Engine,
-			Role:   s.Kubernetes.Role,
-			JWT:    s.Kubernetes.JWT,
+			Engine:    s.Kubernetes.Engine,
+			Namespace: s.Kubernetes.Namespace,
+			Role:      s.Kubernetes.Role,
+			JWT:       s.Kubernetes.JWT,
 		}
 	}
 	if s.Transit != nil {
