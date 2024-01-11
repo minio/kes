@@ -49,9 +49,6 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		c.APIVersion = APIv1
 	}
 	if c.AppRole != nil {
-		if c.AppRole.Retry == 0 {
-			c.AppRole.Retry = 5 * time.Second
-		}
 		if c.AppRole.Engine == "" {
 			c.AppRole.Engine = EngineAppRole
 		}
@@ -59,9 +56,6 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	if c.K8S != nil {
 		if c.K8S.Engine == "" {
 			c.K8S.Engine = EngineKubernetes
-		}
-		if c.K8S.Retry == 0 {
-			c.K8S.Retry = 5 * time.Second
 		}
 	}
 	if c.Transit != nil {
@@ -127,18 +121,19 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		client.SetNamespace(c.Namespace)
 	}
 
-	var (
-		authenticate authFunc
-		retry        time.Duration
-	)
+	var authenticate authFunc
 	switch {
 	case c.AppRole != nil && (c.AppRole.ID != "" || c.AppRole.Secret != ""):
-		authenticate, retry = client.AuthenticateWithAppRole(c.AppRole), c.AppRole.Retry
+		authenticate = client.AuthenticateWithAppRole(c.AppRole)
 	case c.K8S != nil && (c.K8S.Role != "" || c.K8S.JWT != ""):
-		authenticate, retry = client.AuthenticateWithK8S(c.K8S), c.K8S.Retry
+		authenticate = client.AuthenticateWithK8S(c.K8S)
 	}
 
-	token, ttl, err := authenticate()
+	auth, err := authenticate()
+	if err != nil {
+		return nil, err
+	}
+	token, err := auth.TokenID()
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +141,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	go client.CheckStatus(ctx, c.StatusPingAfter)
-	go client.RenewToken(ctx, authenticate, ttl, retry)
+	go client.RenewToken(ctx, authenticate, auth)
 	return &Store{
 		config: c,
 		client: client,

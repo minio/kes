@@ -29,7 +29,6 @@ var cloneConfigTests = []*Config{
 			Engine: "auth",
 			ID:     "be7f3c83-9733-4d65-adaa-7eeb6e14e922",
 			Secret: "ba8d68af-23c4-4199-a516-e37cebdaab48",
-			Retry:  30 * time.Second,
 		},
 		K8S: &Kubernetes{
 			Engine: "auth",
