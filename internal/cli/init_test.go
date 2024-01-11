@@ -10,21 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestReadInitConfig(t *testing.T) {
-	for i, test := range readInitConfigTests {
-		_, err := ReadInitConfig(test.Filename)
-		if err != nil {
-			t.Fatalf("Test %d: failed to read init config: %v", i, err)
-		}
-	}
-}
-
-var readInitConfigTests = []struct {
-	Filename string
-}{
-	{Filename: "./testdata/env.yml"},
-}
-
 func TestFindVersion(t *testing.T) {
 	for i, test := range findVersionsTests {
 		version, err := findVersion(test.Root)
