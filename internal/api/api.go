@@ -35,6 +35,7 @@ const (
 	PathKeyGenerate = "/v1/key/generate/"
 	PathKeyEncrypt  = "/v1/key/encrypt/"
 	PathKeyDecrypt  = "/v1/key/decrypt/"
+	PathKeyHMAC     = "/v1/key/hmac/"
 
 	PathPolicyDescribe = "/v1/policy/describe/"
 	PathPolicyRead     = "/v1/policy/read/"

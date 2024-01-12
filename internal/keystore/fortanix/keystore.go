@@ -26,7 +26,6 @@ import (
 	"github.com/minio/kes"
 	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
-	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/keystore"
 )
 
@@ -312,7 +311,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		KeyID string `json:"kid"`
 	}
 	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, mem.MB)).Decode(&response); err != nil {
 		return fmt.Errorf("fortanix: failed to delete '%s': failed to parse key metadata: %v", name, err)
 	}
 
@@ -387,7 +386,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		Enabled bool   `json:"enabled"`
 	}
 	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, key.MaxSize)).Decode(&response); err != nil {
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, mem.MB)).Decode(&response); err != nil {
 		return nil, fmt.Errorf("fortanix: failed to fetch '%s': failed to parse server response %v", name, err)
 	}
 	if !response.Enabled {
@@ -440,7 +439,7 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 			Name string `json:"name"`
 		}
 		var keys []Response
-		if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*key.MaxSize)).Decode(&keys); err != nil {
+		if err := json.NewDecoder(mem.LimitReader(resp.Body, 10*mem.MB)).Decode(&keys); err != nil {
 			return nil, "", fmt.Errorf("fortanix: failed to list keys: failed to parse server response: %v", err)
 		}
 		if len(keys) == 0 {

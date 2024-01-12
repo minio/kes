@@ -1,43 +1,50 @@
-// Copyright 2022 - MinIO, Inc. All rights reserved.
+// Copyright 2024 - MinIO, Inc. All rights reserved.
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package key
+package crypto
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/minio/kes-go"
 	"github.com/tinylib/msgp/msgp"
 )
 
-// decodeCiphertext parses the given bytes as
-// ciphertext. If it fails to unmarshal the
-// given bytes, decodeCiphertext returns
-// ErrDecrypt.
-func decodeCiphertext(bytes []byte) (ciphertext, error) {
-	if len(bytes) == 0 {
-		return ciphertext{}, kes.ErrDecrypt
+// parseCiphertext parses and converts a ciphertext into
+// the format expected by a SecretKey.
+//
+// Previous implementations of a SecretKey produced a structured
+// ciphertext. parseCiphertext converts all previously generated
+// formats into the one that SecretKey.Decrypt expects.
+func parseCiphertext(b []byte) []byte {
+	if len(b) == 0 {
+		return b
 	}
 
 	var c ciphertext
-	switch bytes[0] {
+	switch b[0] {
 	case 0x95: // msgp first byte
-		if err := c.UnmarshalBinary(bytes); err != nil {
-			return ciphertext{}, kes.ErrDecrypt
+		if err := c.UnmarshalBinary(b); err != nil {
+			return b
 		}
+
+		b = b[:0]
+		b = append(b, c.Bytes...)
+		b = append(b, c.IV...)
+		b = append(b, c.Nonce...)
 	case 0x7b: // JSON first byte
-		if err := c.UnmarshalJSON(bytes); err != nil {
-			return ciphertext{}, kes.ErrDecrypt
+		if err := c.UnmarshalJSON(b); err != nil {
+			return b
 		}
-	default:
-		if err := c.UnmarshalBinary(bytes); err != nil {
-			if err = c.UnmarshalJSON(bytes); err != nil {
-				return ciphertext{}, kes.ErrDecrypt
-			}
-		}
+
+		b = b[:0]
+		b = append(b, c.Bytes...)
+		b = append(b, c.IV...)
+		b = append(b, c.Nonce...)
 	}
-	return c, nil
+	return b
 }
 
 // ciphertext is a structure that contains the encrypted
@@ -49,22 +56,6 @@ type ciphertext struct {
 	IV        []byte
 	Nonce     []byte
 	Bytes     []byte
-}
-
-// MarshalBinary returns the ciphertext's binary representation.
-func (c *ciphertext) MarshalBinary() ([]byte, error) {
-	// We encode a ciphertext simply as message-pack
-	// flat array.
-	const Items = 5
-
-	var b []byte
-	b = msgp.AppendArrayHeader(b, Items)
-	b = msgp.AppendString(b, c.Algorithm.String())
-	b = msgp.AppendString(b, c.ID)
-	b = msgp.AppendBytes(b, c.IV)
-	b = msgp.AppendBytes(b, c.Nonce)
-	b = msgp.AppendBytes(b, c.Bytes)
-	return b, nil
 }
 
 // UnmarshalBinary parses b as binary-encoded ciphertext.
@@ -117,7 +108,7 @@ func (c *ciphertext) UnmarshalBinary(b []byte) error {
 	c.ID = id
 	c.IV = iv[:]
 	c.Nonce = nonce[:]
-	c.Bytes = clone(bytes...)
+	c.Bytes = slices.Clone(bytes)
 	return nil
 }
 

@@ -147,6 +147,14 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			Auth:    (*verifyIdentity)(&s.state),
 			Handler: api.HandlerFunc(s.decryptKey),
 		},
+		api.PathKeyHMAC: {
+			Method:  http.MethodPut,
+			Path:    api.PathKeyHMAC,
+			MaxBody: 1 * mem.MB,
+			Timeout: 15 * time.Second,
+			Auth:    (*verifyIdentity)(&s.state),
+			Handler: api.HandlerFunc(s.hmacKey),
+		},
 
 		api.PathPolicyDescribe: {
 			Method:  http.MethodGet,

@@ -1,0 +1,33 @@
+// Copyright 2024 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
+// Generate the Go protobuf code by running the protobuf compiler
+// from the repository root:
+//
+//   $ protoc -I=./internal/protobuf --go_out=. ./internal/protobuf/*.proto
+
+syntax = "proto3";
+
+package miniohq.kms;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "internal/protobuf";
+
+message SecretKey {
+   bytes Key = 1 [ json_name = "key" ];
+   uint32 Type = 2 [ json_name = "type" ];
+}
+
+message HMACKey {
+   bytes Key = 1 [ json_name = "key" ];
+   uint32 Hash = 2 [ json_name = "hash" ];
+}
+
+message KeyVersion {
+   SecretKey Key = 1 [ json_name = "key" ];
+   HMACKey HMACKey = 2 [ json_name = "hmac_key" ];
+   google.protobuf.Timestamp CreatedAt = 3 [ json_name = "created_at" ];
+   string CreatedBy = 4 [ json_name = "created_by" ];
+}
