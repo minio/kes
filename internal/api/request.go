@@ -26,3 +26,8 @@ type DecryptKeyRequest struct {
 	Ciphertext []byte `json:"ciphertext"`
 	Context    []byte `json:"context"` // optional
 }
+
+// HMACRequest is the request sent by clients when calling the HMAC API.
+type HMACRequest struct {
+	Message []byte `json:"message"`
+}

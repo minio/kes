@@ -25,10 +25,10 @@ import (
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/cpu"
+	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/headers"
 	"github.com/minio/kes/internal/https"
-	"github.com/minio/kes/internal/key"
 	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
@@ -552,21 +552,32 @@ func (s *Server) createKey(resp *api.Response, req *api.Request) {
 		return
 	}
 
-	var algorithm kes.KeyAlgorithm
+	var cipher crypto.SecretKeyType
 	if fips.Enabled || cpu.HasAESGCM() {
-		algorithm = kes.AES256
+		cipher = crypto.AES256
 	} else {
-		algorithm = kes.ChaCha20
+		cipher = crypto.ChaCha20
 	}
 
-	key, err := key.Random(algorithm, req.Identity)
+	key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
+	if err != nil {
+		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
+		resp.Fail(http.StatusInternalServerError, "failed to generate encryption key")
+		return
+	}
+	hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
 	if err != nil {
 		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusInternalServerError, "failed to generate encryption key")
 		return
 	}
 
-	if err = s.state.Load().Keys.Create(req.Context(), req.Resource, key); err != nil {
+	if err = s.state.Load().Keys.Create(req.Context(), req.Resource, crypto.KeyVersion{
+		Key:       key,
+		HMACKey:   hmac,
+		CreatedAt: time.Now().UTC(),
+		CreatedBy: req.Identity,
+	}); err != nil {
 		if err, ok := api.IsError(err); ok {
 			resp.Failr(err)
 			return
@@ -604,33 +615,44 @@ func (s *Server) importKey(resp *api.Response, req *api.Request) {
 		return
 	}
 
-	var algorithm kes.KeyAlgorithm
+	var cipher crypto.SecretKeyType
 	switch imp.Cipher {
 	case "AES256", "AES256-GCM_SHA256":
-		algorithm = kes.AES256
+		cipher = crypto.AES256
 	case "ChaCha20", "XCHACHA20-POLY1305":
 		if fips.Enabled {
 			resp.Failf(http.StatusNotAcceptable, "algorithm '%s' not supported by FIPS 140-2", imp.Cipher)
 			return
 		}
-		algorithm = kes.ChaCha20
+		cipher = crypto.ChaCha20
 	default:
 		resp.Failf(http.StatusNotAcceptable, "algorithm '%s' is not supported", imp.Cipher)
 		return
 	}
 
-	if len(imp.Bytes) != key.Len(algorithm) {
+	if len(imp.Bytes) != crypto.SecretKeySize {
 		resp.Failf(http.StatusNotAcceptable, "invalid key size for '%s'", imp.Cipher)
 		return
 	}
 
-	key, err := key.New(algorithm, imp.Bytes, req.Identity)
+	key, err := crypto.NewSecretKey(cipher, imp.Bytes)
 	if err != nil {
 		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusInternalServerError, "failed to create key")
 		return
 	}
-	if err = s.state.Load().Keys.Create(req.Context(), req.Resource, key); err != nil {
+	hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
+	if err != nil {
+		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
+		resp.Fail(http.StatusInternalServerError, "failed to create key")
+		return
+	}
+	if err = s.state.Load().Keys.Create(req.Context(), req.Resource, crypto.KeyVersion{
+		Key:       key,
+		HMACKey:   hmac,
+		CreatedAt: time.Now().UTC(),
+		CreatedBy: req.Identity,
+	}); err != nil {
 		if err, ok := api.IsError(err); ok {
 			resp.Failr(err)
 			return
@@ -670,9 +692,9 @@ func (s *Server) describeKey(resp *api.Response, req *api.Request) {
 
 	api.ReplyWith(resp, http.StatusOK, api.DescribeKeyResponse{
 		Name:      req.Resource,
-		Algorithm: key.Algorithm().String(),
-		CreatedAt: key.CreatedAt(),
-		CreatedBy: key.CreatedBy().String(),
+		Algorithm: key.Key.Type().String(),
+		CreatedAt: key.CreatedAt,
+		CreatedBy: key.CreatedBy.String(),
 	})
 }
 
@@ -759,7 +781,7 @@ func (s *Server) encryptKey(resp *api.Response, req *api.Request) {
 		resp.Fail(http.StatusBadGateway, "failed to read key")
 		return
 	}
-	ciphertext, err := key.Wrap(enc.Plaintext, enc.Context)
+	ciphertext, err := key.Key.Encrypt(enc.Plaintext, enc.Context)
 	if err != nil {
 		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusInternalServerError, "failed to encrypt plaintext")
@@ -809,7 +831,7 @@ func (s *Server) generateKey(resp *api.Response, req *api.Request) {
 		resp.Fail(http.StatusInternalServerError, "failed to generate encryption key")
 		return
 	}
-	ciphertext, err := key.Wrap(dataKey, gen.Context)
+	ciphertext, err := key.Key.Encrypt(dataKey, gen.Context)
 	if err != nil {
 		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
 		resp.Fail(http.StatusInternalServerError, "failed to generate encryption key")
@@ -851,7 +873,7 @@ func (s *Server) decryptKey(resp *api.Response, req *api.Request) {
 		resp.Fail(http.StatusBadGateway, "failed to read key")
 		return
 	}
-	plaintext, err := key.Unwrap(enc.Ciphertext, enc.Context)
+	plaintext, err := key.Key.Decrypt(enc.Ciphertext, enc.Context)
 	if err != nil {
 		if err, ok := api.IsError(err); ok {
 			resp.Failr(err)
@@ -865,6 +887,45 @@ func (s *Server) decryptKey(resp *api.Response, req *api.Request) {
 
 	api.ReplyWith(resp, http.StatusOK, api.DecryptKeyResponse{
 		Plaintext: plaintext,
+	})
+}
+
+func (s *Server) hmacKey(resp *api.Response, req *api.Request) {
+	if !validName(req.Resource) {
+		resp.Failf(http.StatusBadRequest, "key name '%s' is empty, too long or contains invalid characters", req.Resource)
+		return
+	}
+
+	var body api.HMACRequest
+	if err := api.ReadBody(req, &body); err != nil {
+		if err, ok := api.IsError(err); ok {
+			resp.Failr(err)
+			return
+		}
+
+		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
+		resp.Fail(http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	key, err := s.state.Load().Keys.Get(req.Context(), req.Resource)
+	if err != nil {
+		if err, ok := api.IsError(err); ok {
+			resp.Failr(err)
+			return
+		}
+
+		s.state.Load().Log.ErrorContext(req.Context(), err.Error(), "req", req)
+		resp.Fail(http.StatusBadGateway, "failed to read key")
+		return
+	}
+	if !key.HasHMACKey() {
+		resp.Fail(http.StatusConflict, "key does not support HMAC")
+		return
+	}
+
+	api.ReplyWith(resp, http.StatusOK, api.DecryptKeyResponse{
+		Plaintext: key.HMACKey.Sum(body.Message),
 	})
 }
 

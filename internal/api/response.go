@@ -71,6 +71,11 @@ type DecryptKeyResponse struct {
 	Plaintext []byte `json:"plaintext"`
 }
 
+// HMACResponse is the response sent to clients by the HMAC API.
+type HMACResponse struct {
+	Sum []byte `json:"hmac"`
+}
+
 // ReadPolicyResponse is the response sent to clients by the ReadPolicy API.
 type ReadPolicyResponse struct {
 	Name      string              `json:"name"`

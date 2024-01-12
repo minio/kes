@@ -139,6 +139,7 @@ func testListAPIDefaults(t *testing.T) {
 		"/v1/key/generate/": {Method: http.MethodPut, MaxBody: 1 * mem.MB, Timeout: 15 * time.Second},
 		"/v1/key/encrypt/":  {Method: http.MethodPut, MaxBody: 1 * mem.MB, Timeout: 15 * time.Second},
 		"/v1/key/decrypt/":  {Method: http.MethodPut, MaxBody: 1 * mem.MB, Timeout: 15 * time.Second},
+		"/v1/key/hmac/":     {Method: http.MethodPut, MaxBody: 1 * mem.MB, Timeout: 15 * time.Second},
 
 		"/v1/policy/describe/": {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},
 		"/v1/policy/read/":     {Method: http.MethodGet, MaxBody: 0, Timeout: 15 * time.Second},

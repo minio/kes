@@ -15,7 +15,7 @@ import (
 
 	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cache"
-	"github.com/minio/kes/internal/key"
+	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/internal/keystore"
 )
 
@@ -236,7 +236,7 @@ type keyCache struct {
 
 // A cache entry with a recently used flag.
 type cacheEntry struct {
-	Key  key.Key
+	Key  crypto.KeyVersion
 	Used atomic.Bool
 }
 
@@ -253,8 +253,8 @@ func (c *keyCache) Status(ctx context.Context) (KeyStoreState, error) {
 
 // Create creates a new key with the given name if and only if
 // no such entry exists. Otherwise, kes.ErrKeyExists is returned.
-func (c *keyCache) Create(ctx context.Context, name string, key key.Key) error {
-	b, err := key.MarshalText()
+func (c *keyCache) Create(ctx context.Context, name string, key crypto.KeyVersion) error {
+	b, err := crypto.EncodeKeyVersion(key)
 	if err != nil {
 		return err
 	}
@@ -289,7 +289,7 @@ func (c *keyCache) Delete(ctx context.Context, name string) error {
 // Get tries to make as few calls to the underlying key store. Multiple
 // concurrent Get calls for the same key, that is not in the cache, are
 // serialized.
-func (c *keyCache) Get(ctx context.Context, name string) (key.Key, error) {
+func (c *keyCache) Get(ctx context.Context, name string) (crypto.KeyVersion, error) {
 	if entry, ok := c.cache.Get(name); ok {
 		entry.Used.Store(true)
 		return entry.Key, nil
@@ -312,14 +312,14 @@ func (c *keyCache) Get(ctx context.Context, name string) (key.Key, error) {
 	b, err := c.store.Get(ctx, name)
 	if err != nil {
 		if errors.Is(err, kes.ErrKeyNotFound) {
-			return key.Key{}, kes.ErrKeyNotFound
+			return crypto.KeyVersion{}, kes.ErrKeyNotFound
 		}
-		return key.Key{}, err
+		return crypto.KeyVersion{}, err
 	}
 
-	k, err := key.Parse(b)
+	k, err := crypto.ParseKeyVersion(b)
 	if err != nil {
-		return key.Key{}, err
+		return crypto.KeyVersion{}, err
 	}
 
 	entry := &cacheEntry{
@@ -327,7 +327,7 @@ func (c *keyCache) Get(ctx context.Context, name string) (key.Key, error) {
 	}
 	entry.Used.Store(true)
 	c.cache.Set(name, entry)
-	return k, nil
+	return entry.Key, nil
 }
 
 // List returns the first n key names, that start with the given prefix,
