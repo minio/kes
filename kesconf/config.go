@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 	"gopkg.in/yaml.v3"
 )
 

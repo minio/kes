@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/kesconf"
+	"github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )

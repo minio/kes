@@ -19,8 +19,8 @@ import (
 
 	"aead.dev/mem"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // NewStore returns a new Store that reads

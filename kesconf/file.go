@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
@@ -27,6 +26,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
 	"github.com/minio/kes/internal/keystore/vault"
+	kesdk "github.com/minio/kms-go/kes"
 	yaml "gopkg.in/yaml.v3"
 )
 

@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/headers"
+	"github.com/minio/kms-go/kes"
 )
 
 // API paths exposed by KES servers.

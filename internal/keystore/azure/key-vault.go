@@ -15,8 +15,8 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // Credentials are Azure client credentials to authenticate an application

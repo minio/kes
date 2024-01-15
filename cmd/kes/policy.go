@@ -16,8 +16,8 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 )
 
@@ -41,7 +41,6 @@ func policyCmd(args []string) {
 	subCmds := commands{
 		"info": infoPolicyCmd,
 		"ls":   lsPolicyCmd,
-		"rm":   rmPolicyCmd,
 		"show": showPolicyCmd,
 	}
 	if len(args) < 2 {
@@ -76,7 +75,6 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
-    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -93,12 +91,10 @@ func lsPolicyCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
-		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -118,7 +114,7 @@ func lsPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	enclave := newClient(insecureSkipVerify)
 	iter := &kes.ListIter[string]{
 		NextFunc: enclave.ListPolicies,
 	}
@@ -150,54 +146,6 @@ func lsPolicyCmd(args []string) {
 		buf.WriteByte('\n')
 	}
 	fmt.Print(buf)
-}
-
-const rmPolicyCmdUsage = `Usage:
-    kes policy rm [options] <name>...
-
-Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
-
-    -h, --help               Print command line options.
-
-Examples:
-    $ kes policy delete my-policy
-    $ kes policy delete my-policy1, my-policy2
-`
-
-func rmPolicyCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmPolicyCmdUsage) }
-
-	var (
-		insecureSkipVerify bool
-		enclaveName        string
-	)
-	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
-	if err := cmd.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(2)
-		}
-		cli.Fatalf("%v. See 'kes policy rm --help'", err)
-	}
-	if cmd.NArg() == 0 {
-		cli.Fatal("no policy name specified. See 'kes policy rm --help'")
-	}
-
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancelCtx()
-
-	client := newClient(insecureSkipVerify)
-	for _, name := range cmd.Args() {
-		if err := client.DeletePolicy(ctx, name); err != nil {
-			if errors.Is(err, context.Canceled) {
-				os.Exit(1)
-			}
-			cli.Fatalf("failed to delete policy %q: %v", name, err)
-		}
-	}
 }
 
 const infoPolicyCmdUsage = `Usage:

@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/api"
 	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/crypto"
@@ -32,6 +31,7 @@ import (
 	"github.com/minio/kes/internal/keystore"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
+	"github.com/minio/kms-go/kes"
 	"github.com/prometheus/common/expfmt"
 )
 
@@ -924,8 +924,8 @@ func (s *Server) hmacKey(resp *api.Response, req *api.Request) {
 		return
 	}
 
-	api.ReplyWith(resp, http.StatusOK, api.DecryptKeyResponse{
-		Plaintext: key.HMACKey.Sum(body.Message),
+	api.ReplyWith(resp, http.StatusOK, api.HMACResponse{
+		Sum: key.HMACKey.Sum(body.Message),
 	})
 }
 

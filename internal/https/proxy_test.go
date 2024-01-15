@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 )
 
 var tlsProxyAddTests = []struct {

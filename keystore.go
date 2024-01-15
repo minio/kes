@@ -13,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cache"
 	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/internal/keystore"
+	"github.com/minio/kms-go/kes"
 )
 
 // A KeyStore stores key-value pairs. It provides durable storage for a

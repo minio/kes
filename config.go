@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 )
 
 // Config is a structure that holds configuration for a KES server.

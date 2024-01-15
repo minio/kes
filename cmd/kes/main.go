@@ -17,10 +17,10 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/sys"
+	"github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -225,14 +225,6 @@ func newClient(insecureSkipVerify bool) *kes.Client {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: insecureSkipVerify,
 	})
-}
-
-func newEnclave(name string, insecureSkipVerify bool) *kes.Enclave {
-	client := newClient(insecureSkipVerify)
-	if name == "" {
-		name = os.Getenv("KES_ENCLAVE")
-	}
-	return client.Enclave(name)
 }
 
 func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
