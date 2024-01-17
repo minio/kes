@@ -22,9 +22,9 @@ import (
 
 	"aead.dev/mem"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // Config is a structure containing the Entrust KeyControl configuration.

@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 type SetupFunc func(context.Context, kes.KeyStore, string) error

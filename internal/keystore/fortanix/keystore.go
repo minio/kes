@@ -24,9 +24,9 @@ import (
 
 	"aead.dev/mem"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // APIKey is a Fortanix API key for authenticating to

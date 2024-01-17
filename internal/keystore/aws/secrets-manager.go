@@ -17,8 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // Credentials represents static AWS credentials:

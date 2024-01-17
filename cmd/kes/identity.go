@@ -24,9 +24,9 @@ import (
 	"time"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/https"
+	"github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
@@ -39,7 +39,6 @@ Commands:
     of                       Compute a KES identity from a certificate.
     info                     Get information about a KES identity.
     ls                       List KES identities.
-    rm                       Remove a KES identity.
 
 Options:
     -h, --help               Print command line options.
@@ -54,7 +53,6 @@ func identityCmd(args []string) {
 		"of":   ofIdentityCmd,
 		"info": infoIdentityCmd,
 		"ls":   lsIdentityCmd,
-		"rm":   rmIdentityCmd,
 	}
 
 	if len(args) < 2 {
@@ -480,7 +478,6 @@ Options:
                              is detected - colors are automatically disabled if
                              the output goes to a pipe.
                              Possible values: *auto*, never, always.
-    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -497,12 +494,10 @@ func lsIdentityCmd(args []string) {
 		jsonFlag           bool
 		colorFlag          colorOption
 		insecureSkipVerify bool
-		enclaveName        string
 	)
 	cmd.BoolVar(&jsonFlag, "json", false, "Print identities in JSON format")
 	cmd.Var(&colorFlag, "color", "Specify when to use colored output")
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -522,7 +517,7 @@ func lsIdentityCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	enclave := newClient(insecureSkipVerify)
 	iter := &kes.ListIter[kes.Identity]{
 		NextFunc: enclave.ListIdentities,
 	}
@@ -555,51 +550,4 @@ func lsIdentityCmd(args []string) {
 		buf.WriteByte('\n')
 	}
 	fmt.Print(buf)
-}
-
-const rmIdentityCmdUsage = `Usage:
-    kes identity rm <identity>...
-
-Options:
-    -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
-
-    -h, --help               Print command line options.
-
-Examples:
-    $ kes identity rm 736bf58626441e3e134a2daf2e6a8441b40e1abc0eac510878168c8aac9f2b0b
-`
-
-func rmIdentityCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, rmIdentityCmdUsage) }
-
-	var (
-		insecureSkipVerify bool
-		enclaveName        string
-	)
-	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
-	if err := cmd.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(2)
-		}
-		cli.Fatalf("%v. See 'kes identity rm --help'", err)
-	}
-	if cmd.NArg() == 0 {
-		cli.Fatal("no identity specified. See 'kes identity rm --help'")
-	}
-
-	client := newClient(insecureSkipVerify)
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
-
-	for _, identity := range cmd.Args() {
-		if err := client.DeleteIdentity(ctx, kes.Identity(identity)); err != nil {
-			if errors.Is(err, context.Canceled) {
-				os.Exit(1)
-			}
-			cli.Fatalf("failed to remove identity %q: %v", identity, err)
-		}
-	}
 }

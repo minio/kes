@@ -26,8 +26,8 @@ import (
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
-	kesdk "github.com/minio/kes-go"
 	"github.com/minio/kes/internal/keystore"
+	kesdk "github.com/minio/kms-go/kes"
 )
 
 // Store is a Hashicorp Vault secret store.

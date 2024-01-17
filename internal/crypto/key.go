@@ -20,9 +20,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/fips"
 	pb "github.com/minio/kes/internal/protobuf"
+	"github.com/minio/kms-go/kes"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 )

@@ -6,6 +6,7 @@ package kes
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"errors"
 	"net/http"
 	"runtime"
@@ -15,7 +16,7 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 )
 
 func TestImportKey(t *testing.T) {
@@ -54,6 +55,7 @@ func TestAPI(t *testing.T) {
 	t.Run("v1/key/import", testImportKey)
 	t.Run("v1/key/describe", testDescribeKey)
 	t.Run("v1/key/generate", testGenerateKey)
+	t.Run("v1/key/hmac", testHMAC)
 	t.Run("v1/key/encrypt", testEncryptDecryptKey) // also tests decryption
 	t.Run("v1/key/list", testListKeys)
 	t.Run("v1/identity/describe", testDescribeIdentity)
@@ -331,6 +333,53 @@ func testGenerateKey(t *testing.T) {
 		}
 		if bytes.Equal(dek.Ciphertext, dek2.Ciphertext) {
 			t.Errorf("Test %d: generate key is deterministic and produces the same DEK ciphertexts", i)
+		}
+	}
+}
+
+func testHMAC(t *testing.T) {
+	t.Parallel()
+
+	ctx := testContext(t)
+	srv, url := startServer(ctx, nil)
+	defer srv.Close()
+
+	message1 := []byte("Hello World")
+	message2 := []byte("Hello World!")
+
+	client := defaultClient(url)
+	for i, test := range validNameTests {
+		err := client.CreateKey(ctx, test.Name)
+		if err == nil && test.ShouldFail {
+			t.Errorf("Test %d: setup: creating key '%s' should have failed", i, test.Name)
+		}
+		if err != nil && !test.ShouldFail {
+			t.Errorf("Test %d: setup: failed to create key '%s': %v", i, test.Name, err)
+		}
+
+		if test.ShouldFail {
+			continue
+		}
+
+		sum1, err := client.HMAC(ctx, test.Name, message1)
+		if err != nil {
+			t.Errorf("Test %d: failed to compute HMAC with key '%s': %v", i, test.Name, err)
+		}
+		sum2, err := client.HMAC(ctx, test.Name, message2)
+		if err != nil {
+			t.Errorf("Test %d: failed to compute HMAC with key '%s': %v", i, test.Name, err)
+		}
+		if hmac.Equal(sum1, sum2) {
+			t.Errorf("Test %d: HMACs of different messages are equal: got '%x' and '%x'", i, sum1, sum2)
+		}
+
+		verifySum, err := client.HMAC(ctx, test.Name, message1)
+		if err != nil {
+			t.Errorf("Test %d: failed to compute HMAC with key '%s': %v", i, test.Name, err)
+		}
+
+		if !hmac.Equal(sum1, verifySum) {
+			t.Errorf("Test %d: HMACs of equal messages are not equal: got '%x' and '%x'", i, sum1, verifySum)
 		}
 	}
 }

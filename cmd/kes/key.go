@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	tui "github.com/charmbracelet/lipgloss"
-	"github.com/minio/kes-go"
 	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 )
 
@@ -132,7 +132,6 @@ const importKeyCmdUsage = `Usage:
 
 Options:
     -k, --insecure           Skip TLS certificate validation.
-    -e, --enclave <name>     Operate within the specified enclave.
 
     -h, --help               Print command line options.
 
@@ -144,12 +143,8 @@ func importKeyCmd(args []string) {
 	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	cmd.Usage = func() { fmt.Fprint(os.Stderr, importKeyCmdUsage) }
 
-	var (
-		insecureSkipVerify bool
-		enclaveName        string
-	)
+	var insecureSkipVerify bool
 	cmd.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate validation")
-	cmd.StringVarP(&enclaveName, "enclave", "e", "", "Operate within the specified enclave")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -174,7 +169,7 @@ func importKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	enclave := newClient(insecureSkipVerify)
 	if err = enclave.ImportKey(ctx, name, &kes.ImportKeyRequest{Key: key}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -313,7 +308,7 @@ func lsKeyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newEnclave(enclaveName, insecureSkipVerify)
+	enclave := newClient(insecureSkipVerify)
 	iter := &kes.ListIter[string]{
 		NextFunc: enclave.ListKeys,
 	}
