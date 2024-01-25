@@ -1,4 +1,4 @@
-// Copyright 2021 - MinIO, Inc. All rights reserved.
+// Copyright 2024 - MinIO, Inc. All rights reserved.
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
@@ -10,10 +10,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/azure/auth"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
@@ -47,7 +50,7 @@ func (s *Store) String() string { return "Azure KeyVault: " + s.endpoint }
 // Status returns the current state of the Azure KeyVault instance.
 // In particular, whether it is reachable and the network latency.
 func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.client.Endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.endpoint, nil)
 	if err != nil {
 		return kes.KeyStoreState{}, err
 	}
@@ -307,25 +310,26 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 // or when there are no (more) keys starting with the prefix, the
 // returned prefix is empty
 func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	var (
-		names    []string
-		nextLink string
-	)
-	for {
-		secrets, link, status, err := s.client.ListSecrets(ctx, nextLink)
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, "", err
-		}
+	var names []string
+	pager := s.client.azsecretsClient.NewListSecretPropertiesPager(&azsecrets.ListSecretPropertiesOptions{})
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, "", fmt.Errorf("azure: failed to list keys: %v", err)
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, "", err
+			}
+			azResp, ok := transportErrToResponseError(err)
+			if !ok {
+				return nil, "", err
+			}
+			return nil, "", fmt.Errorf("azure: failed to list keys: %s (%s)", azResp.ErrorCode, azResp.errorResponse.Error.Message)
 		}
-		if status.StatusCode != http.StatusOK {
-			return nil, "", fmt.Errorf("azure: failed to list keys: %s (%s)", status.Message, status.ErrorCode)
+		for _, v := range page.SecretPropertiesListResult.Value {
+			if v.ID != nil {
+				names = append(names, (*v.ID).Name())
+			}
 		}
-
-		nextLink = link
-		names = append(names, secrets...)
-		if nextLink == "" {
+		if page.NextLink == nil || *page.NextLink == "" {
 			break
 		}
 	}
@@ -338,19 +342,29 @@ func (s *Store) Close() error { return nil }
 // ConnectWithCredentials tries to establish a connection to a Azure KeyVault
 // instance using Azure client credentials.
 func ConnectWithCredentials(_ context.Context, endpoint string, creds Credentials) (*Store, error) {
-	const Scope = "https://vault.azure.net"
-
-	c := auth.NewClientCredentialsConfig(creds.ClientID, creds.Secret, creds.TenantID)
-	c.Resource = Scope
-	token, err := c.ServicePrincipalToken()
+	os.Setenv("AZURE_CLIENT_ID", creds.ClientID)
+	os.Setenv("AZURE_CLIENT_SECRET", creds.Secret)
+	os.Setenv("AZURE_TENANT_ID", creds.TenantID)
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, fmt.Errorf("azure: failed to obtain ServicePrincipalToken from client credentials: %v", err)
+		return nil, fmt.Errorf("azure: failed to create default Azure credential: %v", err)
+	}
+	azsecretsClient, err := azsecrets.NewClient(endpoint, cred, &azsecrets.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Retry: policy.RetryOptions{
+				MaxRetries:    7,
+				RetryDelay:    200 * time.Millisecond,
+				MaxRetryDelay: 800 * time.Millisecond,
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("azure: failed to create secrets client: %v", err)
 	}
 	return &Store{
 		endpoint: endpoint,
 		client: client{
-			Endpoint:   endpoint,
-			Authorizer: autorest.NewBearerAuthorizer(token),
+			azsecretsClient: azsecretsClient,
 		},
 	}, nil
 }
@@ -358,20 +372,28 @@ func ConnectWithCredentials(_ context.Context, endpoint string, creds Credential
 // ConnectWithIdentity tries to establish a connection to a Azure KeyVault
 // instance using an Azure managed identity.
 func ConnectWithIdentity(_ context.Context, endpoint string, msi ManagedIdentity) (*Store, error) {
-	const Scope = "https://vault.azure.net"
-
-	c := auth.NewMSIConfig()
-	c.Resource = Scope
-	c.ClientID = msi.ClientID
-	token, err := c.ServicePrincipalToken()
+	cred, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+		ID: azidentity.ClientID(msi.ClientID),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("azure: failed to obtain ServicePrincipalToken from managed identity: %v", err)
+		return nil, fmt.Errorf("azure: failed to create default Azure credential: %v", err)
+	}
+	azsecretsClient, err := azsecrets.NewClient(endpoint, cred, &azsecrets.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Retry: policy.RetryOptions{
+				MaxRetries:    7,
+				RetryDelay:    200 * time.Millisecond,
+				MaxRetryDelay: 800 * time.Millisecond,
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("azure: failed to create secrets client: %v", err)
 	}
 	return &Store{
 		endpoint: endpoint,
 		client: client{
-			Endpoint:   endpoint,
-			Authorizer: autorest.NewBearerAuthorizer(token),
+			azsecretsClient: azsecretsClient,
 		},
 	}, nil
 }
