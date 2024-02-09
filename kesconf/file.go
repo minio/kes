@@ -150,6 +150,7 @@ func (f *File) TLSConfig() (*tls.Config, error) {
 		Certificates: []tls.Certificate{certificate},
 		NextProtos:   []string{"h2", "http/1.1"},
 		RootCAs:      rootCAs,
+		ClientCAs:    rootCAs,
 	}, nil
 }
 
