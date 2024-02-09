@@ -13,7 +13,7 @@ import (
 )
 
 func TestBarrierZeroValue(t *testing.T) {
-	t.Run("Lock", func(t *testing.T) {
+	t.Run("Lock", func(*testing.T) {
 		var b Barrier[int]
 		b.Lock(0)
 		b.Unlock(0)
