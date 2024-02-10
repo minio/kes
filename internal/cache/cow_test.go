@@ -19,11 +19,11 @@ func TestCowZeroValue(t *testing.T) {
 			t.Fatal("Empty Cow contains value")
 		}
 	})
-	t.Run("DeleteAll", func(t *testing.T) {
+	t.Run("DeleteAll", func(*testing.T) {
 		var cow Cow[int, string]
 		cow.DeleteAll() // Check whether this panics for an empty Cow
 	})
-	t.Run("DeleteFunc", func(t *testing.T) {
+	t.Run("DeleteFunc", func(*testing.T) {
 		var cow Cow[int, string]
 		cow.DeleteFunc(func(_ int, _ string) bool { return true }) // Check whether this panics for an empty Cow
 	})
