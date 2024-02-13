@@ -62,9 +62,8 @@ tls:
 # In general, the KES server uses reasonable defaults for all APIs.
 # Only customize the APIs if there is a real need.
 #
-# Disabling authentication for an API must be carefully evaluated.
-# An example when disabling authentication may be justified are
-# the liveness and readiness probes in a Kubernetes environment.
+# An example of when you might disable authentication could be to
+# allow the liveness and readiness probes in a Kubernetes environment.
 #
 # When authentication is disabled, the particular API can be
 # accessed by any client that can send HTTPS requests to the
