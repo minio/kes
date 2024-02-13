@@ -11,7 +11,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/minio/kes/internal/api"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/expfmt"
 )
 
@@ -20,33 +22,36 @@ import (
 func New() *Metrics {
 	requestStatusLabels := []string{"code"}
 
+	registry := prometheus.NewRegistry()
+	promFactory := promauto.With(registry)
+
 	metrics := &Metrics{
-		registry: prometheus.NewRegistry(),
-		requestSucceeded: prometheus.NewCounterVec(prometheus.CounterOpts{
+		gatherer: registry,
+		requestSucceeded: promFactory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_success",
 			Help:      "Number of requests that have been served successfully.",
 		}, requestStatusLabels),
-		requestErrored: prometheus.NewCounterVec(prometheus.CounterOpts{
+		requestErrored: promFactory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_error",
 			Help:      "Number of request that failed due to some error. (HTTP 4xx status code)",
 		}, requestStatusLabels),
-		requestFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
+		requestFailed: promFactory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_failure",
 			Help:      "Number of request that failed due to some internal failure. (HTTP 5xx status code)",
 		}, requestStatusLabels),
-		requestActive: prometheus.NewGauge(prometheus.GaugeOpts{
+		requestActive: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_active",
 			Help:      "Number of active requests that are not finished, yet.",
 		}),
-		requestLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
+		requestLatency: promFactory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "response_time",
@@ -54,13 +59,13 @@ func New() *Metrics {
 			Help:      "Histogram of request response times spawning from 10ms to 10s.",
 		}),
 
-		errorLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+		errorLogEvents: promFactory.NewCounter(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "log",
 			Name:      "error_events",
 			Help:      "Number of error log events written to the error log targets.",
 		}),
-		auditLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+		auditLogEvents: promFactory.NewCounter(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "log",
 			Name:      "audit_events",
@@ -68,45 +73,45 @@ func New() *Metrics {
 		}),
 
 		startTime: time.Now(),
-		upTimeInSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
+		upTimeInSeconds: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "up_time",
 			Help:      "The time the server has been up and running in seconds.",
 		}),
 
-		numCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+		numCPUs: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_cpu",
 			Help:      "The number of logical CPUs available on the system. It may be larger than the number of usable CPUs.",
 		}),
-		numUsableCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+		numUsableCPUs: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_cpu_used",
 			Help:      "The number of logical CPUs usable by the server. It may be smaller than the number of available CPUs.",
 		}),
-		numThreads: prometheus.NewGauge(prometheus.GaugeOpts{
+		numThreads: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_threads",
 			Help:      "The number of concurrent co-routines/threads that currently exists.",
 		}),
 
-		memHeapUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+		memHeapUsed: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_heap_used",
 			Help:      "The number of bytes that are currently allocated on the heap memory.",
 		}),
-		memHeapObjects: prometheus.NewGauge(prometheus.GaugeOpts{
+		memHeapObjects: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_heap_objects",
 			Help:      "The number of objects that are currently allocated on the heap memory.",
 		}),
-		memStackUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+		memStackUsed: promFactory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_stack_used",
@@ -114,28 +119,13 @@ func New() *Metrics {
 		}),
 	}
 
-	metrics.registry.MustRegister(metrics.requestSucceeded)
-	metrics.registry.MustRegister(metrics.requestErrored)
-	metrics.registry.MustRegister(metrics.requestFailed)
-	metrics.registry.MustRegister(metrics.requestActive)
-	metrics.registry.MustRegister(metrics.requestLatency)
-	metrics.registry.MustRegister(metrics.errorLogEvents)
-	metrics.registry.MustRegister(metrics.auditLogEvents)
-	metrics.registry.MustRegister(metrics.upTimeInSeconds)
-	metrics.registry.MustRegister(metrics.numCPUs)
-	metrics.registry.MustRegister(metrics.numUsableCPUs)
-	metrics.registry.MustRegister(metrics.numThreads)
-	metrics.registry.MustRegister(metrics.memHeapUsed)
-	metrics.registry.MustRegister(metrics.memHeapObjects)
-	metrics.registry.MustRegister(metrics.memStackUsed)
-
 	return metrics
 }
 
 // Metrics is a type that gathers various metrics and information
 // about an application.
 type Metrics struct {
-	registry *prometheus.Registry
+	gatherer prometheus.Gatherer
 
 	requestSucceeded *prometheus.CounterVec
 	requestFailed    *prometheus.CounterVec
@@ -171,7 +161,7 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 	m.memHeapObjects.Set(float64(memStats.HeapObjects))
 	m.memStackUsed.Set(float64(memStats.StackSys))
 
-	metrics, err := m.registry.Gather()
+	metrics, err := m.gatherer.Gather()
 	if err != nil {
 		return err
 	}
@@ -190,21 +180,22 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 // Count distingushes requests that fail with some sort of
 // well-defined error (HTTP 4xx) and requests that fail due
 // to some internal error (HTTP 5xx).
-func (m *Metrics) Count(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (m *Metrics) Count(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
 		m.requestActive.Inc()
 		defer m.requestActive.Dec()
 
-		rw := countResponseWriter{
-			ResponseWriter: w,
+		rw := &countResponseWriter{
+			ResponseWriter: resp.ResponseWriter,
 			succeeded:      m.requestSucceeded,
 			errored:        m.requestErrored,
 			failed:         m.requestFailed,
 		}
-		if flusher, ok := w.(http.Flusher); ok {
+		if flusher, ok := resp.ResponseWriter.(http.Flusher); ok {
 			rw.flusher = flusher
 		}
-		h.ServeHTTP(&rw, r)
+		resp.ResponseWriter = rw
+		h.ServeAPI(resp, req)
 	})
 }
 
@@ -215,17 +206,18 @@ func (m *Metrics) Count(h http.Handler) http.Handler {
 // application takes to generate and send a response after
 // receiving a request. It basically shows how many request
 // the application can handle.
-func (m *Metrics) Latency(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rw := latencyResponseWriter{
-			ResponseWriter: w,
+func (m *Metrics) Latency(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
+		rw := &latencyResponseWriter{
+			ResponseWriter: resp.ResponseWriter,
 			start:          time.Now(),
 			histogram:      m.requestLatency,
 		}
-		if flusher, ok := w.(http.Flusher); ok {
+		if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
 			rw.flusher = flusher
 		}
-		h.ServeHTTP(&rw, r)
+		resp.ResponseWriter = rw
+		h.ServeAPI(resp, req)
 	})
 }
 
