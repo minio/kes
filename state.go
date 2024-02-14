@@ -162,7 +162,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig, metrics *metric.M
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.describePolicy),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.describePolicy))),
 		},
 		api.PathPolicyRead: {
 			Method:  http.MethodGet,
@@ -212,7 +212,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig, metrics *metric.M
 			MaxBody: 0,
 			Timeout: 0, // No timeout
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.logError))),
+			Handler: metrics.ErrorEventCounter(api.HandlerFunc(s.logError)),
 		},
 		api.PathLogAudit: {
 			Method:  http.MethodGet,
@@ -220,7 +220,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig, metrics *metric.M
 			MaxBody: 0,
 			Timeout: 0, // No timeout
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.logAudit))),
+			Handler: metrics.AuditEventCounter(api.HandlerFunc(s.logAudit)),
 		},
 	}
 

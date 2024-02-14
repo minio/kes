@@ -211,6 +211,11 @@ type Response struct {
 	http.ResponseWriter
 }
 
+var (
+	_ http.ResponseWriter = (*Response)(nil)
+	_ http.Flusher        = (*Response)(nil)
+)
+
 // Reply is a shorthand for api.Reply. It sends just an HTTP
 // status code to the client. The response body is empty.
 func (r *Response) Reply(code int) { Reply(r, code) }
@@ -243,6 +248,15 @@ func ReplyWith(r *Response, code int, data any) error {
 	r.Header().Set(headers.ContentType, headers.ContentTypeJSON)
 	r.WriteHeader(code)
 	return json.NewEncoder(r).Encode(data)
+}
+
+// Flush sends any buffered data to the client.
+//
+// This method will be called by http.ResponseController.
+func (r *Response) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // ReadBody reads the request body into v using the
