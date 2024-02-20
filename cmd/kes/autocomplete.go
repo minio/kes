@@ -97,9 +97,11 @@ func installAutoCompletion() {
 	}
 
 	var filename string
+	var isZsh bool
 	switch {
 	case strings.HasSuffix(shell, "zsh"):
 		filename = ".zshrc"
+		isZsh = true
 	case strings.HasSuffix(shell, "bash"):
 		filename = ".bashrc"
 	default:
@@ -128,8 +130,14 @@ func installAutoCompletion() {
 		autoloadCmd = "autoload -U +X bashcompinit && bashcompinit"
 		completeCmd = fmt.Sprintf("complete -o default -C %s %s", binaryPath, os.Args[0])
 	)
+
 	hasAutoloadLine, hasCompleteLine := isCompletionInstalled(filename, autoloadCmd, completeCmd)
-	if hasAutoloadLine && hasCompleteLine {
+	if isZsh && (hasAutoloadLine && hasCompleteLine) {
+		cli.Println("Completion is already installed.")
+		return
+	}
+
+	if !isZsh && hasCompleteLine {
 		cli.Println("Completion is already installed.")
 		return
 	}
@@ -140,11 +148,12 @@ func installAutoCompletion() {
 	}
 	defer file.Close()
 
-	if !hasAutoloadLine {
+	if isZsh && !hasAutoloadLine {
 		if _, err = file.WriteString(autoloadCmd + "\n"); err != nil {
 			cli.Fatalf("failed to add '%s' to '%s': %v", autoloadCmd, filename, err)
 		}
 	}
+
 	if !hasCompleteLine {
 		if _, err = file.WriteString(completeCmd + "\n"); err != nil {
 			cli.Fatalf("failed to add '%s' to '%s': %v", completeCmd, filename, err)
@@ -157,7 +166,7 @@ func installAutoCompletion() {
 	cli.Printf("Added completion to '%s'\n", filename)
 	cli.Println()
 	cli.Printf("To uninstall completion remove the following lines from '%s':\n", filename)
-	if !hasAutoloadLine {
+	if isZsh && !hasAutoloadLine {
 		cli.Println("  ", autoloadCmd)
 	}
 	if !hasCompleteLine {
