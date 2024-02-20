@@ -128,6 +128,15 @@ If you want to learn more about KES checkout our [documentation](https://min.io/
  - [Server API](https://min.io/docs/kes/concepts/server-api/)
  - [Go SDK](https://pkg.go.dev/github.com/minio/kes-go)
 
+### Monitoring
+
+KES servers provide an API endpoint `/v1/metrics` that observability tools, like [Prometheus](https://prometheus.io/), can scrape.  
+Refer to the [monitoring documentation](https://min.io/docs/kes/concepts/monitoring/) for how to setup and capture KES metrics.
+
+For a graphical Grafana dashboard refer to the following [example](examples/grafana/dashboard.json).
+
+![](.github/grafana-dashboard.png)  
+
 ## FAQs
 
 <details><summary><b>I have received an <code>insufficient permissions</code> error</b></summary>
