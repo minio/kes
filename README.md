@@ -111,15 +111,6 @@ decryption.
 
 </details>   
 
-## Monitoring
-
-KES servers provide an API endpoint `/v1/metrics` that observability tools, like Prometheus, can scrape.
-Refer to the [monitoring documentation](https://min.io/docs/kes/concepts/monitoring/) for how to setup and capture KES metrics.
-
-For a graphical Grafana dashboard refer to the following [example](examples/grafana/dashboard.json).
-
-![.github/grafana-dashboard.png]  
-
 ## Docs
 
 If you want to learn more about KES checkout our [documentation](https://min.io/docs/kes/).
