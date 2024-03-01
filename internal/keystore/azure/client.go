@@ -73,6 +73,7 @@ func (c *client) CreateSecret(ctx context.Context, name, value string) (status, 
 	if err != nil {
 		return status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		return status{
 			StatusCode: http.StatusOK,
@@ -133,6 +134,7 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 	if err != nil {
 		return "", status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		response, err := parseErrorResponse(resp)
 		if err != nil {
@@ -207,6 +209,7 @@ func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) 
 	if err != nil {
 		return status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode != http.StatusOK {
 			response, err := parseErrorResponse(resp)
@@ -245,6 +248,7 @@ func (c *client) PurgeSecret(ctx context.Context, name string) (status, error) {
 	if err != nil {
 		return status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		response, err := parseErrorResponse(resp)
 		if err != nil {
@@ -296,6 +300,7 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 	if err != nil {
 		return "", status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		response, err := parseErrorResponse(resp)
 		if err != nil {
@@ -379,6 +384,7 @@ func (c *client) ListSecrets(ctx context.Context, nextLink string) ([]string, st
 	if err != nil {
 		return nil, "", status{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		response, err := parseErrorResponse(resp)
 		if err != nil {
