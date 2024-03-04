@@ -5,13 +5,14 @@
 package metric
 
 import (
-	"io"
 	"net/http"
 	"runtime"
 	"strconv"
 	"time"
 
+	"github.com/minio/kes/internal/api"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/expfmt"
 )
 
@@ -20,33 +21,36 @@ import (
 func New() *Metrics {
 	requestStatusLabels := []string{"code"}
 
+	registry := prometheus.NewRegistry()
+	factory := promauto.With(registry)
+
 	metrics := &Metrics{
-		registry: prometheus.NewRegistry(),
-		requestSucceeded: prometheus.NewCounterVec(prometheus.CounterOpts{
+		gatherer: registry,
+		requestSucceeded: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_success",
 			Help:      "Number of requests that have been served successfully.",
 		}, requestStatusLabels),
-		requestErrored: prometheus.NewCounterVec(prometheus.CounterOpts{
+		requestErrored: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_error",
 			Help:      "Number of request that failed due to some error. (HTTP 4xx status code)",
 		}, requestStatusLabels),
-		requestFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
+		requestFailed: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_failure",
 			Help:      "Number of request that failed due to some internal failure. (HTTP 5xx status code)",
 		}, requestStatusLabels),
-		requestActive: prometheus.NewGauge(prometheus.GaugeOpts{
+		requestActive: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "request_active",
 			Help:      "Number of active requests that are not finished, yet.",
 		}),
-		requestLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
+		requestLatency: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: "kes",
 			Subsystem: "http",
 			Name:      "response_time",
@@ -54,13 +58,13 @@ func New() *Metrics {
 			Help:      "Histogram of request response times spawning from 10ms to 10s.",
 		}),
 
-		errorLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+		errorLogEvents: factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "log",
 			Name:      "error_events",
 			Help:      "Number of error log events written to the error log targets.",
 		}),
-		auditLogEvents: prometheus.NewCounter(prometheus.CounterOpts{
+		auditLogEvents: factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "kes",
 			Subsystem: "log",
 			Name:      "audit_events",
@@ -68,45 +72,45 @@ func New() *Metrics {
 		}),
 
 		startTime: time.Now(),
-		upTimeInSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
+		upTimeInSeconds: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "up_time",
 			Help:      "The time the server has been up and running in seconds.",
 		}),
 
-		numCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+		numCPUs: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_cpu",
 			Help:      "The number of logical CPUs available on the system. It may be larger than the number of usable CPUs.",
 		}),
-		numUsableCPUs: prometheus.NewGauge(prometheus.GaugeOpts{
+		numUsableCPUs: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_cpu_used",
 			Help:      "The number of logical CPUs usable by the server. It may be smaller than the number of available CPUs.",
 		}),
-		numThreads: prometheus.NewGauge(prometheus.GaugeOpts{
+		numThreads: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "num_threads",
 			Help:      "The number of concurrent co-routines/threads that currently exists.",
 		}),
 
-		memHeapUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+		memHeapUsed: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_heap_used",
 			Help:      "The number of bytes that are currently allocated on the heap memory.",
 		}),
-		memHeapObjects: prometheus.NewGauge(prometheus.GaugeOpts{
+		memHeapObjects: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_heap_objects",
 			Help:      "The number of objects that are currently allocated on the heap memory.",
 		}),
-		memStackUsed: prometheus.NewGauge(prometheus.GaugeOpts{
+		memStackUsed: factory.NewGauge(prometheus.GaugeOpts{
 			Namespace: "kes",
 			Subsystem: "system",
 			Name:      "mem_stack_used",
@@ -114,28 +118,13 @@ func New() *Metrics {
 		}),
 	}
 
-	metrics.registry.MustRegister(metrics.requestSucceeded)
-	metrics.registry.MustRegister(metrics.requestErrored)
-	metrics.registry.MustRegister(metrics.requestFailed)
-	metrics.registry.MustRegister(metrics.requestActive)
-	metrics.registry.MustRegister(metrics.requestLatency)
-	metrics.registry.MustRegister(metrics.errorLogEvents)
-	metrics.registry.MustRegister(metrics.auditLogEvents)
-	metrics.registry.MustRegister(metrics.upTimeInSeconds)
-	metrics.registry.MustRegister(metrics.numCPUs)
-	metrics.registry.MustRegister(metrics.numUsableCPUs)
-	metrics.registry.MustRegister(metrics.numThreads)
-	metrics.registry.MustRegister(metrics.memHeapUsed)
-	metrics.registry.MustRegister(metrics.memHeapObjects)
-	metrics.registry.MustRegister(metrics.memStackUsed)
-
 	return metrics
 }
 
 // Metrics is a type that gathers various metrics and information
 // about an application.
 type Metrics struct {
-	registry *prometheus.Registry
+	gatherer prometheus.Gatherer
 
 	requestSucceeded *prometheus.CounterVec
 	requestFailed    *prometheus.CounterVec
@@ -171,7 +160,7 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 	m.memHeapObjects.Set(float64(memStats.HeapObjects))
 	m.memStackUsed.Set(float64(memStats.StackSys))
 
-	metrics, err := m.registry.Gather()
+	metrics, err := m.gatherer.Gather()
 	if err != nil {
 		return err
 	}
@@ -190,21 +179,20 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 // Count distingushes requests that fail with some sort of
 // well-defined error (HTTP 4xx) and requests that fail due
 // to some internal error (HTTP 5xx).
-func (m *Metrics) Count(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (m *Metrics) Count(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
 		m.requestActive.Inc()
 		defer m.requestActive.Dec()
 
-		rw := countResponseWriter{
-			ResponseWriter: w,
+		rw := &countResponseWriter{
+			ResponseWriter: resp.ResponseWriter,
 			succeeded:      m.requestSucceeded,
 			errored:        m.requestErrored,
 			failed:         m.requestFailed,
 		}
-		if flusher, ok := w.(http.Flusher); ok {
-			rw.flusher = flusher
-		}
-		h.ServeHTTP(&rw, r)
+		defer rw.updateMetrics()
+		resp.ResponseWriter = rw
+		h.ServeAPI(resp, req)
 	})
 }
 
@@ -215,17 +203,16 @@ func (m *Metrics) Count(h http.Handler) http.Handler {
 // application takes to generate and send a response after
 // receiving a request. It basically shows how many request
 // the application can handle.
-func (m *Metrics) Latency(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rw := latencyResponseWriter{
-			ResponseWriter: w,
+func (m *Metrics) Latency(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
+		rw := &latencyResponseWriter{
+			ResponseWriter: resp.ResponseWriter,
 			start:          time.Now(),
 			histogram:      m.requestLatency,
 		}
-		if flusher, ok := w.(http.Flusher); ok {
-			rw.flusher = flusher
-		}
-		h.ServeHTTP(&rw, r)
+		defer rw.updateMetrics()
+		resp.ResponseWriter = rw
+		h.ServeAPI(resp, req)
 	})
 }
 
@@ -233,36 +220,61 @@ func (m *Metrics) Latency(h http.Handler) http.Handler {
 // the error event log counter on each write call.
 //
 // The returned io.Writer never returns an error on writes.
-func (m *Metrics) ErrorEventCounter() io.Writer {
-	return eventCounter{metric: m.errorLogEvents}
+func (m *Metrics) ErrorEventCounter(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
+		resp.ResponseWriter = &eventCounterWriter{
+			ResponseWriter: resp.ResponseWriter,
+			metric:         m.errorLogEvents,
+		}
+		h.ServeAPI(resp, req)
+	})
 }
 
 // AuditEventCounter returns an io.Writer that increments
 // the audit event log counter on each write call.
 //
-// The returned io.Writer never returns an error on writes.
-func (m *Metrics) AuditEventCounter() io.Writer {
-	return eventCounter{metric: m.auditLogEvents}
+// The returned http.ResponseWriter never returns an error on writes.
+func (m *Metrics) AuditEventCounter(h api.Handler) api.Handler {
+	return api.HandlerFunc(func(resp *api.Response, req *api.Request) {
+		resp.ResponseWriter = &eventCounterWriter{
+			ResponseWriter: resp.ResponseWriter,
+			metric:         m.auditLogEvents,
+		}
+		h.ServeAPI(resp, req)
+	})
 }
 
-type eventCounter struct {
+type eventCounterWriter struct {
+	http.ResponseWriter
 	metric prometheus.Counter
 }
 
-func (w eventCounter) Write(p []byte) (int, error) {
+var (
+	_ http.ResponseWriter = (*eventCounterWriter)(nil)
+	_ http.Flusher        = (*eventCounterWriter)(nil)
+)
+
+func (w *eventCounterWriter) Write(p []byte) (int, error) {
 	w.metric.Inc()
 	return len(p), nil
+}
+
+// Flush sends any buffered data to the client.
+//
+// This method will be called by http.ResponseController.
+func (w *eventCounterWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // latencyResponseWriter is an http.ResponseWriter that
 // measures the internal request-response latency.
 type latencyResponseWriter struct {
 	http.ResponseWriter
-	flusher http.Flusher
 
 	start     time.Time            // The point in time when the request was received
 	histogram prometheus.Histogram // The latency histogram
-	written   bool                 // Inidicates whether the HTTP headers have been written
 }
 
 var (
@@ -270,24 +282,19 @@ var (
 	_ http.Flusher        = (*latencyResponseWriter)(nil)
 )
 
-func (w *latencyResponseWriter) WriteHeader(status int) {
-	w.ResponseWriter.WriteHeader(status)
-	if !w.written {
-		w.histogram.Observe(time.Since(w.start).Seconds())
-		w.written = true
-	}
+// Updates metric request-response latency.
+func (w *latencyResponseWriter) updateMetrics() {
+	w.histogram.Observe(time.Since(w.start).Seconds())
 }
 
-func (w *latencyResponseWriter) Flush() {
-	if w.flusher != nil {
-		w.flusher.Flush()
-	}
-}
-
-// Unwrap returns the underlying http.ResponseWriter.
+// Flush sends any buffered data to the client.
 //
-// This method is implemented for http.ResponseController.
-func (w *latencyResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+// This method will be called by http.ResponseController.
+func (w *latencyResponseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
 
 // countResponseWriter is an http.ResponseWriter that
 // counts the number of requests partition by requests
@@ -297,13 +304,13 @@ func (w *latencyResponseWriter) Unwrap() http.ResponseWriter { return w.Response
 //   - Failed    (HTTP 5xx)
 type countResponseWriter struct {
 	http.ResponseWriter
-	flusher http.Flusher
 
 	succeeded *prometheus.CounterVec
 	errored   *prometheus.CounterVec
 	failed    *prometheus.CounterVec
-	prometheus.Metric
-	written bool // Inidicates whether the HTTP headers have been written
+
+	// HTTP status code set by WriteHeader
+	status int
 }
 
 var (
@@ -313,36 +320,35 @@ var (
 
 func (w *countResponseWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
-	if !w.written {
-		switch {
-		case status >= 200 && status < 300:
-			w.succeeded.WithLabelValues(strconv.Itoa(status)).Inc()
-		case status >= 400 && status < 500:
-			w.errored.WithLabelValues(strconv.Itoa(status)).Inc()
-		case status >= 500 && status < 600:
-			w.failed.WithLabelValues(strconv.Itoa(status)).Inc()
-		default:
-			// We panic to signal that the server returned a status code
-			// that is not tracked. If, in the future, the application
-			// returns a new (kind of) status code it should be collected
-			// as well.
-			// Otherwise, we would silently ignore new status codes and the
-			// metrics would be incomplete.
-			panic("metrics: unexpected response status code " + strconv.Itoa(status))
-		}
-		w.written = true
+	w.status = status
+}
+
+// Updates metrics count partitioned by response status code.
+// Must be called when response is done.
+func (w *countResponseWriter) updateMetrics() {
+	switch {
+	case w.status >= 200 && w.status < 300:
+		w.succeeded.WithLabelValues(strconv.Itoa(w.status)).Inc()
+	case w.status >= 400 && w.status < 500:
+		w.errored.WithLabelValues(strconv.Itoa(w.status)).Inc()
+	case w.status >= 500 && w.status < 600:
+		w.failed.WithLabelValues(strconv.Itoa(w.status)).Inc()
+	default:
+		// We panic to signal that the server returned a status code
+		// that is not tracked. If, in the future, the application
+		// returns a new (kind of) status code it should be collected
+		// as well.
+		// Otherwise, we would silently ignore new status codes and the
+		// metrics would be incomplete.
+		panic("metrics: unexpected response status code " + strconv.Itoa(w.status))
 	}
 }
 
-func (w *countResponseWriter) Write(b []byte) (int, error) { return w.ResponseWriter.Write(b) }
-
-func (w *countResponseWriter) Flush() {
-	if w.flusher != nil {
-		w.flusher.Flush()
-	}
-}
-
-// Unwrap returns the underlying http.ResponseWriter.
+// Flush sends any buffered data to the client.
 //
-// This method is implemented for http.ResponseController.
-func (w *countResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+// This method will be called by http.ResponseController.
+func (w *countResponseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}

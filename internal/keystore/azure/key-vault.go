@@ -56,9 +56,11 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	}
 
 	start := time.Now()
-	if _, err = http.DefaultClient.Do(req); err != nil {
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
+	resp.Body.Close()
 	return kes.KeyStoreState{
 		Latency: time.Since(start),
 	}, nil

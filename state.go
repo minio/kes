@@ -40,7 +40,7 @@ type identityEntry struct {
 	*kes.Policy
 }
 
-func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, map[string]api.Route) {
+func initRoutes(s *Server, routeConfig map[string]RouteConfig, metrics *metric.Metrics) (*http.ServeMux, map[string]api.Route) {
 	routes := map[string]api.Route{
 		api.PathVersion: {
 			Method:  http.MethodGet,
@@ -89,7 +89,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.createKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.createKey))),
 		},
 		api.PathKeyImport: {
 			Method:  http.MethodPut,
@@ -97,7 +97,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 1 * mem.MB,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.importKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.importKey))),
 		},
 		api.PathKeyDescribe: {
 			Method:  http.MethodGet,
@@ -105,7 +105,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.describeKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.describeKey))),
 		},
 		api.PathKeyList: {
 			Method:  http.MethodGet,
@@ -113,7 +113,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.listKeys),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.listKeys))),
 		},
 		api.PathKeyDelete: {
 			Method:  http.MethodDelete,
@@ -121,7 +121,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.deleteKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.deleteKey))),
 		},
 		api.PathKeyEncrypt: {
 			Method:  http.MethodPut,
@@ -129,7 +129,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 1 * mem.MB,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.encryptKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.encryptKey))),
 		},
 		api.PathKeyGenerate: {
 			Method:  http.MethodPut,
@@ -137,7 +137,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 1 * mem.MB,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.generateKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.generateKey))),
 		},
 		api.PathKeyDecrypt: {
 			Method:  http.MethodPut,
@@ -145,7 +145,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 1 * mem.MB,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.decryptKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.decryptKey))),
 		},
 		api.PathKeyHMAC: {
 			Method:  http.MethodPut,
@@ -153,7 +153,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 1 * mem.MB,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.hmacKey),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.hmacKey))),
 		},
 
 		api.PathPolicyDescribe: {
@@ -162,7 +162,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.describePolicy),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.describePolicy))),
 		},
 		api.PathPolicyRead: {
 			Method:  http.MethodGet,
@@ -170,7 +170,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.readPolicy),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.readPolicy))),
 		},
 		api.PathPolicyList: {
 			Method:  http.MethodGet,
@@ -178,7 +178,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.listPolicies),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.listPolicies))),
 		},
 
 		api.PathIdentityDescribe: {
@@ -187,7 +187,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.describeIdentity),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.describeIdentity))),
 		},
 		api.PathIdentityList: {
 			Method:  http.MethodGet,
@@ -195,7 +195,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.listIdentities),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.listIdentities))),
 		},
 		api.PathIdentitySelfDescribe: {
 			Method:  http.MethodGet,
@@ -203,7 +203,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 15 * time.Second,
 			Auth:    insecureIdentifyOnly{}, // Anyone can use the self-describe API as long as a client cert is provided
-			Handler: api.HandlerFunc(s.selfDescribeIdentity),
+			Handler: metrics.Latency(metrics.Count(api.HandlerFunc(s.selfDescribeIdentity))),
 		},
 
 		api.PathLogError: {
@@ -212,7 +212,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 0, // No timeout
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.logError),
+			Handler: metrics.ErrorEventCounter(api.HandlerFunc(s.logError)),
 		},
 		api.PathLogAudit: {
 			Method:  http.MethodGet,
@@ -220,7 +220,7 @@ func initRoutes(s *Server, routeConfig map[string]RouteConfig) (*http.ServeMux, 
 			MaxBody: 0,
 			Timeout: 0, // No timeout
 			Auth:    (*verifyIdentity)(&s.state),
-			Handler: api.HandlerFunc(s.logAudit),
+			Handler: metrics.AuditEventCounter(api.HandlerFunc(s.logAudit)),
 		},
 	}
 

@@ -258,7 +258,7 @@ func (s *Server) Update(conf *Config) (io.Closer, error) {
 		state.Audit.h = conf.AuditLog
 	}
 
-	mux, routes := initRoutes(s, conf.Routes)
+	mux, routes := initRoutes(s, conf.Routes, state.Metrics)
 	state.Routes = routes
 
 	s.tls.Store(conf.TLS.Clone())
@@ -427,7 +427,7 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 		state.Audit = newAuditLogger(conf.AuditLog, &s.AuditLevel)
 	}
 
-	mux, routes := initRoutes(s, conf.Routes)
+	mux, routes := initRoutes(s, conf.Routes, state.Metrics)
 	state.Routes = routes
 
 	s.tls.Store(conf.TLS.Clone())
