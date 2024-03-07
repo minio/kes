@@ -19,9 +19,9 @@ require (
 	github.com/prometheus/common v0.45.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tinylib/msgp v1.1.9
-	golang.org/x/crypto v0.18.0
-	golang.org/x/sys v0.16.0
-	golang.org/x/term v0.16.0
+	golang.org/x/crypto v0.19.0
+	golang.org/x/sys v0.17.0
+	golang.org/x/term v0.17.0
 	google.golang.org/api v0.155.0
 	google.golang.org/grpc v1.60.1
 	google.golang.org/protobuf v1.32.0
@@ -44,7 +44,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
