@@ -6,21 +6,26 @@ package kesconf
 
 import (
 	"flag"
+	"fmt"
+	"os"
 	"testing"
 )
 
-var vaultConfigFile = flag.String("vault.config", "", "Path to a KES config file with Hashicorp Vault config")
+var vaultCfgFile = flag.String("vault-ci.config", "", "Path to a KES config file with Hashicorp Vault config")
 
-func TestVault(t *testing.T) {
-	if *vaultConfigFile == "" {
-		t.Skip("Vault tests disabled. Use -vault.config=<FILE> to enable them")
+func TestVaultCI(t *testing.T) {
+	if *vaultCfgFile == "" {
+		t.Skip("Vault tests disabled. Use -vault-ci.config=<FILE> to enable them")
 	}
 
-	config, err := ReadFile(*vaultConfigFile)
+	config, err := ReadFile(*vaultCfgFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	fmt.Println("VAULT_APPROLE_ID=", os.Getenv("VAULT_APPROLE_ID"))
+	fmt.Println("VAULT_APPROLE_SECRET=", os.Getenv("VAULT_APPROLE_SECRET"))
+	fmt.Println("Keystore AppRole: ", config.KeyStore.(*VaultKeyStore).AppRole)
 	if _, ok := config.KeyStore.(*VaultKeyStore); !ok {
 		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &VaultKeyStore{})
 	}

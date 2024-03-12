@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var FSPath = flag.String("fs.path", "", "Path used for FS tests")
@@ -17,7 +15,7 @@ func TestFS(t *testing.T) {
 	if *FSPath == "" {
 		t.Skip("FS tests disabled. Use -fs.path=<path> to enable them")
 	}
-	config := kesconf.FSKeyStore{
+	config := FSKeyStore{
 		Path: *FSPath,
 	}
 

@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var gcpConfigFile = flag.String("gcp.config", "", "Path to a KES config file with GCP SecretManager config")
@@ -18,13 +16,13 @@ func TestGCP(t *testing.T) {
 		t.Skip("GCP tests disabled. Use -gcp.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*gcpConfigFile)
+	config, err := ReadFile(*gcpConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*kesconf.GCPSecretManagerKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.GCPSecretManagerKeyStore{})
+	if _, ok := config.KeyStore.(*GCPSecretManagerKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &GCPSecretManagerKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)

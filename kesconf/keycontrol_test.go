@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var keyControlConfigFile = flag.String("entrust.config", "", "Path to a KES config file with Entrust KeyControl config")
@@ -18,13 +16,13 @@ func TestKeyControl(t *testing.T) {
 		t.Skip("KeyControl tests disabled. Use -entrust.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*keyControlConfigFile)
+	config, err := ReadFile(*keyControlConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*kesconf.EntrustKeyControlKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.EntrustKeyControlKeyStore{})
+	if _, ok := config.KeyStore.(*EntrustKeyControlKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &EntrustKeyControlKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)

@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var gemaltoConfigFile = flag.String("gemalto.config", "", "Path to a KES config file with Gemalto KeySecure config")
@@ -18,13 +16,13 @@ func TestGemalto(t *testing.T) {
 		t.Skip("Gemalto tests disabled. Use -gemalto.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*gemaltoConfigFile)
+	config, err := ReadFile(*gemaltoConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*kesconf.KeySecureKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.KeySecureKeyStore{})
+	if _, ok := config.KeyStore.(*KeySecureKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &KeySecureKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)

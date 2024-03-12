@@ -2,13 +2,11 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var fortanixConfigFile = flag.String("fortanix.config", "", "Path to a KES config file with Fortanix SDKMS config")
@@ -18,13 +16,13 @@ func TestFortanix(t *testing.T) {
 		t.Skip("Fortanix tests disabled. Use -fortanix.config=<FILE> to enable them")
 	}
 
-	config, err := kesconf.ReadFile(*fortanixConfigFile)
+	config, err := ReadFile(*fortanixConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := config.KeyStore.(*kesconf.FortanixKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.FortanixKeyStore{})
+	if _, ok := config.KeyStore.(*FortanixKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &FortanixKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)
