@@ -255,11 +255,11 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 		return nil, errors.New("kesconf: invalid tls config: no certificate")
 	}
 
-	clientAuth := tls.RequestClientCert
+	clientAuth := tls.RequireAnyClientCert
 	if v := strings.ToLower(y.TLS.ClientAuth.Value); v != "" && v != "on" && v != "off" {
 		return nil, fmt.Errorf("kesconf: invalid tls config: invalid auth '%s'", y.TLS.ClientAuth)
 	} else if v == "on" {
-		clientAuth = tls.VerifyClientCertIfGiven
+		clientAuth = tls.RequireAndVerifyClientCert
 	}
 
 	for _, proxy := range y.TLS.Proxy.Identities {
@@ -303,6 +303,20 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 	for path, api := range y.API.Paths {
 		if api.Timeout.Value < 0 {
 			return nil, fmt.Errorf("kesconf: invalid timeout '%d' for API '%s'", api.Timeout.Value, path)
+		}
+
+		// If mTLS authentication is disabled for at least one API,
+		// we must no longer require that a client sends a certificate.
+		// However, this may cause authentication errors when a client
+		// (the client's HTTP/TLS stack) does not send a certificate
+		// for an API that requires authentication.
+		if api.InsecureSkipAuth.Value {
+			if clientAuth == tls.RequireAnyClientCert {
+				clientAuth = tls.RequestClientCert
+			}
+			if clientAuth == tls.RequireAndVerifyClientCert {
+				clientAuth = tls.VerifyClientCertIfGiven
+			}
 		}
 	}
 
