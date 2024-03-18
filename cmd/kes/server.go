@@ -336,7 +336,7 @@ func startDevServer(addr string) error {
 		MinVersion:   tls.VersionTLS12,
 		NextProtos:   []string{"h2", "http/1.1"},
 		Certificates: []tls.Certificate{srvCert},
-		ClientAuth:   tls.RequestClientCert,
+		ClientAuth:   tls.RequireAnyClientCert,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
