@@ -83,7 +83,7 @@ func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 			"role_id":   login.ID,
 			"secret_id": login.Secret,
 		})
-		if secret == nil {
+		if secret == nil && err == nil {
 			// The Vault SDK eventually returns no error but also no
 			// secret. In this case have to return a (not very helpful)
 			// error to signal that the authentication failed - for some
@@ -108,7 +108,7 @@ func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 			"role": login.Role,
 			"jwt":  login.JWT,
 		})
-		if secret == nil {
+		if secret == nil && err == nil {
 			// The Vault SDK eventually returns no error but also no
 			// secret. In this case have to return a (not very helpful)
 			// error to signal that the authentication failed - for some
