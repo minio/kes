@@ -189,7 +189,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	}
 
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
