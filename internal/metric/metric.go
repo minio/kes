@@ -176,7 +176,7 @@ func (m *Metrics) EncodeTo(encoder expfmt.Encoder) error {
 // how many requests succeeded (HTTP 200 OK) and how many
 // failed.
 //
-// Count distingushes requests that fail with some sort of
+// Count distinguishes requests that fail with some sort of
 // well-defined error (HTTP 4xx) and requests that fail due
 // to some internal error (HTTP 5xx).
 func (m *Metrics) Count(h api.Handler) api.Handler {

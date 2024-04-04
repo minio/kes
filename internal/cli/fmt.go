@@ -24,7 +24,7 @@ func Fatal(v ...any) {
 }
 
 // Fatalf writes an error prefix and the operands,
-// formated according to the format specifier, to OS stderr.
+// formatted according to the format specifier, to OS stderr.
 // Then, Fatalf terminates the program by calling os.Exit(1).
 func Fatalf(format string, v ...any) {
 	fmt.Fprintf(os.Stderr, errPrefix+format+"\n", v...)

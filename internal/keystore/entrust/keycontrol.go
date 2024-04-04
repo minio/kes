@@ -405,7 +405,7 @@ func (kc *KeyControl) List(ctx context.Context, prefix string, n int) ([]string,
 func (kc *KeyControl) refreshToken(ctx context.Context, renew time.Duration) {
 	// We don't wait until the last second of the renew internal but try
 	// to renew the token early.
-	// However, if the renew interval is <= 0 we use 5min as a resonable fallback.
+	// However, if the renew interval is <= 0 we use 5min as a reasonable fallback.
 	if renew/2 <= 0 {
 		renew = 5 * time.Minute
 	}

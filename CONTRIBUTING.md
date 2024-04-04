@@ -27,13 +27,13 @@ a one line summary of the commit
 First, explain why a change is needed if it isn't self-describing. 
 Then talk about what a change does and its potential side-effects
 before explaining the the design decisions. For example, explain
-why you have choosen approach A instead of B. 
+why you have chosen approach A instead of B. 
 
 List assumptions / invariants that your change relies on. For example,
 that some initialization logic assumes that it operations on a clean
 state.
 
-Inlcude benchmarks when claiming a performance gain or loss.
+Include benchmarks when claiming a performance gain or loss.
 
 Reference related commits, pull requests or issues. For example:
 

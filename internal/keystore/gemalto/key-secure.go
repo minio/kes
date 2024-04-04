@@ -34,7 +34,7 @@ import (
 // short-lived authentication token.
 //
 // A token is valid within either the default root
-// domain (empty) or a specifc domain - e.g. my-domain.
+// domain (empty) or a specific domain - e.g. my-domain.
 type Credentials struct {
 	Token  string        // The KeySecure refresh token
 	Domain string        // The KeySecure domain - similar to a Vault Namespace

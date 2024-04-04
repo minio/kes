@@ -51,7 +51,7 @@ func NewStore(dir string) (*Store, error) {
 // the filesystem.
 //
 // It implements the kms.Store interface and
-// acts as KMS abstraction over a fileystem.
+// acts as KMS abstraction over a filesystem.
 type Store struct {
 	dir  string
 	lock sync.RWMutex

@@ -122,7 +122,7 @@ func (c *client) Authenticate(ctx context.Context, endpoint string, login Creden
 //
 // RenewAuthToken tries get a new authentication token from the given
 // KeySecure endpoint by presenting the given refresh token.
-// It continuesly tries to renew the authentication before it expires.
+// It continuously tries to renew the authentication before it expires.
 //
 // If RenewAuthToken fails to request or renew the client's authentication
 // token then it keeps retrying and waits for the given login.Retry delay
