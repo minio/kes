@@ -148,7 +148,7 @@ func (p *TLSProxy) Verify(req *http.Request) error {
 	// further down the stack it looks like the request has
 	// been made by the KES client itself.
 	// HTTP handlers can consume the TLS connection state and
-	// remote address as usual withou  having to care about a
+	// remote address as usual without having to care about a
 	// TLS proxy.
 	if p.Is(identity) {
 		cert, err := p.getClientCertificate(req.Header)

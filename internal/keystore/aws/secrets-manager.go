@@ -143,8 +143,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 			return err
 		}
 		if err, ok := err.(awserr.Error); ok {
-			switch err.Code() {
-			case secretsmanager.ErrCodeResourceExistsException:
+			if err.Code() == secretsmanager.ErrCodeResourceExistsException {
 				return kesdk.ErrKeyExists
 			}
 		}

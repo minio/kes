@@ -298,7 +298,7 @@ func (c *keyCache) Get(ctx context.Context, name string) (crypto.KeyVersion, err
 	// Since the key is not in the cache, we want to fetch it, once.
 	// However, we also don't want to block conccurent reads for different
 	// key names.
-	// Hence, we accquire a lock per key and release it once done.
+	// Hence, we acquire a lock per key and release it once done.
 	c.barrier.Lock(name)
 	defer c.barrier.Unlock(name)
 

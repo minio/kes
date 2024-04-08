@@ -146,7 +146,7 @@ func verifyConfig(c *Config) error {
 		return errors.New("kes: tls config contains no server certificate")
 	}
 	if c.TLS.ClientAuth == tls.NoClientCert {
-		return errors.New("kes: tls client auth must request client certifiate")
+		return errors.New("kes: tls client auth must request client certificate")
 	}
 	if c.Keys == nil {
 		return errors.New("kes: config contains no key store")

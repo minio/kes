@@ -149,7 +149,7 @@ func (s *Server) UpdateTLS(conf *tls.Config) error {
 		return errors.New("kes: tls config contains no server certificate")
 	}
 	if conf.ClientAuth == tls.NoClientCert {
-		return errors.New("kes: tls client auth must request client certifiate")
+		return errors.New("kes: tls client auth must request client certificate")
 	}
 
 	s.mu.Lock()

@@ -59,7 +59,7 @@ func Time(t time.Time) *pbt.Timestamp { return pbt.New(t) }
 //	var t T
 //	var p P = &t
 //
-// This proposition is useful when unmarshaling data into types
+// This proposition is useful when unmarshalling data into types
 // without additional dynamic dispatch or heap allocations.
 //
 // A generic function that wants to use the default value of

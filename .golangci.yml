@@ -1,6 +1,6 @@
 linters-settings:
-  golint:
-    min-confidence: 0
+  gofumpt:
+    simplify: true
 
   misspell:
     locale: US
@@ -11,24 +11,27 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - typecheck
-    - goimports
-    - misspell
-    - staticcheck
-    - govet
-    - revive
-    - ineffassign
-    - gosimple
-    - unused
-    - prealloc
-    - unconvert
+    - durationcheck
+    - gocritic
     - gofumpt
+    - goimports
+    - gomodguard
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - tenv
+    - typecheck
+    - unconvert
+    - unused
 
 issues:
   exclude-use-default: false
   exclude:
       - "var-naming: don't use ALL_CAPS in Go names; use CamelCase"
       - "package-comments: should have a package comment"
+      - "exitAfterDefer:"
 
 service:
-  golangci-lint-version: 1.48.0 # use the fixed version to not introduce new linters unexpectedly
+  golangci-lint-version: 1.57.2 # use the fixed version to not introduce new linters unexpectedly

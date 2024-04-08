@@ -59,7 +59,7 @@ func TestAPI(t *testing.T) {
 	t.Run("v1/key/encrypt", testEncryptDecryptKey) // also tests decryption
 	t.Run("v1/key/list", testListKeys)
 	t.Run("v1/identity/describe", testDescribeIdentity)
-	t.Run("v1/identity/list", testListIdentites)
+	t.Run("v1/identity/list", testListIdentities)
 	t.Run("v1/identity/self/describe", testSelfDescribeIdentity)
 	t.Run("v1/policy/describe", testDescribePolicy)
 	t.Run("v1/policy/read", testReadPolicy)
@@ -498,7 +498,7 @@ func testDescribeIdentity(t *testing.T) {
 	}
 }
 
-func testListIdentites(t *testing.T) {
+func testListIdentities(t *testing.T) {
 	t.Parallel()
 
 	ctx := testContext(t)

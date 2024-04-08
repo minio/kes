@@ -66,7 +66,7 @@ func (b *Barrier[K]) remove(key K) *barrier {
 
 	if m.N == 0 {
 		// Once N reaches 0, the barrier can be removed
-		// since no goroutine is trying to accquire a lock
+		// since no goroutine is trying to acquire a lock
 		// for this key.
 		delete(b.keys, key)
 	}
@@ -77,6 +77,6 @@ type barrier struct {
 	sync.Mutex
 
 	// N is the number of goroutines that have
-	// accquired / are trying to accquire the lock.
+	// acquired / are trying to acquire the lock.
 	N uint
 }

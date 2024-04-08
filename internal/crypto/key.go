@@ -276,7 +276,7 @@ func (s SecretKey) Encrypt(plaintext, associatedData []byte) ([]byte, error) {
 		prf.Write(iv)
 		key := prf.Sum(make([]byte, 0, prf.Size()))
 
-		block, err := aes.NewCipher(key[:])
+		block, err := aes.NewCipher(key)
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +289,7 @@ func (s SecretKey) Encrypt(plaintext, associatedData []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		c, err := chacha20poly1305.New(key[:])
+		c, err := chacha20poly1305.New(key)
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +333,7 @@ func (s SecretKey) Decrypt(ciphertext, associatedData []byte) ([]byte, error) {
 		prf.Write(iv)
 		key := prf.Sum(make([]byte, 0, prf.Size()))
 
-		block, err := aes.NewCipher(key[:])
+		block, err := aes.NewCipher(key)
 		if err != nil {
 			return nil, err
 		}
@@ -346,7 +346,7 @@ func (s SecretKey) Decrypt(ciphertext, associatedData []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		c, err := chacha20poly1305.New(key[:])
+		c, err := chacha20poly1305.New(key)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +355,7 @@ func (s SecretKey) Decrypt(ciphertext, associatedData []byte) ([]byte, error) {
 		panic("crypto: unknown secret key type '" + strconv.Itoa(int(s.cipher)) + "'")
 	}
 
-	plaintext, err := aead.Open(ciphertext[:0], nonce[:], ciphertext, associatedData)
+	plaintext, err := aead.Open(ciphertext[:0], nonce, ciphertext, associatedData)
 	if err != nil {
 		return nil, kes.ErrDecrypt
 	}
