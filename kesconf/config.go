@@ -595,9 +595,6 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 		if y.KeyStore.Azure.KeyVault.Endpoint.Value == "" {
 			return nil, errors.New("kesconf: invalid Azure keyvault keystore: no endpoint specified")
 		}
-		if y.KeyStore.Azure.KeyVault.Credentials == nil && y.KeyStore.Azure.KeyVault.ManagedIdentity == nil {
-			return nil, errors.New("kesconf: invalid Azure keyvault keystore: no authentication method specified")
-		}
 		if y.KeyStore.Azure.KeyVault.Credentials != nil && y.KeyStore.Azure.KeyVault.ManagedIdentity != nil {
 			return nil, errors.New("kesconf: invalid Azure keyvault keystore: more than one authentication method specified")
 		}

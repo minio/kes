@@ -10,12 +10,10 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/keystore"
@@ -46,6 +44,11 @@ type Store struct {
 }
 
 func (s *Store) String() string { return "Azure KeyVault: " + s.endpoint }
+
+const (
+	delay  = 200 * time.Millisecond
+	jitter = 800 * time.Millisecond
+)
 
 // Status returns the current state of the Azure KeyVault instance.
 // In particular, whether it is reachable and the network latency.
@@ -110,24 +113,19 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	if err != nil {
 		return fmt.Errorf("azure: failed to create '%s': %v", name, err)
 	}
-	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsDeletedButRecoverable" {
-		stat, err = s.client.PurgeSecret(ctx, name)
+	if stat.StatusCode == http.StatusConflict && (stat.ErrorCode == "ObjectIsDeletedButRecoverable" || stat.ErrorCode == "ObjectIsBeingDeleted") {
+		stat, err = s.purgeWithRetry(ctx, name, 25)
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 		if err != nil {
 			return fmt.Errorf("azure: failed to create '%s': failed to purge deleted secret: %v", name, err)
 		}
-		if stat.StatusCode != http.StatusNoContent {
+		if stat.StatusCode != http.StatusOK {
 			return fmt.Errorf("azure: failed to create '%s': failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 		}
 
-		const (
-			Retry  = 7
-			Delay  = 200 * time.Millisecond
-			Jitter = 800 * time.Millisecond
-		)
-		for i := 0; i < Retry; i++ {
+		for i := 0; i < 7; i++ {
 			stat, err = s.client.CreateSecret(ctx, name, string(value))
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return err
@@ -136,7 +134,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 				return fmt.Errorf("azure: failed to create '%s': %v", name, err)
 			}
 			if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
-				time.Sleep(Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond)
+				time.Sleep(delay + time.Duration(rand.Int63n(jitter.Milliseconds()))*time.Millisecond)
 				continue
 			}
 			break
@@ -219,51 +217,23 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("azure: failed to delete '%s': %v", name, err)
 	}
-	if stat.StatusCode != http.StatusNotFound {
-		return kesdk.ErrKeyNotFound
-	}
 	if stat.StatusCode != http.StatusOK && stat.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
 
-	// Now, the key either does not exist, is being deleted or
-	// has been deleted. If the key does not exist then purging
-	// it will result in a 404 NotFound.
-	// If the key has been marked as deleted then purging it
-	// should succeed with 204 NoContent.
-	// However, if the key is not ready to be purged then we
-	// retry purging the key a couple of times - hoping that
-	// KeyVault completes the soft-delete process.
-	const (
-		Retry  = 7
-		Delay  = 200 * time.Millisecond
-		Jitter = 800 * time.Millisecond
-	)
-	for i := 0; i < Retry; i++ {
-		stat, err = s.client.PurgeSecret(ctx, name)
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		if err != nil {
-			return fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
-		}
-		switch {
-		case stat.StatusCode == http.StatusNoContent:
-			return nil
-		case stat.StatusCode == http.StatusNotFound:
-			return nil
-		case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
-			return nil
-		case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted":
-			time.Sleep(Delay + time.Duration(rand.Int63n(Jitter.Milliseconds()))*time.Millisecond)
-			continue
-		}
-		break
+	stat, err = s.purgeWithRetry(ctx, name, 10)
+	if err != nil {
+		return err
 	}
-	if stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted" {
+
+	switch {
+	case stat.StatusCode == http.StatusOK:
 		return nil
+	case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted":
+		return nil
+	default:
+		return fmt.Errorf("azure: failed to delete '%s': failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 	}
-	return fmt.Errorf("azure: failed to delete '%s': failed to purge deleted secret: %s (%s)", name, stat.Message, stat.ErrorCode)
 }
 
 // Get returns the first resp. oldest version of the secret.
@@ -321,11 +291,11 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, "", err
 			}
-			azResp, ok := transportErrToResponseError(err)
-			if !ok {
+			stat, err := transportErrToStatus(err)
+			if err != nil {
 				return nil, "", err
 			}
-			return nil, "", fmt.Errorf("azure: failed to list keys: %s (%s)", azResp.ErrorCode, azResp.errorResponse.Error.Message)
+			return nil, "", fmt.Errorf("azure: failed to list keys: %s (%s)", stat.ErrorCode, stat.Message)
 		}
 		for _, v := range page.SecretPropertiesListResult.Value {
 			if v.ID != nil {
@@ -342,16 +312,8 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 // Close closes the Store.
 func (s *Store) Close() error { return nil }
 
-// ConnectWithCredentials tries to establish a connection to a Azure KeyVault
-// instance using Azure client credentials.
-func ConnectWithCredentials(_ context.Context, endpoint string, creds Credentials) (*Store, error) {
-	os.Setenv("AZURE_CLIENT_ID", creds.ClientID)
-	os.Setenv("AZURE_CLIENT_SECRET", creds.Secret)
-	os.Setenv("AZURE_TENANT_ID", creds.TenantID)
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
-	if err != nil {
-		return nil, fmt.Errorf("azure: failed to create default Azure credential: %v", err)
-	}
+// ConnectWithCredentials tries to establish a connection to an Azure KeyVault instance
+func ConnectWithCredentials(endpoint string, cred azcore.TokenCredential) (*Store, error) {
 	azsecretsClient, err := azsecrets.NewClient(endpoint, cred, &azsecrets.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
 			Retry: policy.RetryOptions{
@@ -372,31 +334,35 @@ func ConnectWithCredentials(_ context.Context, endpoint string, creds Credential
 	}, nil
 }
 
-// ConnectWithIdentity tries to establish a connection to a Azure KeyVault
-// instance using an Azure managed identity.
-func ConnectWithIdentity(_ context.Context, endpoint string, msi ManagedIdentity) (*Store, error) {
-	cred, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-		ID: azidentity.ClientID(msi.ClientID),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("azure: failed to create default Azure credential: %v", err)
+func (s *Store) purgeWithRetry(ctx context.Context, name string, retries int) (status, error) {
+	// Now, the key either does not exist, is being deleted or
+	// has been deleted. If the key does not exist then purging
+	// it will result in a 404 NotFound.
+	// If the key has been marked as deleted then purging it
+	// should succeed with 204 NoContent.
+	// However, if the key is not ready to be purged then we
+	// retry purging the key a couple of times - hoping that
+	// KeyVault completes the soft-delete process.
+	var stat status
+	var err error
+	for i := 0; i < retries; i++ {
+		stat, err = s.client.PurgeSecret(ctx, name)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return stat, err
+		}
+		if err != nil {
+			return stat, fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
+		}
+		switch {
+		case stat.StatusCode == http.StatusOK:
+			return stat, nil
+		case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
+			return stat, nil
+		case stat.StatusCode == http.StatusConflict && stat.ErrorCode == "ObjectIsBeingDeleted":
+			time.Sleep(delay + time.Duration(rand.Int63n(jitter.Milliseconds()))*time.Millisecond)
+			continue
+		}
+		break
 	}
-	azsecretsClient, err := azsecrets.NewClient(endpoint, cred, &azsecrets.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			Retry: policy.RetryOptions{
-				MaxRetries:    7,
-				RetryDelay:    200 * time.Millisecond,
-				MaxRetryDelay: 800 * time.Millisecond,
-			},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("azure: failed to create secrets client: %v", err)
-	}
-	return &Store{
-		endpoint: endpoint,
-		client: client{
-			azsecretsClient: azsecretsClient,
-		},
-	}, nil
+	return stat, err
 }

@@ -16,6 +16,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
@@ -760,22 +762,22 @@ func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, erro
 	if (s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "") && s.ManagedIdentityClientID != "" {
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: more than one authentication method specified")
 	}
+	var cred azcore.TokenCredential
+	var err error
 	switch {
 	case s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "":
-		creds := azure.Credentials{
-			TenantID: s.TenantID,
-			ClientID: s.ClientID,
-			Secret:   s.ClientSecret,
-		}
-		return azure.ConnectWithCredentials(ctx, s.Endpoint, creds)
+		cred, err = azidentity.NewClientSecretCredential(s.TenantID, s.ClientID, s.ClientSecret, nil)
 	case s.ManagedIdentityClientID != "":
-		creds := azure.ManagedIdentity{
-			ClientID: s.ManagedIdentityClientID,
-		}
-		return azure.ConnectWithIdentity(ctx, s.Endpoint, creds)
+		cred, err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(s.ManagedIdentityClientID),
+		})
 	default:
-		return nil, errors.New("edge: failed to connect to Azure KeyVault: no authentication method specified")
+		cred, err = azidentity.NewDefaultAzureCredential(nil)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("azure: failed to create default Azure credential: %v", err)
+	}
+	return azure.ConnectWithCredentials(s.Endpoint, cred)
 }
 
 // EntrustKeyControlKeyStore is a structure containing the

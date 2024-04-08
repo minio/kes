@@ -8,9 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
-	"path"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
@@ -43,17 +41,9 @@ type client struct {
 func (c *client) CreateSecret(ctx context.Context, name, value string) (status, error) {
 	_, err := c.azsecretsClient.SetSecret(ctx, name, azsecrets.SetSecretParameters{
 		Value: &value,
-	}, &azsecrets.SetSecretOptions{})
+	}, nil)
 	if err != nil {
-		azResp, ok := transportErrToResponseError(err)
-		if !ok {
-			return status{}, err
-		}
-		return status{
-			StatusCode: azResp.StatusCode,
-			ErrorCode:  azResp.ErrorCode,
-			Message:    azResp.errorResponse.Error.Message,
-		}, nil
+		return transportErrToStatus(err)
 	}
 	return status{
 		StatusCode: http.StatusOK,
@@ -77,20 +67,13 @@ func (c *client) CreateSecret(ctx context.Context, name, value string) (status, 
 // if the secret is disabled, expired or should not
 // be used, yet.
 func (c *client) GetSecret(ctx context.Context, name, version string) (string, status, error) {
-	response, err := c.azsecretsClient.GetSecret(ctx, name, version, &azsecrets.GetSecretOptions{})
+	response, err := c.azsecretsClient.GetSecret(ctx, name, version, nil)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return "", status{}, err
 	}
 	if err != nil {
-		azResp, ok := transportErrToResponseError(err)
-		if !ok {
-			return "", status{}, err
-		}
-		return "", status{
-			StatusCode: azResp.StatusCode,
-			ErrorCode:  azResp.ErrorCode,
-			Message:    azResp.errorResponse.Error.Message,
-		}, nil
+		stat, err := transportErrToStatus(err)
+		return "", stat, err
 	}
 	if response.Attributes.Enabled != nil && !*response.Attributes.Enabled {
 		return "", status{
@@ -135,17 +118,9 @@ func (c *client) GetSecret(ctx context.Context, name, version string) (string, s
 // even if it returns 200 OK. Instead, the secret may be in
 // a transition state from "active" to (soft) deleted.
 func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) {
-	_, err := c.azsecretsClient.DeleteSecret(ctx, name, &azsecrets.DeleteSecretOptions{})
+	_, err := c.azsecretsClient.DeleteSecret(ctx, name, nil)
 	if err != nil {
-		azResp, ok := transportErrToResponseError(err)
-		if !ok {
-			return status{}, err
-		}
-		return status{
-			StatusCode: azResp.StatusCode,
-			ErrorCode:  azResp.ErrorCode,
-			Message:    azResp.errorResponse.Error.Message,
-		}, nil
+		return transportErrToStatus(err)
 	}
 	return status{
 		StatusCode: http.StatusOK,
@@ -158,17 +133,12 @@ func (c *client) DeleteSecret(ctx context.Context, name string) (status, error) 
 // recovered. Therefore, deleting a KeyVault secret permanently is
 // a two-step process.
 func (c *client) PurgeSecret(ctx context.Context, name string) (status, error) {
-	_, err := c.azsecretsClient.PurgeDeletedSecret(ctx, name, &azsecrets.PurgeDeletedSecretOptions{})
+	_, err := c.azsecretsClient.PurgeDeletedSecret(ctx, name, nil)
 	if err != nil {
-		azResp, ok := transportErrToResponseError(err)
-		if !ok {
-			return status{}, err
+		stat, err := transportErrToStatus(err)
+		if stat.StatusCode != http.StatusNoContent && stat.StatusCode != http.StatusOK && stat.StatusCode != http.StatusNotFound {
+			return stat, err
 		}
-		return status{
-			StatusCode: azResp.StatusCode,
-			ErrorCode:  azResp.ErrorCode,
-			Message:    azResp.errorResponse.Error.Message,
-		}, nil
 	}
 	return status{
 		StatusCode: http.StatusOK,
@@ -183,53 +153,39 @@ func (c *client) PurgeSecret(ctx context.Context, name string) (status, error) {
 // versions of the given secret. When a secret contains more then 25
 // versions GetFirstVersions returns a status with a 422 HTTP error code.
 func (c *client) GetFirstVersion(ctx context.Context, name string) (string, status, error) {
-	pager := c.azsecretsClient.NewListSecretPropertiesVersionsPager(name, &azsecrets.ListSecretPropertiesVersionsOptions{})
+	pager := c.azsecretsClient.NewListSecretPropertiesVersionsPager(name, nil)
+	page, err := pager.NextPage(ctx)
+	if err != nil {
+		stat, err := transportErrToStatus(err)
+		return "", stat, err
+	}
 	if pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			azResp, ok := transportErrToResponseError(err)
-			if !ok {
-				return "", status{}, err
-			}
-			return "", status{
-				StatusCode: azResp.StatusCode,
-				ErrorCode:  azResp.ErrorCode,
-				Message:    azResp.errorResponse.Error.Message,
-			}, nil
-		}
-		if page.SecretPropertiesListResult.NextLink != nil && *page.SecretPropertiesListResult.NextLink != "" {
-			return "", status{
-				StatusCode: http.StatusUnprocessableEntity,
-				ErrorCode:  "TooManyObjectVersions",
-				Message:    fmt.Sprintf("There are too many versions of %q.", name),
-			}, nil
-		}
-		if len(page.SecretPropertiesListResult.Value) == 0 {
-			return "", status{
-				StatusCode: http.StatusNotFound,
-				ErrorCode:  "NoObjectVersions",
-				Message:    fmt.Sprintf("There are no versions of %q.", name),
-			}, nil
-		}
-		var (
-			id        string                 // most recent Secret ID
-			createdAt int64  = math.MaxInt64 // most recent createdAt UNIX timestamp
-		)
-		for _, v := range page.SecretPropertiesListResult.Value {
-			if v.Attributes != nil && v.Attributes.Created != nil && v.ID != nil {
-				if createdAt > (*v.Attributes.Created).Unix() {
-					createdAt = (*v.Attributes.Created).Unix()
-					id = v.ID.Version()
-				}
-			}
-		}
-		return path.Base(id), status{
-			StatusCode: http.StatusOK,
+		return "", status{
+			StatusCode: http.StatusUnprocessableEntity,
+			ErrorCode:  "TooManyObjectVersions",
+			Message:    fmt.Sprintf("There are too many versions of %q.", name),
 		}, nil
 	}
-	return "", status{
-		StatusCode: http.StatusNotFound,
-		ErrorCode:  "NoObjectVersions",
-		Message:    fmt.Sprintf("There are no versions of %q.", name),
+	if len(page.SecretPropertiesListResult.Value) == 0 {
+		return "", status{
+			StatusCode: http.StatusNotFound,
+			ErrorCode:  "NoObjectVersions",
+			Message:    fmt.Sprintf("There are no versions of %q.", name),
+		}, nil
+	}
+	var (
+		version   string           // most recent Secret version
+		createdAt *time.Time = nil // most recent createdAt UNIX timestamp
+	)
+	for _, v := range page.SecretPropertiesListResult.Value {
+		if v.Attributes != nil && v.Attributes.Created != nil && v.ID != nil {
+			if createdAt == nil || createdAt.After(*v.Attributes.Created) {
+				createdAt = v.Attributes.Created
+				version = v.ID.Version()
+			}
+		}
+	}
+	return version, status{
+		StatusCode: http.StatusOK,
 	}, nil
 }

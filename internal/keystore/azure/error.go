@@ -6,9 +6,9 @@ package azure
 
 import (
 	"encoding/json"
-	"net/http"
+	"errors"
 
-	"aead.dev/mem"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // errorResponse is a KeyVault secrets API error response.
@@ -22,18 +22,19 @@ type errorResponse struct {
 	} `json:"error"`
 }
 
-// parseErrorResponse parses the response body as
-// KeyVault secrets API error response.
-func parseErrorResponse(resp *http.Response) (errorResponse, error) {
-	const MaxSize = 1 * mem.MiB
-	limit := mem.Size(resp.ContentLength)
-	if limit < 0 || limit > MaxSize {
-		limit = MaxSize
+// transportErrToStatus converts a transport error to a Status.
+func transportErrToStatus(err error) (status, error) {
+	var rerr *azcore.ResponseError
+	if errors.As(err, &rerr) {
+		var errorResponse errorResponse
+		if rerr.RawResponse != nil {
+			json.NewDecoder(rerr.RawResponse.Body).Decode(&errorResponse)
+		}
+		return status{
+			ErrorCode:  errorResponse.Error.Inner.Code,
+			StatusCode: rerr.StatusCode,
+			Message:    errorResponse.Error.Message,
+		}, nil
 	}
-
-	var response errorResponse
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, limit)).Decode(&response); err != nil {
-		return errorResponse{}, err
-	}
-	return response, nil
+	return status{}, err
 }
