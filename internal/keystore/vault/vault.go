@@ -226,7 +226,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	// But when the client returns an error it does not mean that
 	// the entry does not exist but that some other error (e.g.
 	// network error) occurred.
-	switch secret, err := s.client.Logical().Read(location); {
+	switch secret, err := s.client.Logical().ReadWithContext(ctx, location); {
 	case err == nil && secret != nil && s.config.APIVersion != APIv2:
 		if _, ok := secret.Data[name]; !ok {
 			return fmt.Errorf("vault: entry exist but failed to read '%s': invalid K/V v1 format", location)
@@ -340,13 +340,6 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	return nil
 }
 
-// Set creates the given key-value pair at Vault if and only
-// if the given key does not exist. If such an entry already exists
-// it returns kes.ErrKeyExists.
-func (s *Store) Set(ctx context.Context, name string, value []byte) error {
-	return s.Create(ctx, name, value)
-}
-
 // Get returns the value associated with the given key.
 // If no entry for the key exists it returns kes.ErrKeyNotFound.
 func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
@@ -354,38 +347,27 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 		return nil, errSealed
 	}
 
-	var location string
+	var (
+		location = path.Join(s.config.Prefix, name)
+		entry    *vaultapi.KVSecret
+		err      error
+	)
 	if s.config.APIVersion == APIv2 {
-		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#read-secret-version
-		location = path.Join(s.config.Engine, "data", s.config.Prefix, name) // /<engine>/data/<location>/<name>
+		entry, err = s.client.KVv2(s.config.Engine).GetVersion(ctx, location, 1)
 	} else {
-		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#read-secret
-		location = path.Join(s.config.Engine, s.config.Prefix, name) // /<engine>/<location>/<name>
+		entry, err = s.client.KVv1(s.config.Engine).Get(ctx, location)
 	}
-	entry, err := s.client.Logical().Read(location)
 	if err != nil || entry == nil {
 		// Vault will not return an error if e.g. the key existed but has
 		// been deleted. However, it will return (nil, nil) in this case.
-		if err == nil && entry == nil {
+		if (err == nil && entry == nil) || errors.Is(err, vaultapi.ErrSecretNotFound) {
 			return nil, kesdk.ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("vault: failed to read '%s': %v", location, err)
 	}
 
-	data := entry.Data
-	if s.config.APIVersion == APIv2 { // See: https://www.vaultproject.io/api/secret/kv/kv-v2#sample-response-1 (differs from v1 format)
-		v, ok := entry.Data["data"]
-		if !ok || v == nil {
-			return nil, fmt.Errorf("vault: failed to read '%s': invalid K/V v2 format: missing 'data' entry", location)
-		}
-		data, ok = v.(map[string]interface{})
-		if !ok || data == nil {
-			return nil, fmt.Errorf("vault: failed to read '%s': invalid K/V v2 format: invalid 'data' entry", location)
-		}
-	}
-
 	// Verify that we got a well-formed response from Vault
-	v, ok := data[name]
+	v, ok := entry.Data[name]
 	if !ok || v == nil {
 		return nil, fmt.Errorf("vault: failed to read '%s': entry exists but no secret key is present", location)
 	}
@@ -446,35 +428,19 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return errSealed
 	}
 
-	var location string
+	var (
+		location = path.Join(s.config.Prefix, name)
+		err      error
+	)
 	if s.config.APIVersion == APIv2 {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v2#delete-metadata-and-all-versions
-		location = path.Join(s.config.Engine, "metadata", s.config.Prefix, name) // /<engine>/metadata/<location>/<name>
+		err = s.client.KVv2(s.config.Engine).DeleteMetadata(ctx, location)
 	} else {
 		// See: https://www.vaultproject.io/api/secret/kv/kv-v1#delete-secret
-		location = path.Join(s.config.Engine, s.config.Prefix, name) // /<engine>/<location>/<name>
+		err = s.client.KVv1(s.config.Engine).Delete(ctx, location)
 	}
-
-	// The Vault SDK may not return an error even if it hasn't deleted
-	// an entry - e.g. in case of some network errors. Therefore, we
-	// implement the specific key deletion logic ourself.
-	//
-	// We expect HTTP 204 (No Content) when a key got deleted successfully.
-	// So, we check that Vault response with 204. Otherwise, we return an
-	// error.
-	req := s.client.Client.NewRequest(http.MethodDelete, "/v1/"+location)
-	resp, err := s.client.Client.RawRequestWithContext(ctx, req)
 	if err != nil {
 		return fmt.Errorf("vault: failed to delete '%s': %v", location, err)
-	}
-	if resp != nil && resp.Body != nil {
-		defer resp.Body.Close()
-	}
-	if resp.StatusCode != http.StatusNoContent {
-		if _, err := vaultapi.ParseSecret(resp.Body); err != nil {
-			return fmt.Errorf("vault: failed to delete '%s': %v", location, err)
-		}
-		return fmt.Errorf("vault: failed to delete '%s': expected response %s (%d) but received %s (%d)", location, resp.Status, resp.StatusCode, http.StatusText(http.StatusNoContent), http.StatusNoContent)
 	}
 	return nil
 }
@@ -509,10 +475,7 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 		location = path.Join(s.config.Engine, s.config.Prefix)
 	}
 
-	r := s.client.NewRequest("LIST", "/v1/"+location)
-	r.Params.Set("list", "true")
-
-	resp, err := s.client.RawRequestWithContext(ctx, r)
+	resp, err := s.client.Logical().ReadRawWithDataWithContext(ctx, location, map[string][]string{"list": {"true"}})
 	if err != nil {
 		return nil, "", fmt.Errorf("vault: failed to list '%s': %v", location, err)
 	}
