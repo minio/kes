@@ -27,7 +27,6 @@ const policyCmdUsage = `Usage:
 Commands:
     info                     Get information about a policy.
     ls                       List policies.
-    rm                       Remove a policy.
     show                     Display a policy.
 
 Options:
