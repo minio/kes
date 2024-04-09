@@ -28,7 +28,10 @@ func transportErrToStatus(err error) (status, error) {
 	if errors.As(err, &rerr) {
 		var errorResponse errorResponse
 		if rerr.RawResponse != nil {
-			json.NewDecoder(rerr.RawResponse.Body).Decode(&errorResponse)
+			err = json.NewDecoder(rerr.RawResponse.Body).Decode(&errorResponse)
+			if err != nil {
+				return status{}, err
+			}
 		}
 		return status{
 			ErrorCode:  errorResponse.Error.Inner.Code,
