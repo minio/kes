@@ -42,7 +42,7 @@ func TestConnectWithCredentials(t *testing.T) {
 	keyValue := time.Now().Format(time.RFC3339Nano)
 	err = c1.Create(ctx, keyName, []byte(keyValue))
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("error creating key: %s", err)
 	}
 
 	// delete key upon termination
@@ -51,44 +51,47 @@ func TestConnectWithCredentials(t *testing.T) {
 	// fetch key and check if the value is correct
 	data, err := c1.Get(ctx, keyName)
 	if err != nil {
-		t.Errorf("Error fetching key: %v", err)
+		t.Fatalf("error fetching key: %v", err)
 	}
 	if string(data) != keyValue {
-		t.Errorf("Got %q, but expected %q", string(data), keyValue)
+		t.Fatalf("got %q, but expected %q", string(data), keyValue)
 	}
 
 	// list keys
 	list, next, err := c1.List(ctx, prefix, 25)
 	if err != nil {
-		t.Errorf("Error listing keys: %v", err)
+		t.Fatalf("error listing keys: %v", err)
 	}
 	if len(list) != 1 || next != "" {
-		t.Log("Got the following keys:\n")
+		t.Log("got the following keys:\n")
 		for _, key := range list {
 			t.Logf("- %s", key)
-			t.Errorf("Got %d keys, but expected 1 key", len(list))
+			t.Fatalf("got %d keys, but only expected key %q", len(list), keyName)
 		}
+	}
+	if list[0] != keyName {
+		t.Fatalf("got key %q, but expected key %q", list[0], keyName)
 	}
 
 	// delete the key
 	err = c1.Delete(ctx, keyName)
 	if err != nil {
-		t.Errorf("Error deleting key: %v", err)
+		t.Fatalf("error deleting key: %v", err)
 	}
 
 	// recreate the key (deleted secret should be purged automatically)
 	keyValue = time.Now().Format(time.RFC3339Nano)
 	err = c1.Create(ctx, keyName, []byte(keyValue))
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("error (re)creating the key: %v", err)
 	}
 
 	// fetch key and check if the value is correct
 	data, err = c1.Get(ctx, keyName)
 	if err != nil {
-		t.Errorf("Error fetching key: %v", err)
+		t.Fatalf("error fetching key %q: %v", keyName, err)
 	}
 	if string(data) != keyValue {
-		t.Errorf("Got %q, but expected %q", string(data), keyValue)
+		t.Errorf("Got value %q, but expected value %q", string(data), keyValue)
 	}
 }
