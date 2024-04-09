@@ -174,8 +174,8 @@ func (c *client) GetFirstVersion(ctx context.Context, name string) (string, stat
 		}, nil
 	}
 	var (
-		version   string           // most recent Secret version
-		createdAt *time.Time = nil // most recent createdAt UNIX timestamp
+		version   string     // most recent Secret version
+		createdAt *time.Time // most recent createdAt UNIX timestamp
 	)
 	for _, v := range page.SecretPropertiesListResult.Value {
 		if v.Attributes != nil && v.Attributes.Created != nil && v.ID != nil {

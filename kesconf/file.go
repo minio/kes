@@ -758,7 +758,7 @@ type AzureKeyVaultKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on Azure KeyVault.
-func (s *AzureKeyVaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
+func (s *AzureKeyVaultKeyStore) Connect(_ context.Context) (kes.KeyStore, error) {
 	if (s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "") && s.ManagedIdentityClientID != "" {
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: more than one authentication method specified")
 	}
