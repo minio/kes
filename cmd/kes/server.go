@@ -181,6 +181,7 @@ func startServer(addrFlag, configFlag string) error {
 	defer conf.Keys.Close()
 
 	srv := &kes.Server{}
+	conf.Cache = configureCache(conf.Cache)
 	if rawConfig.Log != nil {
 		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
 		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
@@ -242,6 +243,7 @@ func startServer(addrFlag, configFlag string) error {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue
 				}
+				config.Cache = configureCache(config.Cache)
 
 				closer, err := srv.Update(config)
 				if err != nil {
@@ -345,8 +347,12 @@ func startDevServer(addr string) error {
 	conf := &kes.Config{
 		Admin: apiKey.Identity(),
 		TLS:   tlsConf,
-		Cache: &kes.CacheConfig{},
-		Keys:  &kes.MemKeyStore{},
+		Cache: &kes.CacheConfig{
+			Expiry:        5 * time.Minute,
+			ExpiryUnused:  30 * time.Second,
+			ExpiryOffline: 0,
+		},
+		Keys: &kes.MemKeyStore{},
 	}
 	srv := &kes.Server{}
 
@@ -380,6 +386,21 @@ func startDevServer(addr string) error {
 	}
 	fmt.Println("\n=> Stopping server... Goodbye.")
 	return nil
+}
+
+// configureCache sets default values for each cache config option
+// as documented in: https://github.com/minio/kes/blob/master/server-config.yaml
+func configureCache(c *kes.CacheConfig) *kes.CacheConfig {
+	if c == nil {
+		c = &kes.CacheConfig{}
+	}
+	if c.Expiry == 0 {
+		c.Expiry = 5 * time.Minute
+	}
+	if c.ExpiryUnused == 0 {
+		c.Expiry = 30 * time.Second
+	}
+	return c
 }
 
 // lookupInterfaceIPs returns a list of IP addrs for which a listener

@@ -172,13 +172,14 @@ func newCache(store KeyStore, conf *CacheConfig) *keyCache {
 		stop:  stop,
 	}
 
+	expiryOffline := conf.ExpiryOffline
 	go c.gc(ctx, conf.Expiry, func() {
-		if offline := c.offline.Load(); !offline {
+		if offline := c.offline.Load(); !offline || expiryOffline <= 0 {
 			c.cache.DeleteAll()
 		}
 	})
 	go c.gc(ctx, conf.ExpiryUnused/2, func() {
-		if offline := c.offline.Load(); !offline {
+		if offline := c.offline.Load(); !offline || conf.ExpiryOffline <= 0 {
 			c.cache.DeleteFunc(func(_ string, e *cacheEntry) bool {
 				// We remove an entry if it isn't marked as used.
 				// We also change all other entries to unused such
@@ -195,7 +196,7 @@ func newCache(store KeyStore, conf *CacheConfig) *keyCache {
 		}
 	})
 	go c.gc(ctx, conf.ExpiryOffline, func() {
-		if offline := c.offline.Load(); offline {
+		if offline := c.offline.Load(); offline && expiryOffline > 0 {
 			c.cache.DeleteAll()
 		}
 	})
