@@ -354,7 +354,7 @@ func (s *Store) purgeWithRetry(ctx context.Context, name string, retries int) (s
 			return stat, fmt.Errorf("azure: failed to delete '%s': %s (%s)", name, stat.Message, stat.ErrorCode)
 		}
 		switch {
-		case stat.StatusCode == http.StatusOK:
+		case stat.StatusCode == http.StatusOK || stat.StatusCode == http.StatusNotFound:
 			return stat, nil
 		case stat.StatusCode == http.StatusForbidden && stat.ErrorCode == "ForbiddenByPolicy":
 			return stat, nil
