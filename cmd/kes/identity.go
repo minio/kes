@@ -7,9 +7,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
@@ -27,12 +29,14 @@ import (
 	"github.com/minio/kes/internal/cli"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kms-go/kes"
+	sdk "github.com/minio/kms-go/kes"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/term"
 )
 
 const identityCmdUsage = `Usage:
     kes identity <command>
+    kes identity [KEY | FILE]
 
 Commands:
     new                      Create a new KES identity.
@@ -45,36 +49,134 @@ Options:
 `
 
 func identityCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
-
-	subCmds := commands{
-		"new":  newIdentityCmd,
-		"of":   ofIdentityCmd,
-		"info": infoIdentityCmd,
-		"ls":   lsIdentityCmd,
+	if len(args) >= 2 {
+		subCmds := commands{
+			"new":  newIdentityCmd,
+			"of":   ofIdentityCmd,
+			"info": infoIdentityCmd,
+			"ls":   lsIdentityCmd,
+		}
+		if cmd, ok := subCmds[args[1]]; ok {
+			cmd(args[1:])
+			return
+		}
 	}
 
-	if len(args) < 2 {
-		cmd.Usage()
-		os.Exit(2)
-	}
-	if cmd, ok := subCmds[args[1]]; ok {
-		cmd(args[1:])
-		return
-	}
-
-	if err := cmd.Parse(args[1:]); err != nil {
+	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	flags.Usage = func() { fmt.Fprint(os.Stderr, identityCmdUsage) }
+	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
 		}
-		cli.Fatalf("%v. See 'kes identity --help'", err)
+		cli.Exit(err)
 	}
-	if cmd.NArg() > 0 {
-		cli.Fatalf("%q is not an identity command. See 'kes identity --help'", cmd.Arg(0))
+
+	if flags.NArg() > 1 {
+		cli.Exit("too many arguments")
 	}
-	cmd.Usage()
-	os.Exit(2)
+
+	if flags.NArg() == 0 {
+		key, err := sdk.GenerateAPIKey(nil)
+		if err != nil {
+			cli.Exitf("failed to generate API key: %v", err)
+		}
+
+		if !cli.IsTerminal() {
+			fmt.Print(key)
+			return
+		}
+
+		buf := &strings.Builder{}
+		fmt.Fprintln(buf, "Your API key:")
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "  ", tui.NewStyle().Bold(true).Render(key.String()))
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "This is the only time it is shown. Keep it secret and secure!")
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "Your API key's identity:")
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "  ", tui.NewStyle().Bold(true).Render(key.Identity().String()))
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "The identity is not a secret an can be shared securely.")
+		fmt.Fprintln(buf, "Peers need your identity in order to verify your API key.")
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "This identity can be re-computed again via:")
+		fmt.Fprintln(buf)
+		fmt.Fprintf(buf, "  $ minkms identity %s", key.String())
+		fmt.Println(tui.NewStyle().Border(tui.HiddenBorder()).Padding(0, 0, 0, 0).Render(buf.String()))
+		return
+	}
+
+	printIdentity := func(identity sdk.Identity) {
+		if !cli.IsTerminal() {
+			fmt.Print(identity)
+			return
+		}
+
+		buf := &strings.Builder{}
+		fmt.Fprintln(buf, "Identity:")
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "  ", tui.NewStyle().Bold(true).Render(identity.String()))
+		fmt.Fprintln(buf)
+		fmt.Fprintln(buf, "An identity is a fingerprint of your API key")
+		fmt.Fprint(buf, "or certificate and can be shared securely.")
+		fmt.Println(tui.NewStyle().Border(tui.HiddenBorder()).Padding(0, 0, 0, 0).Render(buf.String()))
+	}
+	if key, err := sdk.ParseAPIKey(flags.Arg(0)); err == nil {
+		printIdentity(key.Identity())
+		return
+	}
+
+	filename := flags.Arg(0)
+	raw, err := os.ReadFile(filename)
+	if err != nil {
+		cli.Exit(err)
+	}
+	raw = bytes.TrimSpace(raw)
+
+	var block *pem.Block
+	for len(raw) > 0 {
+		if block, raw = pem.Decode(raw); block == nil {
+			cli.Exitf("'%s' contains no valid PEM certificate or private key", filename)
+		}
+
+		switch {
+		case block.Type == "CERTIFICATE":
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				cli.Exit(err)
+			}
+			h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+			printIdentity(sdk.Identity(hex.EncodeToString(h[:])))
+			return
+		case strings.Contains(block.Type, "PRIVATE KEY"): // Type may be PRIVATE KEY, EC PRIVATE KEY, ...
+			priv, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				cli.Exit(err)
+			}
+
+			key, ok := priv.(ed25519.PrivateKey)
+			if !ok {
+				cli.Exitf("'%s' contains unsupported private key. Only ed25519 private keys are supported", filename)
+			}
+			apiKey := "kes:v1:" + base64.StdEncoding.EncodeToString(append([]byte{0}, key[:ed25519.SeedSize]...))
+
+			if !cli.IsTerminal() {
+				fmt.Print(apiKey)
+				return
+			}
+			buf := &strings.Builder{}
+			fmt.Fprintln(buf, "Your API key:")
+			fmt.Fprintln(buf)
+			fmt.Fprintln(buf, "  ", tui.NewStyle().Bold(true).Render(apiKey))
+			fmt.Fprintln(buf)
+			fmt.Fprintf(buf, "It corresponds to the private key in: %s.\n", filename)
+			fmt.Fprint(buf, "Keep it secret and secure!")
+			fmt.Println(tui.NewStyle().Border(tui.HiddenBorder()).Padding(0, 0, 0, 0).Render(buf.String()))
+			return
+		}
+	}
+	cli.Exitf("'%s' contains no valid PEM certificate or private key", filename)
 }
 
 const newIdentityCmdUsage = `Usage:
