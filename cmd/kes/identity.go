@@ -97,7 +97,7 @@ func identityCmd(args []string) {
 		fmt.Fprintln(buf)
 		fmt.Fprintln(buf, "  ", tui.NewStyle().Bold(true).Render(key.Identity().String()))
 		fmt.Fprintln(buf)
-		fmt.Fprintln(buf, "The identity is not a secret an can be shared securely.")
+		fmt.Fprintln(buf, "The identity is not a secret and can be shared securely.")
 		fmt.Fprintln(buf, "Peers need your identity in order to verify your API key.")
 		fmt.Fprintln(buf)
 		fmt.Fprintln(buf, "This identity can be re-computed again via:")
