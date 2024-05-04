@@ -7,7 +7,6 @@ package azure
 import (
 	"encoding/json"
 	"errors"
-	"log/slog"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
@@ -31,7 +30,6 @@ func transportErrToStatus(err error) (status, error) {
 		if rerr.RawResponse != nil {
 			jsonErr := json.NewDecoder(rerr.RawResponse.Body).Decode(&errorResponse)
 			if jsonErr != nil {
-				slog.Error("error deserializing Azure KeyVault error message: %v", jsonErr)
 				return status{}, err
 			}
 		}
