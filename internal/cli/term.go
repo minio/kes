@@ -11,7 +11,7 @@ import (
 	"golang.org/x/term"
 )
 
-var isTerm = term.IsTerminal(int(os.Stdout.Fd()))
+var isTerm = term.IsTerminal(int(os.Stdout.Fd())) || term.IsTerminal(int(os.Stderr.Fd()))
 
 // IsTerminal reports whether stdout is a terminal.
 func IsTerminal() bool { return isTerm }
