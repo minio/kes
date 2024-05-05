@@ -6,30 +6,17 @@ package cli
 
 import (
 	"fmt"
-	"os"
-
-	tui "github.com/charmbracelet/lipgloss"
 )
-
-var errPrefix = tui.NewStyle().Foreground(tui.Color("#ac0000")).Render("Error: ")
 
 // Fatal writes an error prefix and the operands
 // to OS stderr. Then, Fatal terminates the program by
 // calling os.Exit(1).
-func Fatal(v ...any) {
-	fmt.Fprint(os.Stderr, errPrefix)
-	fmt.Fprint(os.Stderr, v...)
-	fmt.Fprintln(os.Stderr)
-	os.Exit(1)
-}
+func Fatal(v ...any) { Exit(v...) }
 
 // Fatalf writes an error prefix and the operands,
 // formatted according to the format specifier, to OS stderr.
 // Then, Fatalf terminates the program by calling os.Exit(1).
-func Fatalf(format string, v ...any) {
-	fmt.Fprintf(os.Stderr, errPrefix+format+"\n", v...)
-	os.Exit(1)
-}
+func Fatalf(format string, v ...any) { Exitf(format, v...) }
 
 // Print formats using the default formats for its operands and
 // writes to standard output. Spaces are added between operands

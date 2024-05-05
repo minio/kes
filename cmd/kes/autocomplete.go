@@ -110,7 +110,7 @@ func installAutoCompletion() {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		cli.Fatalf("failed to detect home directory: %v")
+		cli.Fatalf("failed to detect home directory: %v", home)
 	}
 	if home == "" {
 		home = "~"
@@ -119,11 +119,11 @@ func installAutoCompletion() {
 
 	binaryPath, err := os.Executable()
 	if err != nil {
-		cli.Fatalf("failed to detect binary path: %v")
+		cli.Fatalf("failed to detect binary path: %v", err)
 	}
 	binaryPath, err = filepath.Abs(binaryPath)
 	if err != nil {
-		cli.Fatalf("failed to turn binary path into an absolute path: %v")
+		cli.Fatalf("failed to turn binary path into an absolute path: %v", err)
 	}
 
 	var (
