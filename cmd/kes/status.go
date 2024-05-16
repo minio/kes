@@ -66,7 +66,9 @@ func statusCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes status --help'")
 	}
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
@@ -90,7 +92,7 @@ func statusCmd(args []string) {
 
 	if jsonFlag {
 		encoder := json.NewEncoder(os.Stdout)
-		if isTerm(os.Stdout) && !shortFlag {
+		if cli.IsTerminal() && !shortFlag {
 			encoder.SetIndent("", "  ")
 		}
 		if apiFlag {

@@ -33,6 +33,7 @@ const usage = `Usage:
 Commands:
     server                   Start a KES server.
 
+    ls                       List keys, policies and identites.
     key                      Manage cryptographic keys.
     policy                   Manage KES policies.
     identity                 Manage KES identities.
@@ -61,6 +62,7 @@ func main() {
 	subCmds := commands{
 		"server": serverCmd,
 
+		"ls":       ls,
 		"key":      keyCmd,
 		"policy":   policyCmd,
 		"identity": identityCmd,
@@ -124,110 +126,124 @@ func main() {
 	os.Exit(2)
 }
 
-func newClient(insecureSkipVerify bool) *kes.Client {
-	const DefaultServer = "https://127.0.0.1:7373"
-	const (
-		EnvServer     = "KES_SERVER"
-		EnvAPIKey     = "KES_API_KEY"
-		EnvClientKey  = "KES_CLIENT_KEY"
-		EnvClientCert = "KES_CLIENT_CERT"
-	)
-
-	if apiKey, ok := os.LookupEnv(EnvAPIKey); ok {
-		if _, ok = os.LookupEnv(EnvClientCert); ok {
-			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientCert)
-		}
-		if _, ok = os.LookupEnv(EnvClientKey); ok {
-			cli.Fatalf("two conflicting environment variables set: unset either '%s' or '%s'", EnvAPIKey, EnvClientKey)
-		}
-		key, err := kes.ParseAPIKey(apiKey)
-		if err != nil {
-			cli.Fatalf("invalid API key: %v", err)
-		}
-		cert, err := kes.GenerateCertificate(key)
-		if err != nil {
-			cli.Fatalf("failed to generate client certificate from API key: %v", err)
-		}
-
-		addr := DefaultServer
-		if env, ok := os.LookupEnv(EnvServer); ok {
-			addr = env
-		}
-		return kes.NewClientWithConfig(addr, &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: insecureSkipVerify,
-		})
-	}
-
-	certPath, ok := os.LookupEnv(EnvClientCert)
-	if !ok {
-		cli.Fatalf("no TLS client certificate. Environment variable '%s' is not set", EnvClientCert)
-	}
-	if strings.TrimSpace(certPath) == "" {
-		cli.Fatalf("no TLS client certificate. Environment variable '%s' is empty", EnvClientCert)
-	}
-
-	keyPath, ok := os.LookupEnv(EnvClientKey)
-	if !ok {
-		cli.Fatalf("no TLS private key. Environment variable '%s' is not set", EnvClientKey)
-	}
-	if strings.TrimSpace(keyPath) == "" {
-		cli.Fatalf("no TLS private key. Environment variable '%s' is empty", EnvClientKey)
-	}
-
-	certPem, err := os.ReadFile(certPath)
-	if err != nil {
-		cli.Fatalf("failed to load TLS certificate: %v", err)
-	}
-	certPem, err = https.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
-	if err != nil {
-		cli.Fatalf("failed to load TLS certificate: %v", err)
-	}
-	keyPem, err := os.ReadFile(keyPath)
-	if err != nil {
-		cli.Fatalf("failed to load TLS private key: %v", err)
-	}
-
-	// Check whether the private key is encrypted. If so, ask the user
-	// to enter the password on the CLI.
-	privateKey, err := decodePrivateKey(keyPem)
-	if err != nil {
-		cli.Fatalf("failed to read TLS private key: %v", err)
-	}
-	if len(privateKey.Headers) > 0 && x509.IsEncryptedPEMBlock(privateKey) {
-		fmt.Fprint(os.Stderr, "Enter password for private key: ")
-		password, err := term.ReadPassword(int(os.Stderr.Fd()))
-		if err != nil {
-			cli.Fatalf("failed to read private key password: %v", err)
-		}
-		fmt.Fprintln(os.Stderr) // Add the newline again
-
-		decPrivateKey, err := x509.DecryptPEMBlock(privateKey, password)
-		if err != nil {
-			if errors.Is(err, x509.IncorrectPasswordError) {
-				cli.Fatalf("incorrect password")
-			}
-			cli.Fatalf("failed to decrypt private key: %v", err)
-		}
-		keyPem = pem.EncodeToMemory(&pem.Block{Type: privateKey.Type, Bytes: decPrivateKey})
-	}
-
-	cert, err := tls.X509KeyPair(certPem, keyPem)
-	if err != nil {
-		cli.Fatalf("failed to load TLS private key or certificate: %v", err)
-	}
-
-	addr := DefaultServer
-	if env, ok := os.LookupEnv(EnvServer); ok {
-		addr = env
-	}
-	return kes.NewClientWithConfig(addr, &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: insecureSkipVerify,
-	})
+// config is a structure containing configuration for a client.
+type config struct {
+	Endpoint           string
+	APIKey             string
+	PrivateKeyFile     string
+	CertificateFile    string
+	InsecureSkipVerify bool
 }
 
-func isTerm(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
+// newClient returns a new client using the given config.
+// On error, it aborts the program using cli.Exit.
+func newClient(conf config) *kes.Client {
+	var (
+		endpoints = strings.Split(conf.Endpoint, ",")
+		apiKey    = conf.APIKey
+		keyFile   = conf.PrivateKeyFile
+		certFile  = conf.CertificateFile
+	)
+
+	if conf.Endpoint == "" {
+		endpoints = strings.Split(cli.Env(cli.EnvServer), ",")
+	}
+	for i := range endpoints {
+		endpoints[i] = strings.TrimSpace(endpoints[i])
+		endpoints[i] = strings.TrimPrefix(endpoints[i], "http://")
+		if !strings.HasPrefix(endpoints[i], "https://") {
+			endpoints[i] = "https://" + endpoints[i]
+		}
+	}
+	if len(endpoints) == 0 {
+		cli.Exitf("'%s' contains no hosts / IPs", cli.EnvServer)
+	}
+
+	if apiKey == "" {
+		apiKey = cli.Env(cli.EnvAPIKey)
+	}
+	if keyFile == "" {
+		keyFile = cli.Env(cli.EnvPrivateKey)
+	}
+	if certFile == "" {
+		certFile = cli.Env(cli.EnvCertificate)
+	}
+
+	if apiKey == "" && keyFile == "" && certFile == "" {
+		cli.Exitf("no API key specified. Consider setting %s", cli.EnvAPIKey)
+	}
+	if apiKey != "" && keyFile != "" {
+		cli.Exit("API key and private key file cannot be used at the same time")
+	}
+	if apiKey != "" && certFile != "" {
+		cli.Exit("API key and certificate file cannot be used at the same time")
+	}
+	if keyFile != "" && certFile == "" {
+		cli.Exitf("no certificate file specified. Consider setting %s", cli.EnvCertificate)
+	}
+	if keyFile == "" && certFile != "" {
+		cli.Exitf("no private key file specified. Consider setting %s", cli.EnvPrivateKey)
+	}
+
+	var cert tls.Certificate
+	if apiKey != "" {
+		key, err := kes.ParseAPIKey(apiKey)
+		if err != nil {
+			cli.Exitf("parsing API key: %v", err)
+		}
+		if cert, err = kes.GenerateCertificate(key); err != nil {
+			cli.Exitf("generating certificate: %v", err)
+		}
+	} else {
+		certPem, err := os.ReadFile(certFile)
+		if err != nil {
+			cli.Fatalf("reading certificate file: %v", err)
+		}
+		certPem, err = https.FilterPEM(certPem, func(b *pem.Block) bool { return b.Type == "CERTIFICATE" })
+		if err != nil {
+			cli.Fatalf("reading certificate file: %v", err)
+		}
+		keyPem, err := os.ReadFile(keyFile)
+		if err != nil {
+			cli.Fatalf("reading private key file: %v", err)
+		}
+
+		// Check whether the private key is encrypted. If so, ask the user
+		// to enter the password on the CLI.
+		privateKey, err := decodePrivateKey(keyPem)
+		if err != nil {
+			cli.Fatalf("failed to read TLS private key: %v", err)
+		}
+		if len(privateKey.Headers) > 0 && x509.IsEncryptedPEMBlock(privateKey) {
+			fmt.Fprint(os.Stderr, "Enter password for private key: ")
+			password, err := term.ReadPassword(int(os.Stderr.Fd()))
+			if err != nil {
+				cli.Exitf("reading password: %v", err)
+			}
+			fmt.Fprintln(os.Stderr) // Add the newline again
+
+			decPrivateKey, err := x509.DecryptPEMBlock(privateKey, password)
+			if err != nil {
+				if errors.Is(err, x509.IncorrectPasswordError) {
+					cli.Exit("incorrect password")
+				}
+				cli.Exitf("failed to decrypt private key: %v", err)
+			}
+			keyPem = pem.EncodeToMemory(&pem.Block{Type: privateKey.Type, Bytes: decPrivateKey})
+		}
+
+		if cert, err = tls.X509KeyPair(certPem, keyPem); err != nil {
+			cli.Exit(err)
+		}
+	}
+
+	client := kes.NewClientWithConfig("", &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: conf.InsecureSkipVerify,
+	})
+	client.Endpoints = endpoints
+	return client
+}
 
 func decodePrivateKey(pemBlock []byte) (*pem.Block, error) {
 	ErrNoPrivateKey := errors.New("no PEM-encoded private key found")

@@ -116,7 +116,9 @@ func createKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	for _, name := range cmd.Args() {
 		if err := client.CreateKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -169,7 +171,9 @@ func importKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	enclave := newClient(insecureSkipVerify)
+	enclave := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	if err = enclave.ImportKey(ctx, name, &kes.ImportKeyRequest{Key: key}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
@@ -229,7 +233,9 @@ func describeKeyCmd(args []string) {
 	defer cancelCtx()
 
 	name := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	info, err := client.DescribeKey(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -308,7 +314,9 @@ func lsKeyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newClient(insecureSkipVerify)
+	enclave := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	iter := &kes.ListIter[string]{
 		NextFunc: enclave.ListKeys,
 	}
@@ -380,7 +388,9 @@ func rmKeyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	for _, name := range cmd.Args() {
 		if err := client.DeleteKey(ctx, name); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -436,7 +446,9 @@ func encryptKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	ciphertext, err := client.Encrypt(ctx, name, []byte(message), nil)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -445,7 +457,7 @@ func encryptKeyCmd(args []string) {
 		cli.Fatalf("failed to encrypt message: %v", err)
 	}
 
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		fmt.Printf("\nciphertext: %s\n", base64.StdEncoding.EncodeToString(ciphertext))
 	} else {
 		fmt.Printf(`{"ciphertext":"%s"}`, base64.StdEncoding.EncodeToString(ciphertext))
@@ -509,7 +521,9 @@ func decryptKeyCmd(args []string) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	plaintext, err := client.Decrypt(ctx, name, ciphertext, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -518,7 +532,7 @@ func decryptKeyCmd(args []string) {
 		cli.Fatalf("failed to decrypt ciphertext: %v", err)
 	}
 
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		fmt.Printf("\nplaintext: %s\n", base64.StdEncoding.EncodeToString(plaintext))
 	} else {
 		fmt.Printf(`{"plaintext":"%s"}`, base64.StdEncoding.EncodeToString(plaintext))
@@ -575,7 +589,9 @@ func dekCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	key, err := client.GenerateKey(ctx, name, associatedData)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -588,7 +604,7 @@ func dekCmd(args []string) {
 		plaintext  = base64.StdEncoding.EncodeToString(key.Plaintext)
 		ciphertext = base64.StdEncoding.EncodeToString(key.Ciphertext)
 	)
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		const format = "\nplaintext:  %s\nciphertext: %s\n"
 		fmt.Printf(format, plaintext, ciphertext)
 	} else {

@@ -6,10 +6,10 @@ package main
 
 import (
 	"errors"
-	"os"
 	"strings"
 
 	tui "github.com/charmbracelet/lipgloss"
+	"github.com/minio/kes/internal/cli"
 	"github.com/muesli/termenv"
 	flag "github.com/spf13/pflag"
 )
@@ -29,7 +29,7 @@ var _ flag.Value = (*colorOption)(nil)
 
 func (c *colorOption) Colorize() bool {
 	v := strings.ToLower(c.value)
-	return v == "always" || ((v == "auto" || v == "") && isTerm(os.Stdout))
+	return v == "always" || ((v == "auto" || v == "") && cli.IsTerminal())
 }
 
 func (c *colorOption) String() string { return c.value }

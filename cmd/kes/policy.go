@@ -113,7 +113,9 @@ func lsPolicyCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newClient(insecureSkipVerify)
+	enclave := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	iter := &kes.ListIter[string]{
 		NextFunc: enclave.ListPolicies,
 	}
@@ -194,7 +196,9 @@ func infoPolicyCmd(args []string) {
 	defer cancelCtx()
 
 	name := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	info, err := client.DescribePolicy(ctx, name)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -204,7 +208,7 @@ func infoPolicyCmd(args []string) {
 	}
 	if jsonFlag {
 		encoder := json.NewEncoder(os.Stdout)
-		if isTerm(os.Stdout) {
+		if cli.IsTerminal() {
 			encoder.SetIndent("", "  ")
 		}
 		if err = encoder.Encode(info); err != nil {
@@ -269,7 +273,9 @@ func showPolicyCmd(args []string) {
 	}
 
 	name := cmd.Arg(0)
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
@@ -281,7 +287,7 @@ func showPolicyCmd(args []string) {
 		}
 		cli.Fatalf("failed to show policy '%s': %v", name, err)
 	}
-	if !isTerm(os.Stdout) || jsonFlag {
+	if !cli.IsTerminal() || jsonFlag {
 		type Response struct {
 			Allow     map[string]kes.Rule `json:"allow,omitempty"`
 			Deny      map[string]kes.Rule `json:"deny,omitempty"`
@@ -289,7 +295,7 @@ func showPolicyCmd(args []string) {
 			CreatedBy kes.Identity        `json:"created_by,omitempty"`
 		}
 		encoder := json.NewEncoder(os.Stdout)
-		if isTerm(os.Stdout) {
+		if cli.IsTerminal() {
 			encoder.SetIndent("", "  ")
 		}
 		err = encoder.Encode(Response{

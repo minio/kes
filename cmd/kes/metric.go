@@ -52,11 +52,13 @@ func metricCmd(args []string) {
 		cli.Fatal("too many arguments. See 'kes metric --help'")
 	}
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		traceMetricsWithUI(ctx, client, rate)
 		return
 	}
