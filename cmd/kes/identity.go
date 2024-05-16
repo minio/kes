@@ -337,7 +337,7 @@ func newIdentityCmd(args []string) {
 	}
 
 	bold := tui.NewStyle()
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		bold = bold.Bold(true)
 	}
 	var buffer strings.Builder
@@ -418,7 +418,7 @@ func ofIdentityCmd(args []string) {
 		h := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 		identity = kes.Identity(hex.EncodeToString(h[:]))
 	}
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		var buffer strings.Builder
 		fmt.Fprintln(&buffer, "Identity:")
 		fmt.Fprintln(&buffer)
@@ -491,7 +491,9 @@ func infoIdentityCmd(args []string) {
 		dotDenyStyle = dotDenyStyle.Foreground(ColorDotDeny)
 	}
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	if cmd.NArg() == 0 {
 		info, policy, err := client.DescribeSelf(ctx)
 		if err != nil {
@@ -619,7 +621,9 @@ func lsIdentityCmd(args []string) {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
-	enclave := newClient(insecureSkipVerify)
+	enclave := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	iter := &kes.ListIter[kes.Identity]{
 		NextFunc: enclave.ListIdentities,
 	}

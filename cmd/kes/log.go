@@ -67,7 +67,9 @@ func logCmd(args []string) {
 		auditFlag = !auditFlag
 	}
 
-	client := newClient(insecureSkipVerify)
+	client := newClient(config{
+		InsecureSkipVerify: insecureSkipVerify,
+	})
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancelCtx()
 
@@ -125,7 +127,7 @@ func printAuditLog(stream *kes.AuditStream) {
 		format = "%02d:%02d:%02d    %s     %s    %s    %s    %s\n"
 	)
 
-	if isTerm(os.Stdout) {
+	if cli.IsTerminal() {
 		fmt.Println(tui.NewStyle().Bold(true).Underline(true).Render(header))
 	} else {
 		fmt.Println(header)
