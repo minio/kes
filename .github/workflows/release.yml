@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.22.2
+          go-version: 1.22.4
           check-latest: true
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -30,4 +30,4 @@ jobs:
         uses: goreleaser/goreleaser-action@v3
         with:
           version: latest
-          args: release --skip-publish --skip-sign --clean --snapshot --skip-before
+          args: release --skip=publish,sign,before --clean --snapshot

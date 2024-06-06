@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -15,243 +16,252 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/minio/kes/internal/cli"
+	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/kesconf"
 	"github.com/minio/kms-go/kes"
+	"github.com/minio/kms-go/kms"
 	flag "github.com/spf13/pflag"
-	"golang.org/x/term"
 )
 
-const migrateCmdUsage = `Usage:
-    kes migrate [options] [<pattern>]
+const migrateUsage = `Usage:
+    kes migrate [-f] [--merge] [--from FILE] [--to FILE] [PATTERN]
+    kes migrate [-k] [-f] [--merge] [--from FILE] [--s HOST] [-e ENCLAVE]
+                [-a KEY] [PATTERN]
 
 Options:
-    --from <PATH>            Path to the KES config file of the migration source.
-    --to   <PATH>            Path to the KES config file of the migration target.
+    --from <PATH>            Path to source KES config file.
+    --to   <PATH>            Path to target KES config file.
+
+    -s, --server HOST        KMS server endpoint to which keys are migrated.
+                             Defaults to the value of $MINIO_KMS_SERVER
+    -e, --enclave ENCLAVE    KMS enclave endpoint to which keys are migrated.
+                             Defaults to the value of $MINIO_KMS_ENCLAVE
+    -a, --api-key KEY        KMS API key used to authenticate to the KMS server.
+                             Defaults to the value of $MINIO_KMS_API_KEY
+    -k, --insecure           Skip KMS server certificate verification.
 
     -f, --force              Migrate keys even if a key with the same name exists
                              at the target. The existing keys will be deleted.
 
     --merge                  Merge the source into the target by only migrating
                              those keys that do not exist at the target.
-
-    -q, --quiet              Do not print progress information.
-    -h, --help               Print command line options.
-
-Examples:
-    $ kes migrate --from vault-config.yml --to aws-config.yml
 `
 
-func migrateCmd(args []string) {
-	cmd := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	cmd.Usage = func() { fmt.Fprint(os.Stderr, migrateCmdUsage) }
-
+func migrate(args []string) {
 	var (
-		fromPath  string
-		toPath    string
-		force     bool
-		merge     bool
-		quietFlag bool
+		insecureSkipVerify bool
+		force              bool
+		merge              bool
+		fromPath           string
+		toPath             string
+		kmsServer          string
+		kmsEnclave         string
+		kmsAPIKey          string
 	)
-	cmd.StringVar(&fromPath, "from", "", "Path to the config file of the migration source")
-	cmd.StringVar(&toPath, "to", "", "Path to the config file of the migration target")
-	cmd.BoolVarP(&force, "force", "f", false, "Overwrite existing keys at the migration target")
-	cmd.BoolVar(&merge, "merge", false, "Only migrate keys that don't exist at the migration target")
-	cmd.BoolVarP(&quietFlag, "quiet", "q", false, "Do not print progress information")
-	if err := cmd.Parse(args[1:]); err != nil {
+
+	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	flags.Usage = func() { fmt.Fprint(os.Stderr, migrateUsage) }
+
+	flags.BoolVarP(&insecureSkipVerify, "insecure", "k", false, "")
+	flags.BoolVarP(&force, "force", "f", false, "")
+	flags.BoolVar(&merge, "merge", false, "")
+	flags.StringVar(&fromPath, "from", "", "")
+	flags.StringVar(&toPath, "to", "", "")
+	flags.StringVarP(&kmsServer, "server", "s", cli.Env("MINIO_KMS_SERVER"), "")
+	flags.StringVarP(&kmsEnclave, "enclave", "e", cli.Env("MINIO_KMS_ENCLAVE"), "")
+	flags.StringVarP(&kmsAPIKey, "api-key", "a", cli.Env("MINIO_KMS_API_KEY"), "")
+	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
 		}
 		cli.Fatalf("%v. See 'kes migrate --help'", err)
 	}
-	if cmd.NArg() > 1 {
-		cli.Fatal("too many arguments. See 'kes migrate --help'")
+
+	cli.Assert(flags.NArg() <= 1, "too many arguments")
+	cli.Assert(fromPath != "", "no source specified. Use '--from' flag")
+	if flags.Changed("server") {
+		cli.Assert(toPath == "", "cannot use '-s / --server' and '--to' flag")
 	}
-	if fromPath == "" {
-		cli.Fatal("no migration source specified. Use '--from' to specify a config file")
+	if flags.Changed("enclave") {
+		cli.Assert(toPath == "", "cannot use '-e / --enclave' and '--to' flag")
+	}
+	if flags.Changed("api-key") {
+		cli.Assert(toPath == "", "cannot use '-a / --api-key' and '--to' flag")
+	}
+	if toPath != "" {
+		cli.Assert(!insecureSkipVerify, "cannot use '-k / --insecure' and '--to' flag")
 	}
 	if toPath == "" {
-		cli.Fatal("no migration target specified. Use '--to' to specify a config file")
+		cli.Assert(kmsServer != "", "missing migration target. Use '--to' or '--server'")
+		cli.Assert(kmsEnclave != "", "no KMS enclave specified. Use '--enclave'")
+		cli.Assert(kmsAPIKey != "", "no KMS API key specified. Use '--api-key'")
 	}
-	if force && merge {
-		cli.Fatal("mutually exclusive options '--force' and '--merge' specified")
-	}
+	cli.Assert(!(force && merge), "'--force' and '--merge' flags are mutually exclusive")
 
-	quiet := quiet(quietFlag)
-	pattern := cmd.Arg(0)
+	pattern := flags.Arg(0)
 	if pattern == "" {
 		pattern = "*"
 	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt)
 	defer cancel()
 
-	sourceConfig, err := kesconf.ReadFile(fromPath)
-	if err != nil {
-		cli.Fatalf("failed to read '--from' config file: %v", err)
-	}
+	srcConf, err := kesconf.ReadFile(fromPath)
+	cli.Assert(err == nil, err)
 
-	targetConfig, err := kesconf.ReadFile(toPath)
-	if err != nil {
-		cli.Fatalf("failed to read '--to' config file: %v", err)
-	}
+	src, err := srcConf.KeyStore.Connect(ctx)
+	cli.Assert(err == nil, err)
 
-	src, err := sourceConfig.KeyStore.Connect(ctx)
-	if err != nil {
-		cli.Fatal(err)
-	}
-	dst, err := targetConfig.KeyStore.Connect(ctx)
-	if err != nil {
-		cli.Fatal(err)
-	}
-
-	var (
-		n        uint64
-		uiTicker = time.NewTicker(100 * time.Millisecond)
-	)
-	defer uiTicker.Stop()
-
-	// Now, we start listing the keys at the source.
-	iterator := &kes.ListIter[string]{
+	iter := &kes.ListIter[string]{
 		NextFunc: src.List,
 	}
 
-	// Then, we start the UI which prints how many keys have
-	// been migrated in fixed time intervals.
+	// Migrate from one KES backend (--from) to another one (--to).
+	if toPath != "" {
+		dstConf, err := kesconf.ReadFile(toPath)
+		cli.Assert(err == nil, err)
+
+		dst, err := dstConf.KeyStore.Connect(ctx)
+		cli.Assert(err == nil, err)
+
+		var (
+			count  atomic.Uint64
+			ticker = time.NewTicker(1 * time.Second)
+		)
+		fmt.Println("Starting key migration:")
+		fmt.Println()
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					if n := count.Load(); n <= 1 {
+						fmt.Printf("Migrated %6d key  ...\n", n)
+					} else {
+						fmt.Printf("Migrated %6d keys ...\n", n)
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		for {
+			name, err := iter.Next(ctx)
+			if err == io.EOF {
+				break
+			}
+			cli.Assert(err == nil, err)
+
+			if ok, _ := filepath.Match(pattern, name); !ok {
+				continue
+			}
+
+			key, err := src.Get(ctx, name)
+			cli.Assert(err == nil, err)
+
+			err = dst.Create(ctx, name, key)
+			if merge && errors.Is(err, kes.ErrKeyExists) {
+				continue // Do not increment the counter since we skip this key
+			}
+			if force && errors.Is(err, kes.ErrKeyExists) { // Try to overwrite the key
+				if err = dst.Delete(ctx, name); err != nil {
+					cli.Assert(err == nil, err)
+				}
+				err = dst.Create(ctx, name, key)
+			}
+			cli.Assert(err == nil, err)
+			count.Add(1)
+		}
+		ticker.Stop()
+
+		if n := count.Load(); n == 0 {
+			fmt.Println("Migration succeeded! No keys migrated.")
+		} else {
+			fmt.Printf("Migrated %6d keys successfully!\n", count.Load())
+		}
+		return
+	}
+
+	// Migrate from a KES backend (--from) to a KMS server (-s / --server).
+	apiKey, err := kms.ParseAPIKey(kmsAPIKey)
+	cli.Assert(err == nil, err)
+
+	client, err := kms.NewClient(&kms.Config{
+		Endpoints: []string{kmsServer},
+		APIKey:    apiKey,
+		TLS: &tls.Config{
+			InsecureSkipVerify: insecureSkipVerify,
+		},
+	})
+	cli.Assert(err == nil, err)
+
+	var (
+		count  atomic.Uint64
+		ticker = time.NewTicker(1 * time.Second)
+	)
+	fmt.Println("Starting key migration:")
+	fmt.Println()
 	go func() {
 		for {
 			select {
-			case <-uiTicker.C:
-				msg := fmt.Sprintf("Migrated keys: %d", atomic.LoadUint64(&n))
-				quiet.ClearMessage(msg)
-				quiet.Print(msg)
+			case <-ticker.C:
+				if n := count.Load(); n <= 1 {
+					fmt.Printf("Migrated %6d key  ...\n", n)
+				} else {
+					fmt.Printf("Migrated %6d keys ...\n", n)
+				}
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
-	// Finally, we start the actual migration.
 	for {
-		name, err := iterator.Next(ctx)
+		name, err := iter.Next(ctx)
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			quiet.ClearLine()
-			cli.Fatalf("failed to migrate %q: %v\nMigrated keys: %d", name, err, atomic.LoadUint64(&n))
-		}
+		cli.Assert(err == nil, err)
 
 		if ok, _ := filepath.Match(pattern, name); !ok {
 			continue
 		}
 
-		key, err := src.Get(ctx, name)
-		if err != nil {
-			quiet.ClearLine()
-			cli.Fatalf("failed to migrate %q: %v\nMigrated keys: %d", name, err, atomic.LoadUint64(&n))
-		}
+		b, err := src.Get(ctx, name)
+		cli.Assert(err == nil, err)
 
-		err = dst.Create(ctx, name, key)
-		if merge && errors.Is(err, kes.ErrKeyExists) {
+		key, err := crypto.ParseKeyVersion(b)
+		cli.Assert(err == nil, err)
+
+		err = client.ImportKey(ctx, &kms.ImportKeyRequest{
+			Enclave: kmsEnclave,
+			Name:    name,
+			Type:    kms.SecretKeyType(key.Key.Type()),
+			Key:     key.Key.Bytes(),
+		})
+		if merge && errors.Is(err, kms.ErrKeyExists) {
 			continue // Do not increment the counter since we skip this key
 		}
-		if force && errors.Is(err, kes.ErrKeyExists) { // Try to overwrite the key
-			if err = dst.Delete(ctx, name); err != nil {
-				quiet.ClearLine()
-				cli.Fatalf("failed to migrate %q: %v\nMigrated keys: %d", name, err, atomic.LoadUint64(&n))
+		if force && errors.Is(err, kms.ErrKeyExists) { // Try to overwrite the key
+			if err = client.DeleteKey(ctx, &kms.DeleteKeyRequest{Enclave: kmsEnclave, Name: name, AllVersions: true}); err != nil {
+				cli.Assert(err == nil, err)
 			}
-			err = dst.Create(ctx, name, key)
+			err = client.ImportKey(ctx, &kms.ImportKeyRequest{
+				Enclave: kmsEnclave,
+				Name:    name,
+				Type:    kms.SecretKeyType(key.Key.Type()),
+				Key:     key.Key.Bytes(),
+				// TODO(aead): migrate HMAC key as well
+			})
 		}
-		if err != nil {
-			quiet.ClearLine()
-			cli.Fatalf("failed to migrate %q: %v\nMigrated keys: %d", name, err, atomic.LoadUint64(&n))
-		}
-		atomic.AddUint64(&n, 1)
+		cli.Assert(err == nil, err)
+		count.Add(1)
 	}
-	cancel()
+	ticker.Stop()
 
-	// At the end we show how many keys we have migrated successfully.
-	msg := fmt.Sprintf("Migrated keys: %d ", atomic.LoadUint64(&n))
-	quiet.ClearMessage(msg)
-	quiet.Println(msg)
-}
-
-// quiet is a boolean flag.Value that can print
-// to STDOUT.
-//
-// If quiet is set to true then all quiet.Print*
-// calls become no-ops and no output is printed to
-// STDOUT.
-type quiet bool
-
-// Print behaves as fmt.Print if quiet is false.
-// Otherwise, Print does nothing.
-func (q quiet) Print(a ...any) {
-	if !q {
-		fmt.Print(a...)
-	}
-}
-
-// Printf behaves as fmt.Printf if quiet is false.
-// Otherwise, Printf does nothing.
-func (q quiet) Printf(format string, a ...any) {
-	if !q {
-		fmt.Printf(format, a...)
-	}
-}
-
-// Println behaves as fmt.Println if quiet is false.
-// Otherwise, Println does nothing.
-func (q quiet) Println(a ...any) {
-	if !q {
-		fmt.Println(a...)
-	}
-}
-
-// ClearLine clears the last line written to STDOUT if
-// STDOUT is a terminal that supports terminal control
-// sequences.
-//
-// Otherwise, ClearLine just prints a empty newline.
-func (q quiet) ClearLine() {
-	if color.NoColor {
-		q.Println()
+	if n := count.Load(); n == 0 {
+		fmt.Println("Migration succeeded! No keys migrated.")
 	} else {
-		q.Print(eraseLine)
-	}
-}
-
-const (
-	eraseLine = "\033[2K\r"
-	moveUp    = "\033[1A"
-)
-
-// ClearMessage tries to erase the given message from STDOUT
-// if STDOUT is a terminal that supports terminal control sequences.
-//
-// Otherwise, ClearMessage just prints an empty newline.
-func (q quiet) ClearMessage(msg string) {
-	if color.NoColor {
-		q.Println()
-		return
-	}
-
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil { // If we cannot get the width, just erasure one line
-		q.Print(eraseLine)
-		return
-	}
-
-	// Erase and move up one line as long as the message is not empty.
-	for len(msg) > 0 {
-		q.Print(eraseLine)
-
-		if len(msg) < width {
-			break
-		}
-		q.Print(moveUp)
-		msg = msg[width:]
+		fmt.Printf("Migrated %6d keys successfully!\n", count.Load())
 	}
 }

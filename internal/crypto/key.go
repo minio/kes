@@ -249,6 +249,12 @@ func (s SecretKey) Type() SecretKeyType { return s.cipher }
 // and its ciphertext.
 func (s SecretKey) Overhead() int { return randSize + 16 }
 
+// Bytes returns the raw key bytes.
+func (s SecretKey) Bytes() []byte {
+	b := make([]byte, 0, len(s.key))
+	return append(b, s.key[:]...)
+}
+
 // Encrypt encrypts and authenticates the plaintext and
 // authenticates the associatedData.
 //
