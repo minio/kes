@@ -71,7 +71,7 @@ func main() {
 		"status": statusCmd,
 		"metric": metricCmd,
 
-		"migrate": migrateCmd,
+		"migrate": migrate,
 		"update":  updateCmd,
 	}
 

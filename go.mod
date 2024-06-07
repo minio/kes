@@ -11,9 +11,9 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.1.0
 	github.com/aws/aws-sdk-go v1.52.1
 	github.com/charmbracelet/lipgloss v0.10.0
-	github.com/fatih/color v1.16.0
 	github.com/hashicorp/vault/api v1.13.0
 	github.com/minio/kms-go/kes v0.3.1-0.20240226133855-0dfed1a72132
+	github.com/minio/kms-go/kms v0.4.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/muesli/termenv v0.15.2
 	github.com/prometheus/client_golang v1.19.0
@@ -64,7 +64,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect

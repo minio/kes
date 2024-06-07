@@ -28,3 +28,17 @@ func Exitf(format string, args ...any) {
 	fmt.Fprintln(os.Stderr, s+fmt.Sprintf(format, args...))
 	os.Exit(1)
 }
+
+// Assert calls Exit if the statement is false.
+func Assert(statement bool, args ...any) {
+	if !statement {
+		Exit(args...)
+	}
+}
+
+// Assertf calls Exitf if the statement is false.
+func Assertf(statement bool, format string, args ...any) {
+	if !statement {
+		Exitf(format, args...)
+	}
+}
