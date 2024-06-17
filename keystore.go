@@ -348,7 +348,7 @@ func (c *keyCache) List(ctx context.Context, prefix string, n int) ([]string, st
 // releases associated resources.
 func (c *keyCache) Close() error {
 	c.stop()
-	return nil
+	return c.store.Close()
 }
 
 // gc executes f periodically until the ctx.Done() channel returns.
