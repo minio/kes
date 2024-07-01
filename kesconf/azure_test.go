@@ -2,14 +2,12 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-package kesconf_test
+package kesconf
 
 import (
 	"flag"
 	"os"
 	"testing"
-
-	"github.com/minio/kes/kesconf"
 )
 
 var azureConfigFile = flag.String("azure.config", "", "Path to a KES config file with Azure KeyVault config")
@@ -24,12 +22,12 @@ func TestAzure(t *testing.T) {
 	}
 	defer file.Close()
 
-	config, err := kesconf.ReadFile(*azureConfigFile)
+	config, err := ReadFile(*azureConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := config.KeyStore.(*kesconf.AzureKeyVaultKeyStore); !ok {
-		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &kesconf.AzureKeyVaultKeyStore{})
+	if _, ok := config.KeyStore.(*AzureKeyVaultKeyStore); !ok {
+		t.Fatalf("Invalid Keystore: want %T - got %T", config.KeyStore, &AzureKeyVaultKeyStore{})
 	}
 
 	ctx, cancel := testingContext(t)
