@@ -102,7 +102,7 @@ func identityCmd(args []string) {
 		fmt.Fprintln(buf)
 		fmt.Fprintln(buf, "This identity can be re-computed again via:")
 		fmt.Fprintln(buf)
-		fmt.Fprintf(buf, "  $ minkms identity %s", key.String())
+		fmt.Fprintf(buf, "  $ kes identity %s", key.String())
 		fmt.Println(tui.NewStyle().Border(tui.HiddenBorder()).Padding(0, 0, 0, 0).Render(buf.String()))
 		return
 	}
