@@ -105,6 +105,8 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 
 	config := vaultapi.DefaultConfig()
 	config.Address = c.Endpoint
+	config.CloneTLSConfig = true // Required for status checks
+	config.CloneToken = true     // Required for status checks
 	config.ConfigureTLS(tlsConfig)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
@@ -160,7 +162,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	// The Vault SDK should not set the X-Vault-Namespace header
 	// for root-only API paths.
 	// Otherwise, Vault may respond with: 404 - unsupported path
-	client, err := s.client.Clone()
+	client, err := s.client.CloneWithHeaders()
 	if err != nil {
 		return kes.KeyStoreState{}, err
 	}
