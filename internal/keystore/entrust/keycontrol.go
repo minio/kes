@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -69,7 +70,17 @@ func (c *Config) Clone() *Config {
 func Login(ctx context.Context, config *Config) (*KeyControl, error) {
 	config = config.Clone()
 	transport := &http.Transport{
-		TLSClientConfig: config.TLS,
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       config.TLS,
 	}
 	token, expiresAt, err := login(ctx, transport, config.Endpoint, config.VaultID, config.Username, config.Password)
 	if err != nil {
