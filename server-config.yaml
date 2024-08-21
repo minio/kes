@@ -3,7 +3,7 @@
 version: v1
 
 # The TCP address (ip:port) for the KES server to listen on.
-address: 0.0.0.0:7373 # The pseudo address 0.0.0.0 refers to all network interfaces 
+address: 0.0.0.0:7373 # The pseudo address 0.0.0.0 refers to all network interfaces
 
 admin:
   # The admin identity identifies the public/private key pair
@@ -269,12 +269,12 @@ keystore:
     # See: https://www.fortanix.com/products/data-security-manager/key-management-service
     sdkms:
       endpoint: ""   # The Fortanix SDKMS endpoint - for example: https://sdkms.fortanix.com
-      group_id: ""   # An optional group ID newly created keys will be placed at. For example: ce08d547-2a82-411e-ae2d-83655a4b7617 
+      group_id: ""   # An optional group ID newly created keys will be placed at. For example: ce08d547-2a82-411e-ae2d-83655a4b7617
                      # If empty, the applications default group is used.
       credentials:   # The Fortanix SDKMS access credentials
         key: ""      # The application's API key - for example: NWMyMWZlNzktZDRmZS00NDFhLWFjMzMtNjZmY2U0Y2ViMThhOnJWQlh0M1lZaDcxZC1NNnh4OGV2MWNQSDVVSEt1eXEyaURqMHRrRU1pZDg=
       tls:           # The KeySecure client TLS configuration
-        ca: ""       # Path to one or more PEM-encoded CA certificates for verifying the Fortanix SDKMS TLS certificate. 
+        ca: ""       # Path to one or more PEM-encoded CA certificates for verifying the Fortanix SDKMS TLS certificate.
   aws:
     # The AWS SecretsManager key store. The server will store
     # secret keys at the AWS SecretsManager encrypted with
@@ -323,7 +323,7 @@ keystore:
         client_id:      "" # The service account client ID   - for example, 113491952745362495489"
         private_key_id: "" # The service account private key - for example, 381514ebd3cf45a64ca8adc561f0ce28fca5ec06
         private_key:    "" # The raw encoded private key of the service account -
-	                   #   for example, "-----BEGIN PRIVATE KEY-----\n ... \n-----END PRIVATE KEY-----\n
+                     #   for example, "-----BEGIN PRIVATE KEY-----\n ... \n-----END PRIVATE KEY-----\n
 
   azure:
     # The Azure KeyVault configuration.
