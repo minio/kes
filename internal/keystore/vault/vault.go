@@ -131,7 +131,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		authenticate = client.AuthenticateWithK8S(c.K8S)
 	}
 
-	auth, err := authenticate()
+	auth, err := authenticate(ctx)
 	if err != nil {
 		return nil, err
 	}

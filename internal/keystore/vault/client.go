@@ -70,7 +70,7 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 //
 // To renew the auth. token see: client.RenewToken(...).
 func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
-	return func() (*vaultapi.Secret, error) {
+	return func(ctx context.Context) (*vaultapi.Secret, error) {
 		client := c.Client
 		switch {
 		case login.Namespace == "/": // Treat '/' as the root namespace
@@ -79,7 +79,7 @@ func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 			client = client.WithNamespace(login.Namespace)
 		}
 
-		secret, err := client.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
+		secret, err := client.Logical().WriteWithContext(ctx, path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role_id":   login.ID,
 			"secret_id": login.Secret,
 		})
@@ -95,7 +95,7 @@ func (c *client) AuthenticateWithAppRole(login *AppRole) authFunc {
 }
 
 func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
-	return func() (*vaultapi.Secret, error) {
+	return func(ctx context.Context) (*vaultapi.Secret, error) {
 		client := c.Client
 		switch {
 		case login.Namespace == "/": // Treat '/' as the root namespace
@@ -104,7 +104,7 @@ func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 			client = client.WithNamespace(login.Namespace)
 		}
 
-		secret, err := client.Logical().Write(path.Join("auth", login.Engine, "login"), map[string]interface{}{
+		secret, err := client.Logical().WriteWithContext(ctx, path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role": login.Role,
 			"jwt":  login.JWT,
 		})
@@ -124,7 +124,7 @@ func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 // It returns a secret with a Vault authentication token
 // and its time-to-live (TTL) or an error explaining why
 // the authentication attempt failed.
-type authFunc func() (*vaultapi.Secret, error)
+type authFunc func(context.Context) (*vaultapi.Secret, error)
 
 // RenewToken tries to renew the Vault auth token periodically
 // based on its TTL. If TTL is zero, RenewToken returns early
@@ -167,10 +167,10 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, secret *
 			continue
 		}
 
-		// We renew the token right before it expires.
-		renewIn := ttl
-		if renewIn > 10*time.Second {
-			renewIn = ttl - 10*time.Second
+		// We renew the token after 80% of its TTL has passed.
+		renewIn := 80 * (ttl / 100)
+		if renewIn < time.Second {
+			renewIn = time.Second
 		}
 
 		timer := time.NewTimer(renewIn)
@@ -192,10 +192,10 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, secret *
 					}
 				}
 				if secret == nil {
-					secret, _ = authenticate()
+					secret, _ = authenticate(ctx)
 				}
 			} else {
-				secret, _ = authenticate()
+				secret, _ = authenticate(ctx)
 			}
 
 			if secret != nil {
