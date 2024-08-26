@@ -36,9 +36,9 @@ func TestStore_MTls(t *testing.T) {
 			ServerCaCertFilePath:     "../../../server-ca.cert",
 		})
 		assertNoError(t, err)
-		resp := client.DoRequest(context.Background(), "GET", "/api/v1/data?path=/", nil)
+		resp := client.doRequest(context.Background(), "GET", "/api/v1/data?path=/", nil)
 		assertNoError(t, resp.err)
-		fmt.Println(resp.Status)
+		fmt.Println(resp.status)
 	})
 
 }
@@ -191,7 +191,7 @@ func TestStore_Get(t *testing.T) {
 	t.Run("GET bytes value with Base64 encoding request contract", func(t *testing.T) {
 		const key = "key"
 		value := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 80, 114, 122, 255, 121, 107, 108, 255}
-		encodedValue := BytesToJsonString(value, true)
+		encodedValue := bytesToJsonString(value, true)
 		fakeClient.respStatusCodes["GET"] = 200
 		fakeClient.respBody = fmt.Sprintf(`
 		{
@@ -326,7 +326,7 @@ func (m *FakeReadCloser) Close() error {
 	return nil
 }
 
-func (c *FakeHttpClient) DoRequest(_ context.Context, method, url string, body io.Reader) HttpResponse {
+func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) HttpResponse {
 	c.reqMethod = method
 	c.reqUri = url
 	c.reqBody = ""
@@ -339,7 +339,7 @@ func (c *FakeHttpClient) DoRequest(_ context.Context, method, url string, body i
 	mockBody := &FakeReadCloser{
 		Reader: bytes.NewBufferString(c.respBody),
 	}
-	return HttpResponse{StatusCode: c.respStatusCodes[method], Status: c.respStatus, Body: mockBody, err: c.error}
+	return HttpResponse{statusCode: c.respStatusCodes[method], status: c.respStatus, body: mockBody, err: c.error}
 }
 
 func assertError(t *testing.T, err error) {

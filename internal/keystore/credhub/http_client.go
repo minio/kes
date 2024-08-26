@@ -9,27 +9,27 @@ import (
 )
 
 type HttpResponse struct {
-	StatusCode int
-	Status     string
-	Body       io.ReadCloser
+	statusCode int
+	status     string
+	body       io.ReadCloser
 	err        error
 }
 
 func NewHttpResponseError(err error) HttpResponse {
-	return HttpResponse{StatusCode: -1, Status: "", Body: nil, err: err}
+	return HttpResponse{statusCode: -1, status: "", body: nil, err: err}
 }
-func (c *HttpResponse) IsStatusCode2xx() bool {
-	return c.StatusCode >= http.StatusOK && c.StatusCode < http.StatusMultipleChoices
+func (c *HttpResponse) isStatusCode2xx() bool {
+	return c.statusCode >= http.StatusOK && c.statusCode < http.StatusMultipleChoices
 }
 
-func (c *HttpResponse) CloseResource() {
-	if c.Body != nil {
-		_ = c.Body.Close()
+func (c *HttpResponse) closeResource() {
+	if c.body != nil {
+		_ = c.body.Close()
 	}
 }
 
 type HttpClient interface {
-	DoRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse
+	doRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse
 }
 
 type HttpMTlsClient struct {
@@ -60,7 +60,7 @@ func NewHttpMTlsClient(config *Config) (HttpClient, error) {
 	return &HttpMTlsClient{baseUrl: config.BaseUrl, httpClient: httpClient}, nil
 }
 
-func (s *HttpMTlsClient) DoRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse {
+func (s *HttpMTlsClient) doRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse {
 	url := s.baseUrl + uri
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
@@ -71,6 +71,6 @@ func (s *HttpMTlsClient) DoRequest(ctx context.Context, method, uri string, body
 	if err != nil {
 		return NewHttpResponseError(err)
 	} else {
-		return HttpResponse{StatusCode: resp.StatusCode, Status: resp.Status, Body: resp.Body, err: nil}
+		return HttpResponse{statusCode: resp.StatusCode, status: resp.Status, body: resp.Body, err: nil}
 	}
 }

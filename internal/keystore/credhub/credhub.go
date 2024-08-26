@@ -126,8 +126,8 @@ func NewStore(_ context.Context, config *Config) (*Store, error) {
 func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	uri := "/health"
 	startTime := time.Now()
-	resp := s.client.DoRequest(ctx, http.MethodGet, uri, nil)
-	defer resp.CloseResource()
+	resp := s.client.doRequest(ctx, http.MethodGet, uri, nil)
+	defer resp.closeResource()
 	if resp.err != nil {
 		return kes.KeyStoreState{Latency: 0}, resp.err
 	}
@@ -135,11 +135,11 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 		Latency: time.Since(startTime),
 	}
 
-	if resp.IsStatusCode2xx() {
+	if resp.isStatusCode2xx() {
 		var responseData struct {
 			Status string `json:"status"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+		if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
 			return state, fmt.Errorf("failed to parse response: %v", err)
 		} else {
 			if responseData.Status == "UP" {
@@ -149,7 +149,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 			}
 		}
 	} else {
-		return state, fmt.Errorf("the CredHub (%s) is not healthy, status: %s", uri, resp.Status)
+		return state, fmt.Errorf("the CredHub (%s) is not healthy, status: %s", uri, resp.status)
 	}
 }
 
@@ -165,11 +165,12 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 func (s *Store) create(ctx context.Context, name string, value []byte, operationID string) error {
 	_, err := s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
 		_, err := s.Get(ctx, name)
-		if err == nil {
+		switch {
+		case err == nil:
 			return nil, fmt.Errorf("key '%s' already exists: %w", name, kesdk.ErrKeyExists)
-		} else if errors.Is(err, kesdk.ErrKeyNotFound) {
+		case errors.Is(err, kesdk.ErrKeyNotFound):
 			return nil, s.put(ctx, name, value, operationID)
-		} else {
+		default:
 			return nil, err
 		}
 	})
@@ -181,7 +182,7 @@ func (s *Store) create(ctx context.Context, name string, value []byte, operation
 // - `credhub curl -X=PUT -p "/api/v1/data" -d='{"name":"/test-namespace/key-1","type":"value","value":"1"}`
 func (s *Store) put(ctx context.Context, name string, value []byte, operationID string) error {
 	uri := "/api/v1/data"
-	valueStr := BytesToJsonString(value, s.config.ForceBase64ValuesEncoding)
+	valueStr := bytesToJsonString(value, s.config.ForceBase64ValuesEncoding)
 	data := map[string]interface{}{
 		"name":  s.config.Namespace + "/" + name,
 		"type":  "value",
@@ -194,21 +195,21 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 	if err != nil {
 		return err
 	}
-	resp := s.client.DoRequest(ctx, http.MethodPut, uri, bytes.NewBuffer(payload))
-	defer resp.CloseResource()
+	resp := s.client.doRequest(ctx, http.MethodPut, uri, bytes.NewBuffer(payload))
+	defer resp.closeResource()
 	if resp.err != nil {
 		return resp.err
 	}
 
-	if resp.IsStatusCode2xx() {
+	if resp.isStatusCode2xx() {
 		var responseData struct {
 			Value    string `json:"value"`
 			Metadata struct {
 				OperationId string `json:"operation_id"`
 			} `json:"metadata"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-			return fmt.Errorf("can't decode response of put entry (status: %s)", resp.Status)
+		if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
+			return fmt.Errorf("can't decode response of put entry (status: %s)", resp.status)
 		}
 		if responseData.Value != valueStr {
 			return fmt.Errorf("key '%s' was inserted but overwritten by other process (the returned value is different from the the one sent): %w", name, kesdk.ErrKeyExists)
@@ -219,7 +220,7 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 		return nil
 
 	} else {
-		return fmt.Errorf("failed to put entry (status: %s)", resp.Status)
+		return fmt.Errorf("failed to put entry (status: %s)", resp.status)
 	}
 }
 
@@ -231,16 +232,16 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 // - `credhub curl -X=DELETE -p "/api/v1/data?name=/test-namespace/key-2"`
 func (s *Store) Delete(ctx context.Context, name string) error {
 	uri := fmt.Sprintf("/api/v1/data?name=%s/%s", s.config.Namespace, name)
-	resp := s.client.DoRequest(ctx, http.MethodDelete, uri, nil)
-	defer resp.CloseResource()
+	resp := s.client.doRequest(ctx, http.MethodDelete, uri, nil)
+	defer resp.closeResource()
 	if resp.err != nil {
 		return resp.err
 	}
 
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.statusCode == http.StatusNotFound {
 		return kesdk.ErrKeyNotFound
-	} else if !resp.IsStatusCode2xx() {
-		return fmt.Errorf("failed to delete entry: %s", resp.Status)
+	} else if !resp.isStatusCode2xx() {
+		return fmt.Errorf("failed to delete entry: %s", resp.status)
 	}
 	return nil
 }
@@ -253,23 +254,23 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 // - `credhub curl -X=GET -p "/api/v1/data?name=/test-namespace/key-4&current=true"`
 func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	uri := fmt.Sprintf("/api/v1/data?current=true&name=%s/%s", s.config.Namespace, name)
-	resp := s.client.DoRequest(ctx, http.MethodGet, uri, nil)
-	defer resp.CloseResource()
+	resp := s.client.doRequest(ctx, http.MethodGet, uri, nil)
+	defer resp.closeResource()
 	if resp.err != nil {
 		return nil, resp.err
 	}
 
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.statusCode == http.StatusNotFound {
 		return nil, kesdk.ErrKeyNotFound
-	} else if !resp.IsStatusCode2xx() {
-		return nil, fmt.Errorf("failed to get entry (status: %s)", resp.Status)
+	} else if !resp.isStatusCode2xx() {
+		return nil, fmt.Errorf("failed to get entry (status: %s)", resp.status)
 	}
 	var responseData struct {
 		Data []struct {
 			Value string `json:"value"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+	if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +280,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	if len(responseData.Data) > 1 {
 		return nil, fmt.Errorf("received multiple entries (%d) for the same key", len(responseData.Data))
 	}
-	return JsonStringToBytes(responseData.Data[0].Value)
+	return jsonStringToBytes(responseData.Data[0].Value)
 }
 
 // List returns the first n key names, that start with the given
@@ -299,21 +300,21 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	pathPrefix := s.config.Namespace + "/"
 	uri := fmt.Sprintf("/api/v1/data?name-like=%s%s", pathPrefix, prefix)
-	resp := s.client.DoRequest(ctx, http.MethodGet, uri, nil)
-	defer resp.CloseResource()
+	resp := s.client.doRequest(ctx, http.MethodGet, uri, nil)
+	defer resp.closeResource()
 	if resp.err != nil {
 		return nil, "", resp.err
 	}
 
-	if !resp.IsStatusCode2xx() {
-		return nil, "", fmt.Errorf("failed to list entries (status: %s)", resp.Status)
+	if !resp.isStatusCode2xx() {
+		return nil, "", fmt.Errorf("failed to list entries (status: %s)", resp.status)
 	}
 	var responseData struct {
 		Credentials []struct {
 			Name string `json:"name"`
 		} `json:"credentials"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+	if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
 		return nil, "", err
 	}
 

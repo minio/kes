@@ -12,7 +12,7 @@ import (
 
 const Base64Prefix = "Base64:"
 
-func BytesToJsonString(bytes []byte, forceBase64 bool) (value string) {
+func bytesToJsonString(bytes []byte, forceBase64 bool) (value string) {
 	if utf8.Valid(bytes) && !forceBase64 {
 		strBytes := string(bytes)
 		if !strings.HasPrefix(strBytes, Base64Prefix) {
@@ -22,10 +22,9 @@ func BytesToJsonString(bytes []byte, forceBase64 bool) (value string) {
 	return Base64Prefix + base64.StdEncoding.EncodeToString(bytes)
 }
 
-func JsonStringToBytes(value string) (bytes []byte, err error) {
+func jsonStringToBytes(value string) (bytes []byte, err error) {
 	if strings.HasPrefix(value, Base64Prefix) {
 		return base64.StdEncoding.DecodeString(strings.TrimPrefix(value, Base64Prefix))
-	} else {
-		return []byte(value), nil
 	}
+	return []byte(value), nil
 }
