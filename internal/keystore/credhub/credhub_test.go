@@ -310,7 +310,7 @@ func NewFakeStore() (*FakeHTTPClient, *Store) {
 
 type FakeHTTPClient struct {
 	reqMethod       string
-	reqUri          string
+	reqURI          string
 	reqBody         string
 	respStatusCodes map[string]int
 	respStatus      string
@@ -328,7 +328,7 @@ func (m *FakeReadCloser) Close() error {
 
 func (c *FakeHTTPClient) doRequest(_ context.Context, method, url string, body io.Reader) httpResponse {
 	c.reqMethod = method
-	c.reqUri = url
+	c.reqURI = url
 	c.reqBody = ""
 	if body != nil {
 		bodyBytes, err := io.ReadAll(body)
@@ -391,22 +391,22 @@ func assertRequest(t *testing.T, fc *FakeHTTPClient, method, uri string) {
 	if fc.reqMethod != method {
 		t.Fatalf("expected requested method '%s' but got '%s'", method, fc.reqMethod)
 	}
-	if fc.reqUri != uri {
-		t.Fatalf("expected requested uri '%s' but got '%s'", uri, fc.reqUri)
+	if fc.reqURI != uri {
+		t.Fatalf("expected requested uri '%s' but got '%s'", uri, fc.reqURI)
 	}
 }
 func assertRequestWithJSONBody(t *testing.T, fc *FakeHTTPClient, method, uri string, jsonBody string) {
 	assertRequest(t, fc, method, uri)
 
-	var gotJSON, expectedJson interface{}
+	var gotJSON, expectedJSON interface{}
 	err1 := json.Unmarshal([]byte(fc.reqBody), &gotJSON)
-	err2 := json.Unmarshal([]byte(jsonBody), &expectedJson)
+	err2 := json.Unmarshal([]byte(jsonBody), &expectedJSON)
 
 	if err1 != nil || err2 != nil {
 		t.Fatalf("jsons deserialization errors: %v, %v", err1, err2)
 	}
 
-	if !reflect.DeepEqual(gotJSON, expectedJson) {
+	if !reflect.DeepEqual(gotJSON, expectedJSON) {
 		t.Fatalf("expected requested body '%s' but got '%s'", jsonBody, fc.reqBody)
 	}
 }
