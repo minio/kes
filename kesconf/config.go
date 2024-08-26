@@ -687,7 +687,6 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 			ForceBase64ValuesEncoding: y.KeyStore.CredHub.ForceBase64ValuesEncoding.Value,
 		}
 		_, err := config.Validate()
-
 		if err != nil {
 			return nil, err
 		}
