@@ -8,36 +8,36 @@ import (
 	"net/http"
 )
 
-type HttpResponse struct {
+type HTTPResponse struct {
 	statusCode int
 	status     string
 	body       io.ReadCloser
 	err        error
 }
 
-func NewHttpResponseError(err error) HttpResponse {
-	return HttpResponse{statusCode: -1, status: "", body: nil, err: err}
+func NewHTTPResponseError(err error) HTTPResponse {
+	return HTTPResponse{statusCode: -1, status: "", body: nil, err: err}
 }
-func (c *HttpResponse) isStatusCode2xx() bool {
+func (c *HTTPResponse) isStatusCode2xx() bool {
 	return c.statusCode >= http.StatusOK && c.statusCode < http.StatusMultipleChoices
 }
 
-func (c *HttpResponse) closeResource() {
+func (c *HTTPResponse) closeResource() {
 	if c.body != nil {
 		_ = c.body.Close()
 	}
 }
 
-type HttpClient interface {
-	doRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse
+type HTTPClient interface {
+	doRequest(ctx context.Context, method, uri string, body io.Reader) HTTPResponse
 }
 
-type HttpMTlsClient struct {
+type HTTPMTlsClient struct {
 	baseUrl    string
 	httpClient *http.Client
 }
 
-func NewHttpMTlsClient(config *Config) (HttpClient, error) {
+func NewHttpMTlsClient(config *Config) (HTTPClient, error) {
 	certs, err := config.Validate()
 	if err != nil {
 		return nil, err
@@ -57,20 +57,19 @@ func NewHttpMTlsClient(config *Config) (HttpClient, error) {
 	}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
 	httpClient := &http.Client{Transport: transport}
-	return &HttpMTlsClient{baseUrl: config.BaseUrl, httpClient: httpClient}, nil
+	return &HTTPMTlsClient{baseUrl: config.BaseUrl, httpClient: httpClient}, nil
 }
 
-func (s *HttpMTlsClient) doRequest(ctx context.Context, method, uri string, body io.Reader) HttpResponse {
+func (s *HTTPMTlsClient) doRequest(ctx context.Context, method, uri string, body io.Reader) HTTPResponse {
 	url := s.baseUrl + uri
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return NewHttpResponseError(err)
+		return NewHTTPResponseError(err)
 	}
 	req.Header.Set(contentType, applicationJson)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return NewHttpResponseError(err)
-	} else {
-		return HttpResponse{statusCode: resp.StatusCode, status: resp.Status, body: resp.Body, err: nil}
+		return NewHTTPResponseError(err)
 	}
+	return HTTPResponse{statusCode: resp.StatusCode, status: resp.Status, body: resp.Body, err: nil}
 }

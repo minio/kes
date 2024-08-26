@@ -326,7 +326,7 @@ func (m *FakeReadCloser) Close() error {
 	return nil
 }
 
-func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) HttpResponse {
+func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) HTTPResponse {
 	c.reqMethod = method
 	c.reqUri = url
 	c.reqBody = ""
@@ -339,7 +339,7 @@ func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body i
 	mockBody := &FakeReadCloser{
 		Reader: bytes.NewBufferString(c.respBody),
 	}
-	return HttpResponse{statusCode: c.respStatusCodes[method], status: c.respStatus, body: mockBody, err: c.error}
+	return HTTPResponse{statusCode: c.respStatusCodes[method], status: c.respStatus, body: mockBody, err: c.error}
 }
 
 func assertError(t *testing.T, err error) {

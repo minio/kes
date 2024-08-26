@@ -105,7 +105,7 @@ func (c *Config) validatePemFile(path, name string) (pemBytes, derBytes []byte, 
 type Store struct {
 	LastError error
 	config    *Config
-	client    HttpClient
+	client    HTTPClient
 	sfGroup   singleflight.Group
 }
 
