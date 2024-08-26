@@ -30,8 +30,8 @@ const (
 )
 
 type Config struct {
-	BaseUrl                   string // The base URL endpoint of the CredHub service.
-	EnableMutualTls           bool   // If set to true, enables mutual TLS.
+	BaseURL                   string // The base URL endpoint of the CredHub service.
+	EnableMutualTLS           bool   // If set to true, enables mutual TLS.
 	ClientCertFilePath        string // Path to the client's certificate file used for mutual TLS authentication.
 	ClientKeyFilePath         string // Path to the client's private key file used for mutual TLS authentication.
 	ServerInsecureSkipVerify  bool   // If set to true, server's certificate will not be verified against the provided CA certificate.
@@ -47,8 +47,8 @@ type Certs struct {
 
 func (c *Config) Validate() (*Certs, error) {
 	certs := &Certs{}
-	if c.BaseUrl == "" {
-		return certs, errors.New("credhub config: `BaseUrl` can't be empty")
+	if c.BaseURL == "" {
+		return certs, errors.New("credhub config: `BaseURL` can't be empty")
 	}
 	if c.Namespace == "" {
 		return certs, errors.New("credhub config: `Namespace` can't be empty")
@@ -66,9 +66,9 @@ func (c *Config) Validate() (*Certs, error) {
 			return nil, errors.New(fmt.Sprintf("credhub config: error parsing the certificate '%s': %v", "ServerCaCertFilePath", err))
 		}
 	}
-	if c.EnableMutualTls {
+	if c.EnableMutualTLS {
 		if c.ClientCertFilePath == "" || c.ClientKeyFilePath == "" {
-			return certs, errors.New("credhub config: `ClientCertFilePath` and `ClientKeyFilePath` can't be empty when `EnableMutualTls` is true")
+			return certs, errors.New("credhub config: `ClientCertFilePath` and `ClientKeyFilePath` can't be empty when `EnableMutualTLS` is true")
 		}
 		cCertPemBytes, cCertDerBytes, err := c.validatePemFile(c.ClientCertFilePath, "ClientCertFilePath")
 		if err != nil {
@@ -105,17 +105,16 @@ func (c *Config) validatePemFile(path, name string) (pemBytes, derBytes []byte, 
 type Store struct {
 	LastError error
 	config    *Config
-	client    HTTPClient
+	client    httpClient
 	sfGroup   singleflight.Group
 }
 
 func NewStore(_ context.Context, config *Config) (*Store, error) {
-	client, err := NewHttpMTlsClient(config)
+	client, err := newHTTPMTLSClient(config)
 	if err != nil {
 		return nil, err
-	} else {
-		return &Store{config: config, client: client}, nil
 	}
+	return &Store{config: config, client: client}, nil
 }
 
 // Status returns the current state of the KeyStore.
@@ -144,13 +143,11 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 		} else {
 			if responseData.Status == "UP" {
 				return state, nil
-			} else {
-				return state, fmt.Errorf("CredHub is not UP, status: %s", responseData.Status)
 			}
+			return state, fmt.Errorf("CredHub is not UP, status: %s", responseData.Status)
 		}
-	} else {
-		return state, fmt.Errorf("the CredHub (%s) is not healthy, status: %s", uri, resp.status)
 	}
+	return state, fmt.Errorf("the CredHub (%s) is not healthy, status: %s", uri, resp.status)
 }
 
 // Create creates a new entry with the given name if and only
@@ -219,9 +216,8 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 		}
 		return nil
 
-	} else {
-		return fmt.Errorf("failed to put entry (status: %s)", resp.status)
 	}
+	return fmt.Errorf("failed to put entry (status: %s)", resp.status)
 }
 
 // Delete removes the entry. It may return either no error or

@@ -212,8 +212,8 @@ type ymlFile struct {
 		} `yaml:"entrust"`
 
 		CredHub *struct {
-			BaseUrl                   env[string] `yaml:"base_url"`
-			EnableMutualTls           env[bool]   `yaml:"enable_mutual_tls"`
+			BaseURL                   env[string] `yaml:"base_url"`
+			EnableMutualTLS           env[bool]   `yaml:"enable_mutual_tls"`
 			ClientCertFilePath        env[string] `yaml:"client_cert_file_path"`
 			ClientKeyFilePath         env[string] `yaml:"client_key_file_path"`
 			ServerCaCertFilePath      env[string] `yaml:"server_ca_cert_file_path"`
@@ -677,8 +677,8 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 			return nil, errors.New("kesconf: invalid CredHub config: more than once keystore specified")
 		}
 		config := credhub.Config{
-			BaseUrl:                   y.KeyStore.CredHub.BaseUrl.Value,
-			EnableMutualTls:           y.KeyStore.CredHub.EnableMutualTls.Value,
+			BaseURL:                   y.KeyStore.CredHub.BaseURL.Value,
+			EnableMutualTLS:           y.KeyStore.CredHub.EnableMutualTLS.Value,
 			ClientCertFilePath:        y.KeyStore.CredHub.ClientCertFilePath.Value,
 			ClientKeyFilePath:         y.KeyStore.CredHub.ClientKeyFilePath.Value,
 			ServerInsecureSkipVerify:  y.KeyStore.CredHub.ServerInsecureSkipVerify.Value,

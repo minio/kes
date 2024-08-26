@@ -26,10 +26,10 @@ const testNamespace = "/test-namespace"
 func TestStore_MTls(t *testing.T) {
 	t.Run("get status request contract", func(t *testing.T) {
 		t.Skip("skipping due to this being an integration test that requires specific configuration for a CredHub instance")
-		client, err := NewHttpMTlsClient(&Config{
-			BaseUrl:                  "https://localhost:8844",
+		client, err := newHTTPMTLSClient(&Config{
+			BaseURL:                  "https://localhost:8844",
 			Namespace:                testNamespace,
-			EnableMutualTls:          true,
+			EnableMutualTLS:          true,
 			ClientCertFilePath:       "../../../client.cert",
 			ClientKeyFilePath:        "../../../client.key",
 			ServerInsecureSkipVerify: false,
@@ -297,7 +297,7 @@ func TestStore_List(t *testing.T) {
 	})
 }
 
-//=== tools:
+// === tools:
 
 func NewFakeStore() (*FakeHttpClient, *Store) {
 	fakeClient := &FakeHttpClient{respStatusCodes: map[string]int{}}
@@ -326,7 +326,7 @@ func (m *FakeReadCloser) Close() error {
 	return nil
 }
 
-func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) HTTPResponse {
+func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) httpResponse {
 	c.reqMethod = method
 	c.reqUri = url
 	c.reqBody = ""
@@ -339,7 +339,7 @@ func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body i
 	mockBody := &FakeReadCloser{
 		Reader: bytes.NewBufferString(c.respBody),
 	}
-	return HTTPResponse{statusCode: c.respStatusCodes[method], status: c.respStatus, body: mockBody, err: c.error}
+	return httpResponse{statusCode: c.respStatusCodes[method], status: c.respStatus, body: mockBody, err: c.error}
 }
 
 func assertError(t *testing.T, err error) {
