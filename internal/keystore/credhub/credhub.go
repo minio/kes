@@ -13,15 +13,16 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/golang/groupcache/singleflight"
 	"github.com/google/uuid"
 	"github.com/minio/kes"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 )
 
 const (

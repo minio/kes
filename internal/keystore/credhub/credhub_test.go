@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/minio/kes/internal/api"
-	"github.com/minio/kms-go/kes"
 	"io"
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/minio/kes/internal/api"
+	"github.com/minio/kms-go/kes"
 )
 
 /** CredHub Rest API contract tests.
@@ -40,7 +41,6 @@ func TestStore_MTLS(t *testing.T) {
 		assertNoError(t, resp.err)
 		fmt.Println(resp.status)
 	})
-
 }
 
 // `credhub curl -X=GET -p /health`
@@ -220,7 +220,6 @@ func TestStore_Get(t *testing.T) {
 		assertErrorIs(t, err, kes.ErrKeyNotFound)
 		assertAPIErrorStatus(t, err, http.StatusNotFound)
 	})
-
 }
 
 // `credhub curl -X=DELETE -p "/api/v1/data?name=/test-namespace/element-name"`
@@ -381,6 +380,7 @@ func assertEqualComparable(t *testing.T, expected, got any) {
 		t.Fatalf("expected '%v' got '%v'", expected, got)
 	}
 }
+
 func assertEqualBytes(t *testing.T, expected, got []byte) {
 	if !bytes.Equal(expected, got) {
 		t.Fatalf("expected '%v' got '%v'", expected, got)
@@ -395,6 +395,7 @@ func assertRequest(t *testing.T, fc *FakeHTTPClient, method, uri string) {
 		t.Fatalf("expected requested uri '%s' but got '%s'", uri, fc.reqURI)
 	}
 }
+
 func assertRequestWithJSONBody(t *testing.T, fc *FakeHTTPClient, method, uri string, jsonBody string) {
 	assertRequest(t, fc, method, uri)
 

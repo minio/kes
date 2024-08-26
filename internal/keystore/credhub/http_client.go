@@ -18,6 +18,7 @@ type httpResponse struct {
 func newHTTPResponseError(err error) httpResponse {
 	return httpResponse{statusCode: -1, status: "", body: nil, err: err}
 }
+
 func (c *httpResponse) isStatusCode2xx() bool {
 	return c.statusCode >= http.StatusOK && c.statusCode < http.StatusMultipleChoices
 }
