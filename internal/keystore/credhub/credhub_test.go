@@ -23,7 +23,7 @@ The following is checked:
 const testNamespace = "/test-namespace"
 
 // `curl -v --cert ./client.cert --key ./client.key --cacert ./server-ca.cert https://localhost:8844/api/v1/data?path=/`
-func TestStore_MTls(t *testing.T) {
+func TestStore_MTLS(t *testing.T) {
 	t.Run("get status request contract", func(t *testing.T) {
 		t.Skip("skipping due to this being an integration test that requires specific configuration for a CredHub instance")
 		client, err := newHTTPMTLSClient(&Config{
@@ -82,7 +82,7 @@ func TestStore_put(t *testing.T) {
 		store.config.ForceBase64ValuesEncoding = false
 		err := store.put(context.Background(), key, []byte(value), operationID)
 		assertNoError(t, err)
-		assertRequestWithJsonBody(t, fakeClient, "PUT", "/api/v1/data",
+		assertRequestWithJSONBody(t, fakeClient, "PUT", "/api/v1/data",
 			fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, value, operationID))
 	})
 
@@ -96,7 +96,7 @@ func TestStore_put(t *testing.T) {
 		fakeClient.respBody = fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID)
 		err := store.put(context.Background(), key, []byte(value), operationID)
 		assertNoError(t, err)
-		assertRequestWithJsonBody(t, fakeClient, "PUT", "/api/v1/data",
+		assertRequestWithJSONBody(t, fakeClient, "PUT", "/api/v1/data",
 			fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID))
 	})
 	t.Run("PUT bytes value with not valid UTF-8 bytes", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestStore_put(t *testing.T) {
 		fakeClient.respBody = fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID)
 		err := store.put(context.Background(), key, value, operationID)
 		assertNoError(t, err)
-		assertRequestWithJsonBody(t, fakeClient, "PUT", "/api/v1/data",
+		assertRequestWithJSONBody(t, fakeClient, "PUT", "/api/v1/data",
 			fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID))
 	})
 	t.Run("PUT string value starts with 'Base64:' request contract", func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestStore_put(t *testing.T) {
 		fakeClient.respBody = fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID)
 		err := store.put(context.Background(), key, []byte(value), operationID)
 		assertNoError(t, err)
-		assertRequestWithJsonBody(t, fakeClient, "PUT", "/api/v1/data",
+		assertRequestWithJSONBody(t, fakeClient, "PUT", "/api/v1/data",
 			fmt.Sprintf(`{"name":"%s/%s","type":"value","value":"%s","metadata":{"operation_id":"%s"}}`, testNamespace, key, encodedValue, operationID))
 	})
 }
@@ -138,7 +138,7 @@ func TestStore_Create(t *testing.T) {
 		const value = "string-value"
 		err := store.Create(context.Background(), key, []byte(value))
 		assertErrorIs(t, err, kes.ErrKeyExists)
-		assertApiErrorStatus(t, err, http.StatusBadRequest)
+		assertAPIErrorStatus(t, err, http.StatusBadRequest)
 	})
 	t.Run("create element that doesn't exist", func(t *testing.T) {
 		fakeClient.respStatusCodes["GET"] = 404
@@ -218,7 +218,7 @@ func TestStore_Get(t *testing.T) {
 		const name = "element-name"
 		_, err := store.Get(context.Background(), name)
 		assertErrorIs(t, err, kes.ErrKeyNotFound)
-		assertApiErrorStatus(t, err, http.StatusNotFound)
+		assertAPIErrorStatus(t, err, http.StatusNotFound)
 	})
 
 }
@@ -240,7 +240,7 @@ func TestStore_Delete(t *testing.T) {
 		const name = "element-name"
 		err := store.Delete(context.Background(), name)
 		assertErrorIs(t, err, kes.ErrKeyNotFound)
-		assertApiErrorStatus(t, err, http.StatusNotFound)
+		assertAPIErrorStatus(t, err, http.StatusNotFound)
 	})
 }
 
@@ -299,8 +299,8 @@ func TestStore_List(t *testing.T) {
 
 // === tools:
 
-func NewFakeStore() (*FakeHttpClient, *Store) {
-	fakeClient := &FakeHttpClient{respStatusCodes: map[string]int{}}
+func NewFakeStore() (*FakeHTTPClient, *Store) {
+	fakeClient := &FakeHTTPClient{respStatusCodes: map[string]int{}}
 	store := &Store{
 		config: &Config{Namespace: testNamespace},
 		client: fakeClient,
@@ -308,7 +308,7 @@ func NewFakeStore() (*FakeHttpClient, *Store) {
 	return fakeClient, store
 }
 
-type FakeHttpClient struct {
+type FakeHTTPClient struct {
 	reqMethod       string
 	reqUri          string
 	reqBody         string
@@ -326,7 +326,7 @@ func (m *FakeReadCloser) Close() error {
 	return nil
 }
 
-func (c *FakeHttpClient) doRequest(_ context.Context, method, url string, body io.Reader) httpResponse {
+func (c *FakeHTTPClient) doRequest(_ context.Context, method, url string, body io.Reader) httpResponse {
 	c.reqMethod = method
 	c.reqUri = url
 	c.reqBody = ""
@@ -357,7 +357,7 @@ func assertErrorIs(t *testing.T, err, target error) {
 	}
 }
 
-func assertApiErrorStatus(t *testing.T, err error, status int) {
+func assertAPIErrorStatus(t *testing.T, err error, status int) {
 	if err == nil {
 		t.Fatal("error can't be null")
 	}
@@ -387,7 +387,7 @@ func assertEqualBytes(t *testing.T, expected, got []byte) {
 	}
 }
 
-func assertRequest(t *testing.T, fc *FakeHttpClient, method, uri string) {
+func assertRequest(t *testing.T, fc *FakeHTTPClient, method, uri string) {
 	if fc.reqMethod != method {
 		t.Fatalf("expected requested method '%s' but got '%s'", method, fc.reqMethod)
 	}
@@ -395,18 +395,18 @@ func assertRequest(t *testing.T, fc *FakeHttpClient, method, uri string) {
 		t.Fatalf("expected requested uri '%s' but got '%s'", uri, fc.reqUri)
 	}
 }
-func assertRequestWithJsonBody(t *testing.T, fc *FakeHttpClient, method, uri string, jsonBody string) {
+func assertRequestWithJSONBody(t *testing.T, fc *FakeHTTPClient, method, uri string, jsonBody string) {
 	assertRequest(t, fc, method, uri)
 
-	var gotJson, expectedJson interface{}
-	err1 := json.Unmarshal([]byte(fc.reqBody), &gotJson)
+	var gotJSON, expectedJson interface{}
+	err1 := json.Unmarshal([]byte(fc.reqBody), &gotJSON)
 	err2 := json.Unmarshal([]byte(jsonBody), &expectedJson)
 
 	if err1 != nil || err2 != nil {
 		t.Fatalf("jsons deserialization errors: %v, %v", err1, err2)
 	}
 
-	if !reflect.DeepEqual(gotJson, expectedJson) {
+	if !reflect.DeepEqual(gotJSON, expectedJson) {
 		t.Fatalf("expected requested body '%s' but got '%s'", jsonBody, fc.reqBody)
 	}
 }

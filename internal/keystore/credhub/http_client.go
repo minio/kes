@@ -66,7 +66,7 @@ func (s *httpMTLSClient) doRequest(ctx context.Context, method, uri string, body
 	if err != nil {
 		return newHTTPResponseError(err)
 	}
-	req.Header.Set(contentType, applicationJson)
+	req.Header.Set(contentType, applicationJSON)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return newHTTPResponseError(err)

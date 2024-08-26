@@ -26,7 +26,7 @@ import (
 
 const (
 	contentType     = "Content-Type"
-	applicationJson = "application/json"
+	applicationJSON = "application/json"
 )
 
 type Config struct {
@@ -63,7 +63,7 @@ func (c *Config) Validate() (*Certs, error) {
 		}
 		certs.ServerCaCert, err = x509.ParseCertificate(sCertDerBytes)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("credhub config: error parsing the certificate '%s': %v", "ServerCaCertFilePath", err))
+			return nil, fmt.Errorf("credhub config: error parsing the certificate '%s': %v", "ServerCaCertFilePath", err)
 		}
 	}
 	if c.EnableMutualTLS {
@@ -76,7 +76,7 @@ func (c *Config) Validate() (*Certs, error) {
 		}
 		_, err = x509.ParseCertificate(cCertDerBytes)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("credhub config: error parsing the certificate '%s': %v", "ClientCertFilePath", err))
+			return nil, fmt.Errorf("credhub config: error parsing the certificate '%s': %v", "ClientCertFilePath", err)
 		}
 		cKeyPemBytes, _, err := c.validatePemFile(c.ClientKeyFilePath, "ClientKeyFilePath")
 		if err != nil {
@@ -202,7 +202,7 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 		var responseData struct {
 			Value    string `json:"value"`
 			Metadata struct {
-				OperationId string `json:"operation_id"`
+				OperationID string `json:"operation_id"`
 			} `json:"metadata"`
 		}
 		if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
@@ -211,8 +211,8 @@ func (s *Store) put(ctx context.Context, name string, value []byte, operationID 
 		if responseData.Value != valueStr {
 			return fmt.Errorf("key '%s' was inserted but overwritten by other process (the returned value is different from the the one sent): %w", name, kesdk.ErrKeyExists)
 		}
-		if responseData.Metadata.OperationId != operationID {
-			return fmt.Errorf("key '%s' was inserted but overwritten by other process (operation ID %s != %s): %w", name, responseData.Metadata.OperationId, operationID, kesdk.ErrKeyExists)
+		if responseData.Metadata.OperationID != operationID {
+			return fmt.Errorf("key '%s' was inserted but overwritten by other process (operation ID %s != %s): %w", name, responseData.Metadata.OperationID, operationID, kesdk.ErrKeyExists)
 		}
 		return nil
 
