@@ -10,21 +10,21 @@ import (
 	"unicode/utf8"
 )
 
-const Base64Prefix = "Base64:"
+const base64Prefix = "Base64:"
 
-func bytesToJsonString(bytes []byte, forceBase64 bool) (value string) {
+func bytesToJSONString(bytes []byte, forceBase64 bool) (value string) {
 	if utf8.Valid(bytes) && !forceBase64 {
 		strBytes := string(bytes)
-		if !strings.HasPrefix(strBytes, Base64Prefix) {
+		if !strings.HasPrefix(strBytes, base64Prefix) {
 			return string(bytes)
 		}
 	}
-	return Base64Prefix + base64.StdEncoding.EncodeToString(bytes)
+	return base64Prefix + base64.StdEncoding.EncodeToString(bytes)
 }
 
 func jsonStringToBytes(value string) (bytes []byte, err error) {
-	if strings.HasPrefix(value, Base64Prefix) {
-		return base64.StdEncoding.DecodeString(strings.TrimPrefix(value, Base64Prefix))
+	if strings.HasPrefix(value, base64Prefix) {
+		return base64.StdEncoding.DecodeString(strings.TrimPrefix(value, base64Prefix))
 	}
 	return []byte(value), nil
 }

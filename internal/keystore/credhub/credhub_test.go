@@ -191,7 +191,7 @@ func TestStore_Get(t *testing.T) {
 	t.Run("GET bytes value with Base64 encoding request contract", func(t *testing.T) {
 		const key = "key"
 		value := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 80, 114, 122, 255, 121, 107, 108, 255}
-		encodedValue := bytesToJsonString(value, true)
+		encodedValue := bytesToJSONString(value, true)
 		fakeClient.respStatusCodes["GET"] = 200
 		fakeClient.respBody = fmt.Sprintf(`
 		{

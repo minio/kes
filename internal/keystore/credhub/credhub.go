@@ -29,6 +29,7 @@ const (
 	applicationJSON = "application/json"
 )
 
+// Config holds the configuration settings for connecting to a CredHub service.
 type Config struct {
 	BaseURL                   string // The base URL endpoint of the CredHub service.
 	EnableMutualTLS           bool   // If set to true, enables mutual TLS.
@@ -40,11 +41,14 @@ type Config struct {
 	ForceBase64ValuesEncoding bool   // If set to true, forces encoding of all the values as base64 before storage.
 }
 
+// Certs contains the certificates needed for mutual TLS authentication.
 type Certs struct {
 	ServerCaCert  *x509.Certificate
 	ClientKeyPair tls.Certificate
 }
 
+// Validate checks the configuration for correctness and loads the necessary certificates for mutual TLS authentication.
+// It returns a Certs object containing the server CA certificate and client key pair, or an error if validation fails.
 func (c *Config) Validate() (*Certs, error) {
 	certs := &Certs{}
 	if c.BaseURL == "" {
@@ -93,15 +97,16 @@ func (c *Config) Validate() (*Certs, error) {
 func (c *Config) validatePemFile(path, name string) (pemBytes, derBytes []byte, err error) {
 	pemBytes, err = os.ReadFile(path)
 	if err != nil {
-		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to load PEM file '%s'='%s': %v", name, path, err))
+		return pemBytes, nil, fmt.Errorf("credhub config: failed to load PEM file '%s'='%s': %v", name, path, err)
 	}
 	derBlock, _ := pem.Decode(pemBytes)
 	if derBlock == nil {
-		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to decode the '%s'='%s' from PEM format, no PEM data found", name, path))
+		return pemBytes, nil, fmt.Errorf("credhub config: failed to decode the '%s'='%s' from PEM format, no PEM data found", name, path)
 	}
 	return pemBytes, derBlock.Bytes, nil
 }
 
+// Store represents a layer that interacts with a CredHub service using HTTP protocol.
 type Store struct {
 	LastError error
 	config    *Config
@@ -109,6 +114,8 @@ type Store struct {
 	sfGroup   singleflight.Group
 }
 
+// NewStore creates a new instance of Store, initializing it with the provided configuration.
+// It returns an error if the HTTP client initialization fails.
 func NewStore(_ context.Context, config *Config) (*Store, error) {
 	client, err := newHTTPMTLSClient(config)
 	if err != nil {
@@ -140,12 +147,12 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 		}
 		if err := json.NewDecoder(resp.body).Decode(&responseData); err != nil {
 			return state, fmt.Errorf("failed to parse response: %v", err)
-		} else {
-			if responseData.Status == "UP" {
-				return state, nil
-			}
-			return state, fmt.Errorf("CredHub is not UP, status: %s", responseData.Status)
 		}
+		if responseData.Status == "UP" {
+			return state, nil
+		}
+		return state, fmt.Errorf("CredHub is not UP, status: %s", responseData.Status)
+
 	}
 	return state, fmt.Errorf("the CredHub (%s) is not healthy, status: %s", uri, resp.status)
 }
@@ -179,7 +186,7 @@ func (s *Store) create(ctx context.Context, name string, value []byte, operation
 // - `credhub curl -X=PUT -p "/api/v1/data" -d='{"name":"/test-namespace/key-1","type":"value","value":"1"}`
 func (s *Store) put(ctx context.Context, name string, value []byte, operationID string) error {
 	uri := "/api/v1/data"
-	valueStr := bytesToJsonString(value, s.config.ForceBase64ValuesEncoding)
+	valueStr := bytesToJSONString(value, s.config.ForceBase64ValuesEncoding)
 	data := map[string]interface{}{
 		"name":  s.config.Namespace + "/" + name,
 		"type":  "value",
