@@ -33,7 +33,7 @@ type HTTPClient interface {
 }
 
 type HTTPMTlsClient struct {
-	baseUrl    string
+	baseURL    string
 	httpClient *http.Client
 }
 
@@ -57,11 +57,11 @@ func NewHttpMTlsClient(config *Config) (HTTPClient, error) {
 	}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
 	httpClient := &http.Client{Transport: transport}
-	return &HTTPMTlsClient{baseUrl: config.BaseUrl, httpClient: httpClient}, nil
+	return &HTTPMTlsClient{baseURL: config.BaseUrl, httpClient: httpClient}, nil
 }
 
 func (s *HTTPMTlsClient) doRequest(ctx context.Context, method, uri string, body io.Reader) HTTPResponse {
-	url := s.baseUrl + uri
+	url := s.baseURL + uri
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return NewHTTPResponseError(err)
