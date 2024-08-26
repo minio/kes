@@ -22,6 +22,7 @@ import (
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
+	"github.com/minio/kes/internal/keystore/credhub"
 	"github.com/minio/kes/internal/keystore/entrust"
 	"github.com/minio/kes/internal/keystore/fortanix"
 	"github.com/minio/kes/internal/keystore/fs"
@@ -29,7 +30,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gemalto"
 	"github.com/minio/kes/internal/keystore/vault"
 	kesdk "github.com/minio/kms-go/kes"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 )
 
 // ReadFile opens the given file and reads the KES configuration
@@ -39,7 +40,8 @@ func ReadFile(filename string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close() // make sure to close file in case of panic
+	// make sure to close file in case of panic
+	defer func(f *os.File) { _ = f.Close() }(f)
 
 	file, err := ReadFrom(f)
 	if cErr := f.Close(); err == nil {
@@ -827,4 +829,14 @@ func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kes.KeyStore, 
 			RootCAs: rootCAs,
 		},
 	})
+}
+
+// CredHubKeyStore is a structure containing the configuration for CredHub.
+type CredHubKeyStore struct {
+	Config *credhub.Config
+}
+
+// Connect returns a kv.Store that stores key-value pairs on CredHub.
+func (s *CredHubKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
+	return credhub.NewStore(ctx, s.Config)
 }
