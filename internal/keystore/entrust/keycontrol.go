@@ -148,6 +148,7 @@ func (kc *KeyControl) Status(ctx context.Context) (kes.KeyStoreState, error) {
 			Err: fmt.Errorf("keycontrol: failed to fetch status: %v", err),
 		}
 	}
+	defer xhttp.DrainBody(resp.Body)
 	latency := time.Since(start)
 
 	if resp.StatusCode != http.StatusOK {
@@ -247,7 +248,7 @@ func (kc *KeyControl) Get(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("keycontrol: failed to fetch key: %v", err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseErrorResponse(resp)
@@ -295,6 +296,7 @@ func (kc *KeyControl) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("keycontrol: failed to delete key: %v", err)
 	}
+	defer xhttp.DrainBody(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return parseErrorResponse(resp)
 	}
@@ -380,6 +382,7 @@ func (kc *KeyControl) List(ctx context.Context, prefix string, n int) ([]string,
 	if err != nil {
 		return nil, "", fmt.Errorf("keycontrol: failed to list keys: %v", err)
 	}
+	defer xhttp.DrainBody(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", parseErrorResponse(resp)
 	}
@@ -491,7 +494,7 @@ func login(ctx context.Context, rt http.RoundTripper, endpoint, vaultID, usernam
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", time.Time{}, parseErrorResponse(resp)
@@ -539,7 +542,7 @@ func renewToken(ctx context.Context, rt http.RoundTripper, endpoint, token strin
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", time.Time{}, parseErrorResponse(resp)

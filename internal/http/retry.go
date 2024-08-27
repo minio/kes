@@ -188,6 +188,11 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 
 	resp, err := r.Client.Do(req)
 	for N > 0 && (isTemporary(err) || (resp != nil && resp.StatusCode >= http.StatusInternalServerError)) {
+		if resp != nil {
+			DrainBody(resp.Body)
+			resp = nil
+		}
+
 		N--
 		var delay time.Duration
 		switch {
@@ -222,6 +227,10 @@ func (r *Retry) Do(req *http.Request) (*http.Response, error) {
 		resp, err = r.Client.Do(req) // Now, retry.
 	}
 	if isTemporary(err) {
+		if resp != nil {
+			DrainBody(resp.Body)
+			resp = nil
+		}
 		// If the request still fails with a temporary error
 		// we wrap the error to provide more information to the
 		// caller.

@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/minio/kes"
+	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
 )
@@ -63,7 +64,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	if err != nil {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	return kes.KeyStoreState{
 		Latency: time.Since(start),

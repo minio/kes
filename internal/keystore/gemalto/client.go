@@ -78,7 +78,7 @@ func (c *client) Authenticate(ctx context.Context, endpoint string, login Creden
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		response, err := parseServerError(resp)

@@ -126,7 +126,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	if err != nil {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	return kes.KeyStoreState{
 		Latency: time.Since(start),
@@ -167,7 +167,7 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	if err != nil {
 		return fmt.Errorf("gemalto: failed to create key '%s': %v", name, err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode == http.StatusConflict {
 		return kesdk.ErrKeyExists
@@ -210,7 +210,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gemalto: failed to access key '%s': %v", name, err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, kesdk.ErrKeyNotFound
@@ -250,7 +250,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("gemalto: failed to delete key '%s': %v", name, err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
 		// BUG(aead): The KeySecure server returns 404 NotFound if the
@@ -320,7 +320,7 @@ func (s *Store) List(ctx context.Context, prefix string, n int) ([]string, strin
 		if err != nil {
 			return nil, "", err
 		}
-		defer resp.Body.Close()
+		defer xhttp.DrainBody(resp.Body)
 
 		if resp.StatusCode != http.StatusOK {
 			response, err := parseServerError(resp)

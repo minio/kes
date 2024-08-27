@@ -138,7 +138,7 @@ func updateCmd(args []string) {
 		if err != nil {
 			cli.Fatalf("failed to download KES release information: %v", err)
 		}
-		defer resp.Body.Close()
+		defer xhttp.DrainBody(resp.Body)
 
 		var response map[string]any
 		if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxBody)).Decode(&response); err != nil {
@@ -195,7 +195,7 @@ func updateCmd(args []string) {
 	if err != nil {
 		cli.Fatalf("failed to download minisign signature: %v", err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	bytes, err := io.ReadAll(io.LimitReader(resp.Body, int64(1*mem.MB)))
 	if err != nil {
@@ -218,7 +218,7 @@ func updateCmd(args []string) {
 	if err != nil {
 		cli.Fatalf("failed to download binary: %v", err)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	// If the outputFile does not exist we create an empty
 	// one such that selfupdate can do a successful rename
