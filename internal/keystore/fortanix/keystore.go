@@ -193,7 +193,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	if err != nil {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	return kes.KeyStoreState{
 		Latency: time.Since(start),
@@ -476,7 +476,7 @@ func parseErrorResponse(resp *http.Response) error {
 	if resp.Body == nil {
 		return kesdk.NewError(resp.StatusCode, resp.Status)
 	}
-	defer resp.Body.Close()
+	defer xhttp.DrainBody(resp.Body)
 
 	const MaxSize = 1 * mem.MiB
 	size := mem.Size(resp.ContentLength)
