@@ -141,12 +141,16 @@ type authFunc func(context.Context) (*vaultapi.Secret, error)
 //
 //	go client.RenewToken(ctx, login, ttl)
 func (c *client) RenewToken(ctx context.Context, authenticate authFunc, secret *vaultapi.Secret) {
-	ttl, _ := secret.TokenTTL()
+	s := secret
+	ttl, _ := s.TokenTTL()
 	if ttl == 0 {
 		return // Token has no TTL. Hence, we do not need to renew it. (long-lived)
 	}
 
-	const Retry = 3 // Retry token renewal N times before re-authenticating.
+	const (
+		Retry = 3                // Retry token renewal N times before re-authenticating.
+		Delay = 30 * time.Second // Wait a certain amount of time before using a new token to account for Vault replication lag
+	)
 	for {
 		// If Vault is sealed we have to wait
 		// until it is unsealed again.
@@ -155,55 +159,66 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, secret *
 		// another go routine to unblock this for-loop
 		// once vault becomes unsealed again.
 		if c.Sealed() {
-			timer := time.NewTimer(1 * time.Second)
 			select {
 			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
 				return
-			case <-timer.C:
+			case <-time.After(time.Second):
 			}
 			continue
 		}
 
-		// We renew the token after 80% of its TTL has passed.
-		renewIn := 80 * (ttl / 100)
-		if renewIn < time.Second {
-			renewIn = time.Second
+		// If the token is about to expire, we re-auth immediately. We also don't wait
+		// for Vault not to sync up because the existing token will become invalid.
+		if ttl < Delay {
+			if s, _ = authenticate(ctx); s != nil {
+				ttl, _ = s.TokenTTL()
+				token, _ := s.TokenID()
+				c.SetToken(token) // SetToken is safe to call from different go routines
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(3 * time.Second): // In case of an auth failure, wait 3s and retry
+			}
+			continue
 		}
 
-		timer := time.NewTimer(renewIn)
+		renewIn := 80 * (ttl / 100) // Renew token after 80% of its TTL has passed
 		select {
 		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
 			return
-		case <-timer.C:
+		case <-time.After(renewIn):
 			// Try to renew token, if renewable. Otherwise, or if renewal
 			// fails try to re-authenticate.
-			if ok, _ := secret.TokenIsRenewable(); ok {
+			if ok, _ := s.TokenIsRenewable(); ok {
 				for i := 0; i < Retry; i++ {
 					var err error
-					secret, err = c.Auth().Token().RenewSelfWithContext(ctx, 0)
+					s, err = c.Auth().Token().RenewSelfWithContext(ctx, 0)
 					if err == nil {
 						break
 					}
 				}
-				if secret == nil {
-					secret, _ = authenticate(ctx)
+				if s == nil {
+					s, _ = authenticate(ctx)
 				}
 			} else {
-				secret, _ = authenticate(ctx)
+				s, _ = authenticate(ctx)
 			}
 
-			if secret != nil {
-				ttl, _ = secret.TokenTTL()
-				token, _ := secret.TokenID()
+			if s != nil {
+				ttl, _ = s.TokenTTL()
+				token, _ := s.TokenID()
+
+				// Wait before we use the new auth. token. This accounts
+				// for replication lag between the Vault nodes and allows
+				// them to sync the token across the entire cluster.
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(Delay):
+				}
 				c.SetToken(token) // SetToken is safe to call from different go routines
-			} else {
-				ttl = 3 * time.Second // In case of renew/auth failure, retry in 3s.
 			}
 		}
 	}
