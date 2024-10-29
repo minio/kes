@@ -108,6 +108,10 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	config.CloneTLSConfig = true // Required for status checks
 	config.CloneToken = true     // Required for status checks
 	config.ConfigureTLS(tlsConfig)
+	if tr, ok := config.HttpClient.Transport.(*http.Transport); ok {
+		tr.DisableKeepAlives = true
+		tr.MaxIdleConnsPerHost = -1
+	}
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
 		return nil, err
