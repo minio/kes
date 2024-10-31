@@ -1,3 +1,4 @@
+version: 2
 project_name: kes
 
 release:
@@ -62,7 +63,7 @@ signs:
     artifacts: all
 
 snapshot:
-  name_template: '{{ replace .CommitDate ":" "-" }}'
+  version_template: '{{ replace .CommitDate ":" "-" }}'
 
 changelog:
   sort: asc
