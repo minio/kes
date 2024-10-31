@@ -59,6 +59,9 @@ type Store struct {
 
 func (s *Store) String() string { return "Filesystem: " + s.dir }
 
+// Dir returns the directory used on the filesystem.
+func (s *Store) Dir() string { return s.dir }
+
 // Status returns the current state of the Conn.
 //
 // In particular, it reports whether the underlying
