@@ -500,7 +500,7 @@ func infoIdentityCmd(args []string) {
 			cli.Fatal(err)
 		}
 		year, month, day := info.CreatedAt.Date()
-		hour, min, sec := info.CreatedAt.Clock()
+		hour, minute, sec := info.CreatedAt.Clock()
 
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "Identity")),
@@ -508,7 +508,7 @@ func infoIdentityCmd(args []string) {
 		)
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "Created At")),
-			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, sec),
 		)
 		if info.IsAdmin {
 			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "Admin")
@@ -520,13 +520,13 @@ func infoIdentityCmd(args []string) {
 		}
 		if info.Policy != "" {
 			year, month, day := policy.CreatedAt.Date()
-			hour, min, sec := policy.CreatedAt.Clock()
+			hour, minute, sec := policy.CreatedAt.Clock()
 
 			fmt.Println()
 			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Policy")), policyStyle.Render(info.Policy))
 			fmt.Println(
 				faint.Render(fmt.Sprintf("%-11s", "Created At")),
-				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, sec),
 			)
 			if len(policy.Allow) > 0 {
 				fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Allow")))
@@ -547,7 +547,7 @@ func infoIdentityCmd(args []string) {
 			cli.Fatal(err)
 		}
 		year, month, day := info.CreatedAt.Date()
-		hour, min, sec := info.CreatedAt.Clock()
+		hour, minute, sec := info.CreatedAt.Clock()
 
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "Identity")),
@@ -558,7 +558,7 @@ func infoIdentityCmd(args []string) {
 		}
 		fmt.Println(
 			faint.Render(fmt.Sprintf("%-11s", "Created At")),
-			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+			fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, sec),
 		)
 		if info.IsAdmin {
 			fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Role")), "Admin")

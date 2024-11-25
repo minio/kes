@@ -135,11 +135,11 @@ func printAuditLog(stream *kes.AuditStream) {
 	for stream.Next() {
 		event := stream.Event()
 		var (
-			hour, min, sec = event.Timestamp.Clock()
-			status         = strconv.Itoa(event.StatusCode)
-			identity       = identityStyle.Render(event.ClientIdentity.String())
-			apiPath        = apiStyle.Render(event.APIPath)
-			latency        = event.ResponseTime
+			hour, minute, sec = event.Timestamp.Clock()
+			status            = strconv.Itoa(event.StatusCode)
+			identity          = identityStyle.Render(event.ClientIdentity.String())
+			apiPath           = apiStyle.Render(event.APIPath)
+			latency           = event.ResponseTime
 		)
 
 		if event.StatusCode == http.StatusOK {
@@ -167,7 +167,7 @@ func printAuditLog(stream *kes.AuditStream) {
 		}
 		ipAddr = ipStyle.Render(ipAddr)
 
-		fmt.Printf(format, hour, min, sec, status, identity, ipAddr, apiPath, latency)
+		fmt.Printf(format, hour, minute, sec, status, identity, ipAddr, apiPath, latency)
 	}
 	if err := stream.Close(); err != nil {
 		if errors.Is(err, context.Canceled) {
