@@ -447,11 +447,11 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 			// We always check for '/' and the OS-specific one make cover cases where
 			// a path is specified using '/' but the underlying OS is e.g. windows.
 			if jwt := y.KeyStore.Vault.Kubernetes.JWT.Value; strings.ContainsRune(jwt, '/') || strings.ContainsRune(jwt, os.PathSeparator) {
-				b, err := os.ReadFile(y.KeyStore.Vault.Kubernetes.JWT.Value)
+				_, err := os.ReadFile(y.KeyStore.Vault.Kubernetes.JWT.Value)
 				if err != nil {
 					return nil, fmt.Errorf("kesconf: failed to read vault kubernetes JWT from '%s': %v", y.KeyStore.Vault.Kubernetes.JWT.Value, err)
 				}
-				y.KeyStore.Vault.Kubernetes.JWT.Value = string(b)
+				// postpone resolving the JWT until actually logging in
 			}
 		}
 		if y.KeyStore.Vault.Transit != nil {

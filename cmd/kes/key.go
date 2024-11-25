@@ -251,12 +251,12 @@ func describeKeyCmd(args []string) {
 	}
 
 	year, month, day := info.CreatedAt.Date()
-	hour, min, sec := info.CreatedAt.Clock()
+	hour, minute, sec := info.CreatedAt.Clock()
 
 	buf := &strings.Builder{}
 	fmt.Fprintf(buf, "%-11s %s\n", "Name", info.Name)
 	fmt.Fprintf(buf, "%-11s %s\n", "Algorithm", info.Algorithm)
-	fmt.Fprintf(buf, "%-11s %04d-%02d-%02d %02d:%02d:%02d\n", "Date", year, month, day, hour, min, sec)
+	fmt.Fprintf(buf, "%-11s %04d-%02d-%02d %02d:%02d:%02d\n", "Date", year, month, day, hour, minute, sec)
 	fmt.Fprintf(buf, "%-11s %s", "Owner", info.CreatedBy)
 	fmt.Print(buf)
 }

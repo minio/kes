@@ -224,10 +224,10 @@ func infoPolicyCmd(args []string) {
 		fmt.Println(faint.Render(fmt.Sprintf("%-11s", "Name")), policyStyle.Render(name))
 		if !info.CreatedAt.IsZero() {
 			year, month, day := info.CreatedAt.Local().Date()
-			hour, min, sec := info.CreatedAt.Local().Clock()
+			hour, minute, sec := info.CreatedAt.Local().Clock()
 			fmt.Println(
 				faint.Render(fmt.Sprintf("%-11s", "Date")),
-				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, min, sec),
+				fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, sec),
 			)
 		}
 		if !info.CreatedBy.IsUnknown() {
@@ -335,8 +335,8 @@ func showPolicyCmd(args []string) {
 		header := tui.NewStyle().Bold(true).Foreground(Cyan)
 		if !policy.CreatedAt.IsZero() {
 			year, month, day := policy.CreatedAt.Local().Date()
-			hour, min, sec := policy.CreatedAt.Local().Clock()
-			fmt.Printf("\n%s %04d-%02d-%02d %02d:%02d:%02d\n", header.Render("Created at:"), year, month, day, hour, min, sec)
+			hour, minute, sec := policy.CreatedAt.Local().Clock()
+			fmt.Printf("\n%s %04d-%02d-%02d %02d:%02d:%02d\n", header.Render("Created at:"), year, month, day, hour, minute, sec)
 		}
 		if !policy.CreatedBy.IsUnknown() {
 			fmt.Println(header.Render("Created by:"), policy.CreatedBy)
