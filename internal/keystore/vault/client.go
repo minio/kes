@@ -7,7 +7,9 @@ package vault
 import (
 	"context"
 	"errors"
+	"os"
 	"path"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -104,9 +106,18 @@ func (c *client) AuthenticateWithK8S(login *Kubernetes) authFunc {
 			client = client.WithNamespace(login.Namespace)
 		}
 
+		jwt := login.JWT
+		if strings.ContainsRune(jwt, '/') || strings.ContainsRune(jwt, os.PathSeparator) {
+			jwtBytes, err := os.ReadFile(jwt)
+			if err != nil {
+				return nil, err
+			}
+			jwt = string(jwtBytes)
+		}
+
 		secret, err := client.Logical().WriteWithContext(ctx, path.Join("auth", login.Engine, "login"), map[string]interface{}{
 			"role": login.Role,
-			"jwt":  login.JWT,
+			"jwt":  jwt,
 		})
 		if secret == nil && err == nil {
 			// The Vault SDK eventually returns no error but also no
