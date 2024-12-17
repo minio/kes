@@ -1,0 +1,18 @@
+version: v1
+
+address: 0.0.0.0:7373 
+
+admin:
+  identity: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
+
+tls:
+  key:      ./server.key  
+  cert:     ./server.cert  
+
+keystore:
+  aws:
+    secretsmanager:
+      region: us-east-2
+      credentials:
+        accesskey: AKIAIOSFODNN7EXAMPLE
+        secretkey: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
