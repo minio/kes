@@ -238,7 +238,9 @@ func newClient(conf config) *kes.Client {
 	}
 
 	client := kes.NewClientWithConfig("", &tls.Config{
-		Certificates:       []tls.Certificate{cert},
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
 		InsecureSkipVerify: conf.InsecureSkipVerify,
 	})
 	client.Endpoints = endpoints
