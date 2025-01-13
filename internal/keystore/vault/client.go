@@ -196,6 +196,7 @@ func (c *client) RenewToken(ctx context.Context, authenticate authFunc, secret *
 		}
 
 		renewIn := 80 * (ttl / 100) // Renew token after 80% of its TTL has passed
+		ttl = 0                     // Set TTL to zero to trigger an immediate re-authentication in case of auth failure
 		select {
 		case <-ctx.Done():
 			return
