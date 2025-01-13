@@ -249,5 +249,6 @@ func (c *Config) Clone() *Config {
 		PrivateKey:      c.PrivateKey,
 		Certificate:     c.Certificate,
 		CAPath:          c.CAPath,
+		Verbose:         c.Verbose,
 	}
 }

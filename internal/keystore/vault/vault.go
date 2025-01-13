@@ -142,7 +142,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 
 	// log authentication events
 	lastAuthSuccess := false
-	authenticate = func(ctx context.Context) (*vaultapi.Secret, error) {
+	authenticateLogged := func(ctx context.Context) (*vaultapi.Secret, error) {
 		secret, err := authenticate(ctx)
 		if err != nil {
 			if lastAuthSuccess {
@@ -164,7 +164,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		return secret, err
 	}
 
-	auth, err := authenticate(ctx)
+	auth, err := authenticateLogged(ctx)
 	if err != nil {
 		return nil, err
 	}
