@@ -121,6 +121,8 @@ type ymlFile struct {
 			Status struct {
 				Ping env[time.Duration] `yaml:"ping"`
 			} `yaml:"status"`
+
+			Verbose bool `yaml:"verbose"`
 		} `yaml:"vault"`
 
 		Fortanix *struct {
@@ -476,6 +478,7 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 			Certificate: y.KeyStore.Vault.TLS.Certificate.Value,
 			CAPath:      y.KeyStore.Vault.TLS.CAPath.Value,
 			StatusPing:  y.KeyStore.Vault.Status.Ping.Value,
+			Verbose:     y.KeyStore.Vault.Verbose.Value,
 		}
 		if y.KeyStore.Vault.AppRole != nil {
 			s.AppRole = &VaultAppRoleAuth{

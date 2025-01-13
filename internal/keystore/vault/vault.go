@@ -26,6 +26,7 @@ import (
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
+	internalhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
 )
@@ -111,6 +112,9 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 	if tr, ok := config.HttpClient.Transport.(*http.Transport); ok {
 		tr.DisableKeepAlives = true
 		tr.MaxIdleConnsPerHost = -1
+	}
+	if c.Verbose {
+		config.HttpClient.Transport = &internalhttp.LoggingTransport{RoundTripper: config.HttpClient.Transport}
 	}
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {

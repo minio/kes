@@ -455,6 +455,9 @@ type VaultKeyStore struct {
 	// is checked.
 	// If not set, defaults to 10s.
 	StatusPing time.Duration
+
+	// Verbose enables logging of all HTTP requests to Vault
+	Verbose bool
 }
 
 // VaultAppRoleAuth is a structure containing the configuration
@@ -545,6 +548,7 @@ func (s *VaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 		Certificate:     s.Certificate,
 		CAPath:          s.CAPath,
 		StatusPingAfter: s.StatusPing,
+		Verbose:         s.Verbose,
 	}
 	if s.AppRole != nil {
 		c.AppRole = &vault.AppRole{
