@@ -29,7 +29,7 @@ func TestAWS(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	store, err := config.KeyStore.Connect(ctx, false)
+	store, err := config.KeyStore.Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

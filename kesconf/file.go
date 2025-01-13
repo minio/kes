@@ -159,7 +159,7 @@ func (f *File) TLSConfig() (*tls.Config, error) {
 // Config returns a new KES configuration as specified by
 // the File. It connects to the KeyStore using the given
 // context.
-func (f *File) Config(ctx context.Context, verbose bool) (*kes.Config, error) {
+func (f *File) Config(ctx context.Context) (*kes.Config, error) {
 	conf := &kes.Config{
 		Admin: f.Admin,
 	}
@@ -211,7 +211,7 @@ func (f *File) Config(ctx context.Context, verbose bool) (*kes.Config, error) {
 	}
 
 	if f.KeyStore != nil {
-		keystore, err := f.KeyStore.Connect(ctx, verbose)
+		keystore, err := f.KeyStore.Connect(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +298,9 @@ type LogConfig struct {
 	// Audit determines whether the KES server logs audit events to STDOUT.
 	// It does not en/disable audit logging in general.
 	AuditLevel slog.Level
+
+	// Log level for which to report KES diagnostic messages.
+	LogLevel slog.Level
 }
 
 // APIConfig is a structure that holds the API configuration
@@ -365,7 +368,7 @@ type Key struct {
 type KeyStore interface {
 	// Connect establishes and returns a new connection
 	// to the keystore.
-	Connect(ctx context.Context, verbose bool) (kes.KeyStore, error)
+	Connect(ctx context.Context) (kes.KeyStore, error)
 }
 
 // FSKeyStore is a structure containing the configuration
@@ -382,7 +385,7 @@ type FSKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs in a path on the filesystem.
-func (s *FSKeyStore) Connect(context.Context, bool) (kes.KeyStore, error) {
+func (s *FSKeyStore) Connect(context.Context) (kes.KeyStore, error) {
 	return fs.NewStore(s.Path)
 }
 
@@ -528,7 +531,7 @@ type VaultTransit struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Hashicorp Vault server.
-func (s *VaultKeyStore) Connect(ctx context.Context, verbose bool) (kes.KeyStore, error) {
+func (s *VaultKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	if s.AppRole == nil && s.Kubernetes == nil {
 		return nil, errors.New("edge: failed to connect to hashicorp vault: no authentication method specified")
 	}
@@ -568,7 +571,7 @@ func (s *VaultKeyStore) Connect(ctx context.Context, verbose bool) (kes.KeyStore
 			KeyName: s.Transit.KeyName,
 		}
 	}
-	return vault.Connect(ctx, c, verbose)
+	return vault.Connect(ctx, c)
 }
 
 // FortanixKeyStore is a structure containing the
@@ -594,7 +597,7 @@ type FortanixKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Fortanix SDKMS server.
-func (s *FortanixKeyStore) Connect(ctx context.Context, _ bool) (kes.KeyStore, error) {
+func (s *FortanixKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return fortanix.Connect(ctx, &fortanix.Config{
 		Endpoint: s.Endpoint,
 		GroupID:  s.GroupID,
@@ -629,7 +632,7 @@ type KeySecureKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on a Gemalto KeySecure instance.
-func (s *KeySecureKeyStore) Connect(ctx context.Context, _ bool) (kes.KeyStore, error) {
+func (s *KeySecureKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return gemalto.Connect(ctx, &gemalto.Config{
 		Endpoint: s.Endpoint,
 		CAPath:   s.CAPath,
@@ -678,7 +681,7 @@ type GCPSecretManagerKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on GCP SecretManager.
-func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context, _ bool) (kes.KeyStore, error) {
+func (s *GCPSecretManagerKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return gcp.Connect(ctx, &gcp.Config{
 		Endpoint:  s.Endpoint,
 		ProjectID: s.ProjectID,
@@ -722,7 +725,7 @@ type AWSSecretsManagerKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on AWS SecretsManager.
-func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context, _ bool) (kes.KeyStore, error) {
+func (s *AWSSecretsManagerKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	return aws.Connect(ctx, &aws.Config{
 		Addr:     s.Endpoint,
 		Region:   s.Region,
@@ -758,7 +761,7 @@ type AzureKeyVaultKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on Azure KeyVault.
-func (s *AzureKeyVaultKeyStore) Connect(_ context.Context, verbose bool) (kes.KeyStore, error) {
+func (s *AzureKeyVaultKeyStore) Connect(_ context.Context) (kes.KeyStore, error) {
 	if (s.TenantID != "" || s.ClientID != "" || s.ClientSecret != "") && s.ManagedIdentityClientID != "" {
 		return nil, errors.New("edge: failed to connect to Azure KeyVault: more than one authentication method specified")
 	}
@@ -808,7 +811,7 @@ type EntrustKeyControlKeyStore struct {
 }
 
 // Connect returns a kv.Store that stores key-value pairs on Entrust KeyControl.
-func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context, _ bool) (kes.KeyStore, error) {
+func (s *EntrustKeyControlKeyStore) Connect(ctx context.Context) (kes.KeyStore, error) {
 	var rootCAs *x509.CertPool
 	if s.CAPath != "" {
 		ca, err := https.CertPoolFromFile(s.CAPath)

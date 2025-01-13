@@ -1,28 +1,16 @@
-package http
+package vault
 
 import (
 	"log/slog"
 	"net/http"
-	"slices"
 	"time"
 )
 
-// LoggingTransport is an http.RoundTripper that logs the request and response.
-type LoggingTransport struct {
+type loggingTransport struct {
 	http.RoundTripper
-	skipPaths []string
 }
 
-// NewLoggingTransport creates an http.RoundTripper that logs the request and response.
-func NewLoggingTransport(rt http.RoundTripper, skipPaths ...string) *LoggingTransport {
-	return &LoggingTransport{
-		RoundTripper: rt,
-		skipPaths:    skipPaths,
-	}
-}
-
-// RoundTrip implements the RoundTripper interface.
-func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (lt *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt := lt.RoundTripper
 	if rt == nil {
 		rt = http.DefaultTransport
@@ -32,28 +20,42 @@ func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	resp, err := rt.RoundTrip(req)
 
 	// don't log health checks
-	if !slices.Contains(lt.skipPaths, req.URL.Path) {
+	if req.URL.Path != "/v1/sys/health" {
 		switch {
 		case err != nil:
-			slog.Info("HTTP error",
+			slog.Debug("HTTP error",
 				slog.String("method", req.Method),
 				slog.String("url", req.URL.String()),
+				slog.String("auth", obfuscateToken(req.Header.Get("X-Vault-Token"))),
 				slog.Duration("duration", time.Since(start)),
 				slog.String("error", err.Error()))
 		case resp.StatusCode >= 300:
-			slog.Info("HTTP error response",
+			slog.Debug("HTTP error response",
 				slog.String("method", req.Method),
 				slog.String("url", req.URL.String()),
+				slog.String("auth", obfuscateToken(req.Header.Get("X-Vault-Token"))),
 				slog.Duration("duration", time.Since(start)),
 				slog.String("status", resp.Status))
 		default:
 			slog.Debug("HTTP success response",
 				slog.String("method", req.Method),
 				slog.String("url", req.URL.String()),
+				slog.String("auth", obfuscateToken(req.Header.Get("X-Vault-Token"))),
 				slog.Duration("duration", time.Since(start)),
 				slog.String("status", resp.Status))
 		}
 	}
 
 	return resp, err
+}
+
+func obfuscateToken(token string) string {
+	switch {
+	case len(token) == 0:
+		return ""
+	case len(token) > 8:
+		return "***" + token[len(token)-4:]
+	default:
+		return "***"
+	}
 }

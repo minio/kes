@@ -66,6 +66,7 @@ type ymlFile struct {
 	Log struct {
 		Error env[string] `yaml:"error"`
 		Audit env[string] `yaml:"audit"`
+		Level env[string] `yaml:"level"`
 	} `yaml:"log"`
 
 	Keys []struct {
@@ -299,6 +300,10 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+	logLevel, err := parseLogLevel(y.Log.Level.Value)
+	if err != nil {
+		return nil, err
+	}
 
 	for path, api := range y.API.Paths {
 		if api.Timeout.Value < 0 {
@@ -354,6 +359,7 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 		Log: &LogConfig{
 			ErrLevel:   errLevel,
 			AuditLevel: auditLevel,
+			LogLevel:   logLevel,
 		},
 		KeyStore: keystore,
 	}

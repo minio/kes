@@ -87,7 +87,7 @@ func serverCmd(args []string) {
 	cmd.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
 	cmd.StringVar(&mtlsAuthFlag, "auth", "", "Controls how the server handles mTLS authentication")
 	cmd.BoolVar(&devFlag, "dev", false, "Start the KES server in development mode")
-	cmd.BoolVar(&verboseFlag, "verbose", false, "Log verbose output (Vault only)")
+	cmd.BoolVar(&verboseFlag, "verbose", false, "Log verbose output")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -176,18 +176,26 @@ func startServer(addrFlag, configFlag string, verbose bool) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	conf, err := rawConfig.Config(ctx, verbose)
+	srv := &kes.Server{}
+	logLevel := slog.LevelInfo
+	if rawConfig.Log != nil {
+		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
+		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
+		logLevel = rawConfig.Log.LogLevel
+	}
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetLogLoggerLevel(logLevel)
+
+	conf, err := rawConfig.Config(ctx)
 	if err != nil {
 		return err
 	}
 	defer conf.Keys.Close()
 
-	srv := &kes.Server{}
 	conf.Cache = configureCache(conf.Cache)
-	if rawConfig.Log != nil {
-		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
-		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
-	}
+
 	sighup := make(chan os.Signal, 10)
 	signal.Notify(sighup, syscall.SIGHUP)
 	defer signal.Stop(sighup)
@@ -240,7 +248,7 @@ func startServer(addrFlag, configFlag string, verbose bool) error {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue
 				}
-				config, err := file.Config(ctx, verbose)
+				config, err := file.Config(ctx)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue

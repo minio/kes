@@ -27,7 +27,6 @@ import (
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
-	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
 )
@@ -41,7 +40,7 @@ type Store struct {
 
 // Connect connects to a Hashicorp Vault server with
 // the given configuration.
-func Connect(ctx context.Context, c *Config, verbose bool) (*Store, error) {
+func Connect(ctx context.Context, c *Config) (*Store, error) {
 	c = c.Clone()
 
 	if c.Engine == "" {
@@ -114,8 +113,8 @@ func Connect(ctx context.Context, c *Config, verbose bool) (*Store, error) {
 		tr.DisableKeepAlives = true
 		tr.MaxIdleConnsPerHost = -1
 	}
-	if verbose {
-		config.HttpClient.Transport = xhttp.NewLoggingTransport(config.HttpClient.Transport, "/v1/sys/health")
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		config.HttpClient.Transport = &loggingTransport{config.HttpClient.Transport}
 	}
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
@@ -150,14 +149,8 @@ func Connect(ctx context.Context, c *Config, verbose bool) (*Store, error) {
 				lastAuthSuccess = false
 			}
 		} else {
-			if verbose {
-				obfuscatedToken := secret.Auth.ClientToken
-				if len(obfuscatedToken) > 10 {
-					obfuscatedToken = obfuscatedToken[:2] + "***" + obfuscatedToken[len(obfuscatedToken)-4:]
-				} else {
-					obfuscatedToken = "***"
-				}
-				slog.Info("Authentication successful", slog.String("token", obfuscatedToken))
+			if slog.Default().Enabled(ctx, slog.LevelDebug) {
+				slog.Debug("Authentication successful", slog.String("token", obfuscateToken(secret.Auth.ClientToken)))
 			}
 			lastAuthSuccess = true
 		}
