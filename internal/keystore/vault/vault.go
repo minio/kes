@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -137,6 +138,30 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		authenticate = client.AuthenticateWithAppRole(c.AppRole)
 	case c.K8S != nil && (c.K8S.Role != "" || c.K8S.JWT != ""):
 		authenticate = client.AuthenticateWithK8S(c.K8S)
+	}
+
+	// log authentication events
+	lastAuthSuccess := false
+	authenticate = func(ctx context.Context) (*vaultapi.Secret, error) {
+		secret, err := authenticate(ctx)
+		if err != nil {
+			if lastAuthSuccess {
+				slog.Info("Authentication failed (not logged anymore until next successful authentication)", slog.String("error", err.Error()))
+				lastAuthSuccess = false
+			}
+		} else {
+			if c.Verbose {
+				obfuscatedToken := secret.Auth.ClientToken
+				if len(obfuscatedToken) > 10 {
+					obfuscatedToken = obfuscatedToken[:2] + "***" + obfuscatedToken[len(obfuscatedToken)-4:]
+				} else {
+					obfuscatedToken = "***"
+				}
+				slog.Info("Authentication successful", slog.String("token", obfuscatedToken))
+			}
+			lastAuthSuccess = true
+		}
+		return secret, err
 	}
 
 	auth, err := authenticate(ctx)

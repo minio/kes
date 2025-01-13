@@ -122,7 +122,7 @@ type ymlFile struct {
 				Ping env[time.Duration] `yaml:"ping"`
 			} `yaml:"status"`
 
-			Verbose bool `yaml:"verbose"`
+			Verbose env[bool] `yaml:"verbose"`
 		} `yaml:"vault"`
 
 		Fortanix *struct {
