@@ -35,7 +35,7 @@ func TestAzure(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	store, err := config.KeyStore.Connect(ctx)
+	store, err := config.KeyStore.Connect(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}

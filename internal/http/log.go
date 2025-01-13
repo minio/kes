@@ -3,12 +3,22 @@ package http
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 )
 
 // LoggingTransport is an http.RoundTripper that logs the request and response.
 type LoggingTransport struct {
 	http.RoundTripper
+	skipPaths []string
+}
+
+// NewLoggingTransport creates an http.RoundTripper that logs the request and response.
+func NewLoggingTransport(rt http.RoundTripper, skipPaths ...string) *LoggingTransport {
+	return &LoggingTransport{
+		RoundTripper: rt,
+		skipPaths:    skipPaths,
+	}
 }
 
 // RoundTrip implements the RoundTripper interface.
@@ -22,7 +32,7 @@ func (lt *LoggingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	resp, err := rt.RoundTrip(req)
 
 	// don't log health checks
-	if req.URL.Path != "/v1/sys/health" {
+	if !slices.Contains(lt.skipPaths, req.URL.Path) {
 		switch {
 		case err != nil:
 			slog.Info("HTTP error",

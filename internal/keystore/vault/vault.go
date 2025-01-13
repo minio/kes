@@ -27,7 +27,7 @@ import (
 	"aead.dev/mem"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/minio/kes"
-	internalhttp "github.com/minio/kes/internal/http"
+	xhttp "github.com/minio/kes/internal/http"
 	"github.com/minio/kes/internal/keystore"
 	kesdk "github.com/minio/kms-go/kes"
 )
@@ -41,7 +41,7 @@ type Store struct {
 
 // Connect connects to a Hashicorp Vault server with
 // the given configuration.
-func Connect(ctx context.Context, c *Config) (*Store, error) {
+func Connect(ctx context.Context, c *Config, verbose bool) (*Store, error) {
 	c = c.Clone()
 
 	if c.Engine == "" {
@@ -114,8 +114,8 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		tr.DisableKeepAlives = true
 		tr.MaxIdleConnsPerHost = -1
 	}
-	if c.Verbose {
-		config.HttpClient.Transport = &internalhttp.LoggingTransport{RoundTripper: config.HttpClient.Transport}
+	if verbose {
+		config.HttpClient.Transport = xhttp.NewLoggingTransport(config.HttpClient.Transport, "/v1/sys/health")
 	}
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
@@ -150,7 +150,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 				lastAuthSuccess = false
 			}
 		} else {
-			if c.Verbose {
+			if verbose {
 				obfuscatedToken := secret.Auth.ClientToken
 				if len(obfuscatedToken) > 10 {
 					obfuscatedToken = obfuscatedToken[:2] + "***" + obfuscatedToken[len(obfuscatedToken)-4:]

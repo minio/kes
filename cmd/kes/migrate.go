@@ -109,7 +109,7 @@ func migrate(args []string) {
 	srcConf, err := kesconf.ReadFile(fromPath)
 	cli.Assert(err == nil, err)
 
-	src, err := srcConf.KeyStore.Connect(ctx)
+	src, err := srcConf.KeyStore.Connect(ctx, false)
 	cli.Assert(err == nil, err)
 
 	iter := &kes.ListIter[string]{
@@ -121,7 +121,7 @@ func migrate(args []string) {
 		dstConf, err := kesconf.ReadFile(toPath)
 		cli.Assert(err == nil, err)
 
-		dst, err := dstConf.KeyStore.Connect(ctx)
+		dst, err := dstConf.KeyStore.Connect(ctx, false)
 		cli.Assert(err == nil, err)
 
 		var (

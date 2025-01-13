@@ -79,6 +79,7 @@ func serverCmd(args []string) {
 		tlsCertFlag  string
 		mtlsAuthFlag string
 		devFlag      bool
+		verboseFlag  bool
 	)
 	cmd.StringVar(&addrFlag, "addr", "", "The address of the server")
 	cmd.StringVar(&configFlag, "config", "", "Path to the server configuration file")
@@ -86,6 +87,7 @@ func serverCmd(args []string) {
 	cmd.StringVar(&tlsCertFlag, "cert", "", "Path to the TLS certificate")
 	cmd.StringVar(&mtlsAuthFlag, "auth", "", "Controls how the server handles mTLS authentication")
 	cmd.BoolVar(&devFlag, "dev", false, "Start the KES server in development mode")
+	cmd.BoolVar(&verboseFlag, "verbose", false, "Log verbose output (Vault only)")
 	if err := cmd.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(2)
@@ -122,12 +124,12 @@ func serverCmd(args []string) {
 		return
 	}
 
-	if err := startServer(addrFlag, configFlag); err != nil {
+	if err := startServer(addrFlag, configFlag, verboseFlag); err != nil {
 		cli.Fatal(err)
 	}
 }
 
-func startServer(addrFlag, configFlag string) error {
+func startServer(addrFlag, configFlag string, verbose bool) error {
 	var memLocked bool
 	if runtime.GOOS == "linux" {
 		memLocked = mlockall() == nil
@@ -174,7 +176,7 @@ func startServer(addrFlag, configFlag string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	conf, err := rawConfig.Config(ctx)
+	conf, err := rawConfig.Config(ctx, verbose)
 	if err != nil {
 		return err
 	}
@@ -238,7 +240,7 @@ func startServer(addrFlag, configFlag string) error {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue
 				}
-				config, err := file.Config(ctx)
+				config, err := file.Config(ctx, verbose)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to reload server config: %v\n", err)
 					continue

@@ -24,7 +24,7 @@ func TestFS(t *testing.T) {
 	ctx, cancel := testingContext(t)
 	defer cancel()
 
-	store, err := config.Connect(ctx)
+	store, err := config.Connect(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}

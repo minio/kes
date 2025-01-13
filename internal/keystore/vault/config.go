@@ -220,9 +220,6 @@ type Config struct {
 	// host's root CA set is used.
 	CAPath string
 
-	// Flag to enable logging of all Vault HTTP requests
-	Verbose bool
-
 	lock sync.RWMutex
 }
 
@@ -249,6 +246,5 @@ func (c *Config) Clone() *Config {
 		PrivateKey:      c.PrivateKey,
 		Certificate:     c.Certificate,
 		CAPath:          c.CAPath,
-		Verbose:         c.Verbose,
 	}
 }
