@@ -2,6 +2,8 @@ module github.com/minio/kes
 
 go 1.21
 
+toolchain go1.23.5
+
 require (
 	aead.dev/mem v0.2.0
 	aead.dev/minisign v0.2.1
