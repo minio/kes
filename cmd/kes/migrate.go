@@ -233,24 +233,25 @@ func migrate(args []string) {
 		key, err := crypto.ParseKeyVersion(b)
 		cli.Assert(err == nil, err)
 
-		err = client.ImportKey(ctx, &kms.ImportKeyRequest{
-			Enclave: kmsEnclave,
-			Name:    name,
-			Type:    kms.SecretKeyType(key.Key.Type()),
-			Key:     key.Key.Bytes(),
+		err = client.ImportKey(ctx, kmsEnclave, &kms.ImportKeyRequest{
+			Name: name,
+			Type: kms.SecretKeyType(key.Key.Type()),
+			Key:  key.Key.Bytes(),
 		})
 		if merge && errors.Is(err, kms.ErrKeyExists) {
 			continue // Do not increment the counter since we skip this key
 		}
 		if force && errors.Is(err, kms.ErrKeyExists) { // Try to overwrite the key
-			if err = client.DeleteKey(ctx, &kms.DeleteKeyRequest{Enclave: kmsEnclave, Name: name, AllVersions: true}); err != nil {
+			if err = client.DeleteKey(ctx, kmsEnclave, &kms.DeleteKeyRequest{
+				Name:        name,
+				AllVersions: true,
+			}); err != nil {
 				cli.Assert(err == nil, err)
 			}
-			err = client.ImportKey(ctx, &kms.ImportKeyRequest{
-				Enclave: kmsEnclave,
-				Name:    name,
-				Type:    kms.SecretKeyType(key.Key.Type()),
-				Key:     key.Key.Bytes(),
+			err = client.ImportKey(ctx, kmsEnclave, &kms.ImportKeyRequest{
+				Name: name,
+				Type: kms.SecretKeyType(key.Key.Type()),
+				Key:  key.Key.Bytes(),
 				// TODO(aead): migrate HMAC key as well
 			})
 		}
