@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/minio/kes/internal/log"
 	"github.com/minio/kms-go/kes"
 	"gopkg.in/yaml.v3"
 )
@@ -64,8 +65,9 @@ type ymlFile struct {
 	} `yaml:"api"`
 
 	Log struct {
-		Error env[string] `yaml:"error"`
-		Audit env[string] `yaml:"audit"`
+		Format env[string] `yaml:"format"`
+		Error  env[string] `yaml:"error"`
+		Audit  env[string] `yaml:"audit"`
 	} `yaml:"log"`
 
 	Keys []struct {
@@ -291,6 +293,10 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 		return nil, fmt.Errorf("kesconf: invalid offline cache expiry '%v'", y.Cache.Expiry.Offline.Value)
 	}
 
+	logFormat, err := parseLogFormat(y.Log.Format.Value)
+	if err != nil {
+		return nil, err
+	}
 	errLevel, err := parseLogLevel(y.Log.Error.Value)
 	if err != nil {
 		return nil, err
@@ -352,6 +358,7 @@ func ymlToServerConfig(y *ymlFile) (*File, error) {
 			ExpiryOffline: y.Cache.Expiry.Offline.Value,
 		},
 		Log: &LogConfig{
+			LogFormat:  logFormat,
 			ErrLevel:   errLevel,
 			AuditLevel: auditLevel,
 		},
@@ -699,6 +706,17 @@ func (r *env[T]) UnmarshalYAML(node *yaml.Node) error {
 	r.Var = env
 	r.Value = v
 	return nil
+}
+
+func parseLogFormat(s string) (log.Format, error) {
+	switch strings.TrimSpace(strings.ToUpper(s)) {
+	case "JSON":
+		return log.JSONFormat, nil
+	case "TEXT", "":
+		return log.TextFormat, nil
+	default:
+		return log.TextFormat, fmt.Errorf("log format: unknown format '%s'", s)
+	}
 }
 
 func parseLogLevel(s string) (slog.Level, error) {
