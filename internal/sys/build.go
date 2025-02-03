@@ -16,7 +16,7 @@ import (
 type BinaryInfo struct {
 	Version  string // The version of this binary
 	CommitID string // The git commit hash
-	Runtime  string // The Go runtime version, e.g. go1.22.0
+	Runtime  string // The Go runtime version, e.g. go1.23.5
 	Compiler string // The Go compiler used to build this binary
 }
 

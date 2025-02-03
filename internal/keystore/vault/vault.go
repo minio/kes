@@ -113,9 +113,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		tr.DisableKeepAlives = true
 		tr.MaxIdleConnsPerHost = -1
 	}
-	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		config.HttpClient.Transport = &loggingTransport{config.HttpClient.Transport}
-	}
+	config.HttpClient.Transport = NewLoggerTransport(ctx, config.HttpClient.Transport)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
 		return nil, err

@@ -298,9 +298,6 @@ type LogConfig struct {
 	// Audit determines whether the KES server logs audit events to STDOUT.
 	// It does not en/disable audit logging in general.
 	AuditLevel slog.Level
-
-	// Log level for which to report KES diagnostic messages.
-	LogLevel slog.Level
 }
 
 // APIConfig is a structure that holds the API configuration

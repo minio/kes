@@ -177,16 +177,13 @@ func startServer(addrFlag, configFlag string, verbose bool) error {
 	defer cancel()
 
 	srv := &kes.Server{}
-	logLevel := slog.LevelInfo
 	if rawConfig.Log != nil {
 		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
 		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
-		logLevel = rawConfig.Log.LogLevel
 	}
-	if verbose {
-		logLevel = slog.LevelDebug
+	if verbose || srv.ErrLevel.Level() == slog.LevelDebug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
-	slog.SetLogLoggerLevel(logLevel)
 
 	conf, err := rawConfig.Config(ctx)
 	if err != nil {

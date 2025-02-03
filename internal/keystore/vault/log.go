@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +11,17 @@ import (
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
+
+// NewLoggerTransport returns a new http.RoundTripper that logs HTTP requests and responses
+// (when debug logging is enabled).
+func NewLoggerTransport(ctx context.Context, rt http.RoundTripper) http.RoundTripper {
+	if !slog.Default().Enabled(ctx, slog.LevelDebug) {
+		return rt
+	}
+	return &loggingTransport{
+		RoundTripper: rt,
+	}
+}
 
 type loggingTransport struct {
 	http.RoundTripper
