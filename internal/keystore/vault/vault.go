@@ -164,7 +164,7 @@ func (s *Store) String() string { return "Hashicorp Vault: " + s.config.Endpoint
 func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 	// This is a workaround for https://github.com/hashicorp/vault/issues/14934
 	// The Vault SDK should not set the X-Vault-Namespace header
-	// for root-only API paths.
+	// for root-only API paths. Health is also checked in client.CheckStatus.
 	// Otherwise, Vault may respond with: 404 - unsupported path
 	client, err := s.client.CloneWithHeaders()
 	if err != nil {

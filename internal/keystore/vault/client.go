@@ -54,9 +54,14 @@ func (c *client) CheckStatus(ctx context.Context, delay time.Duration) {
 	defer ticker.Stop()
 
 	for {
-		status, err := c.Sys().Health()
-		if err == nil {
-			c.sealed.Store(status.Sealed)
+		client, _ := c.CloneWithHeaders()
+		if client != nil {
+			// See vault.Store.Status() for more info on namespace handling.
+			client.ClearNamespace()
+			status, err := client.Sys().HealthWithContext(ctx)
+			if err == nil {
+				c.sealed.Store(status.Sealed)
+			}
 		}
 
 		select {
