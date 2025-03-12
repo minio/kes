@@ -29,6 +29,7 @@ import (
 	"github.com/minio/kes/internal/headers"
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore"
+	"github.com/minio/kes/internal/log"
 	"github.com/minio/kes/internal/metric"
 	"github.com/minio/kes/internal/sys"
 	"github.com/minio/kms-go/kes"
@@ -55,6 +56,9 @@ type Server struct {
 	// negative, Server.Close waits indefinitely for
 	// connections to return to idle and then shut down.
 	ShutdownTimeout time.Duration
+
+	// LogFormat controls the output format of the default logger.
+	LogFormat log.Format
 
 	// ErrLevel controls which errors are logged by the server.
 	// It may be adjusted after the server has been started to
@@ -410,7 +414,7 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 
 	if conf.ErrorLog == nil {
 		state.LogHandler = newLogHandler(
-			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			newFormattedLogHandler(os.Stderr, s.LogFormat, &slog.HandlerOptions{
 				Level: &s.ErrLevel,
 			}),
 			&s.ErrLevel,
@@ -421,7 +425,7 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 	state.Log = slog.New(state.LogHandler)
 
 	if conf.AuditLog == nil {
-		handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: &s.AuditLevel})
+		handler := newFormattedLogHandler(os.Stdout, s.LogFormat, &slog.HandlerOptions{Level: &s.AuditLevel})
 		state.Audit = newAuditLogger(&AuditLogHandler{Handler: handler}, &s.AuditLevel)
 	} else {
 		state.Audit = newAuditLogger(conf.AuditLog, &s.AuditLevel)

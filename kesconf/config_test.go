@@ -7,6 +7,8 @@ package kesconf
 import (
 	"testing"
 	"time"
+
+	"github.com/minio/kes/internal/log"
 )
 
 func TestReadServerConfigYAML_FS(t *testing.T) {
@@ -67,6 +69,36 @@ func TestReadServerConfigYAML_CustomAPI(t *testing.T) {
 	}
 	if api.InsecureSkipAuth != MetricsSkipAuth {
 		t.Fatalf("Invalid API config: invalid skip_auth for '%s': got '%v' - want '%v'", StatusPath, api.InsecureSkipAuth, MetricsSkipAuth)
+	}
+}
+
+func TestReadServerConfigYAML_DefaultLogFormat(t *testing.T) {
+	const (
+		Filename = "./testdata/log-format-default.yml"
+	)
+
+	config, err := ReadFile(Filename)
+	if err != nil {
+		t.Fatalf("Failed to read file '%s': %v", Filename, err)
+	}
+
+	if config.Log.LogFormat != log.TextFormat {
+		t.Fatalf("Invalid log config: invalid format: got '%s' - want '%s'", config.Log.LogFormat, log.TextFormat)
+	}
+}
+
+func TestReadServerConfigYAML_JSONLogFormat(t *testing.T) {
+	const (
+		Filename = "./testdata/log-format-json.yml"
+	)
+
+	config, err := ReadFile(Filename)
+	if err != nil {
+		t.Fatalf("Failed to read file '%s': %v", Filename, err)
+	}
+
+	if config.Log.LogFormat != log.JSONFormat {
+		t.Fatalf("Invalid log config: invalid format: got '%s' - want '%s'", config.Log.LogFormat, log.JSONFormat)
 	}
 }
 
