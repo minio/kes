@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -112,6 +113,7 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		tr.DisableKeepAlives = true
 		tr.MaxIdleConnsPerHost = -1
 	}
+	config.HttpClient.Transport = NewLoggerTransport(ctx, config.HttpClient.Transport)
 	vaultClient, err := vaultapi.NewClient(config)
 	if err != nil {
 		return nil, err
@@ -135,7 +137,25 @@ func Connect(ctx context.Context, c *Config) (*Store, error) {
 		authenticate = client.AuthenticateWithK8S(c.K8S)
 	}
 
-	auth, err := authenticate(ctx)
+	// log authentication events
+	lastAuthSuccess := false
+	authenticateLogged := func(ctx context.Context) (*vaultapi.Secret, error) {
+		secret, err := authenticate(ctx)
+		if err != nil {
+			if lastAuthSuccess {
+				slog.Info("Authentication failed (not logged anymore until next successful authentication)", slog.String("error", err.Error()))
+				lastAuthSuccess = false
+			}
+		} else {
+			if slog.Default().Enabled(ctx, slog.LevelDebug) {
+				slog.Debug("Authentication successful", slog.String("token", obfuscateToken(secret.Auth.ClientToken)))
+			}
+			lastAuthSuccess = true
+		}
+		return secret, err
+	}
+
+	auth, err := authenticateLogged(ctx)
 	if err != nil {
 		return nil, err
 	}
