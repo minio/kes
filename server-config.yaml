@@ -233,6 +233,13 @@ keystore:
   fs:
     path: "" # Path to directory. Keys will be stored as files.
 
+  # Configuration for storing keys on the filesystem,
+  # using an ecryption encryption key.
+  encryptedfs:
+    masterKeyPath: ""   # Path to secret key file with 32 bytes.
+    masterKeyCipher: "" # Cipher to use, AES256 or ChaCha20. Changing this value breaks any existing encrypted data.
+    path: ""            # Path to directory. Keys will be stored as files.
+
   # Hashicorp Vault configuration. The KES server will store/fetch
   # secret keys at/from Vault's key-value backend.
   #

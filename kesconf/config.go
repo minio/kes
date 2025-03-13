@@ -76,6 +76,11 @@ type ymlFile struct {
 		FS *struct {
 			Path env[string] `yaml:"path"`
 		}
+		EncryptedFS *struct {
+			MasterKeyPath   env[string] `yaml:"masterKeyPath"`
+			MasterKeyCipher env[string] `yaml:"masterKeyCipher"`
+			Path            env[string] `yaml:"path"`
+		} `yaml:"encryptedfs"`
 		KES *struct {
 			Endpoint []env[string] `yaml:"endpoint"`
 			Enclave  env[string]   `yaml:"enclave"`
@@ -413,6 +418,24 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 		}
 		keystore = &FSKeyStore{
 			Path: y.KeyStore.FS.Path.Value,
+		}
+	}
+
+	// Encrypted FS Keystore
+	if y.KeyStore.EncryptedFS != nil {
+		if y.KeyStore.EncryptedFS.MasterKeyPath.Value == "" {
+			return nil, errors.New("kesconf: invalid encryptedfs keystore: no master key path specified")
+		}
+		if y.KeyStore.EncryptedFS.MasterKeyCipher.Value == "" {
+			return nil, errors.New("kesconf: invalid encryptedfs keystore: no master key cipher specified")
+		}
+		if y.KeyStore.EncryptedFS.Path.Value == "" {
+			return nil, errors.New("kesconf: invalid encryptedfs keystore: no path specified")
+		}
+		keystore = &EncryptedFSKeyStore{
+			MasterKeyPath:   y.KeyStore.EncryptedFS.MasterKeyPath.Value,
+			MasterKeyCipher: y.KeyStore.EncryptedFS.MasterKeyCipher.Value,
+			Path:            y.KeyStore.EncryptedFS.Path.Value,
 		}
 	}
 
