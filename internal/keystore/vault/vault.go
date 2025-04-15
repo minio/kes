@@ -184,7 +184,7 @@ func (s *Store) Status(ctx context.Context) (kes.KeyStoreState, error) {
 			return kes.KeyStoreState{Latency: time.Since(start)}, nil
 		}
 	}
-	if errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return kes.KeyStoreState{}, &keystore.ErrUnreachable{Err: err}
 	}
 	return kes.KeyStoreState{}, err
