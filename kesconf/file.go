@@ -22,6 +22,7 @@ import (
 	"github.com/minio/kes/internal/https"
 	"github.com/minio/kes/internal/keystore/aws"
 	"github.com/minio/kes/internal/keystore/azure"
+	"github.com/minio/kes/internal/keystore/efs"
 	"github.com/minio/kes/internal/keystore/entrust"
 	"github.com/minio/kes/internal/keystore/fortanix"
 	"github.com/minio/kes/internal/keystore/fs"
@@ -384,6 +385,28 @@ type FSKeyStore struct {
 // Connect returns a kv.Store that stores key-value pairs in a path on the filesystem.
 func (s *FSKeyStore) Connect(context.Context) (kes.KeyStore, error) {
 	return fs.NewStore(s.Path)
+}
+
+// EncryptedFSKeyStore is a structure containing the configuration
+// for a simple filesystem keystore.
+//
+// A EncryptedFSKeyStore should only be used when testing a KES server.
+type EncryptedFSKeyStore struct {
+	// MasterKeyPath is the path of the file containing the master key.
+	MasterKeyPath string
+	// MasterKeyCipher is the cipher to load the master key.
+	MasterKeyCipher string
+	// Path is the path to the directory that
+	// contains the keys.
+	//
+	// If the directory does not exist, it
+	// will be created.
+	Path string
+}
+
+// Connect returns a kv.Store that stores key-value pairs in a path on the filesystem.
+func (s *EncryptedFSKeyStore) Connect(context.Context) (kes.KeyStore, error) {
+	return efs.NewStore(s.MasterKeyPath, s.MasterKeyCipher, s.Path)
 }
 
 // VaultKeyStore is a structure containing the configuration

@@ -1,0 +1,16 @@
+version: v1
+
+address: 0.0.0.0:7373 
+
+admin:
+  identity: c84cc9b91ae2399b043da7eca616048d4b4200edf2ff418d8af3835911db945d
+
+tls:
+  key:      ./server.key  
+  cert:     ./server.cert  
+
+keystore:
+  encryptedfs:
+    masterKeyPath: ./kes-master-key
+    masterKeyCipher: master-key-cipher
+    path: "/tmp/keys" 
