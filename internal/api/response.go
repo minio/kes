@@ -58,12 +58,14 @@ type ListKeysResponse struct {
 // EncryptKeyResponse is the response sent to clients by the EncryptKey API.
 type EncryptKeyResponse struct {
 	Ciphertext []byte `json:"ciphertext"`
+	Version    string `json:"version,omitempty"`
 }
 
 // GenerateKeyResponse is the response sent to clients by the GenerateKey API.
 type GenerateKeyResponse struct {
 	Plaintext  []byte `json:"plaintext"`
 	Ciphertext []byte `json:"ciphertext"`
+	Version    string `json:"version,omitempty"`
 }
 
 // DecryptKeyResponse is the response sent to clients by the DecryptKey API.
@@ -73,7 +75,8 @@ type DecryptKeyResponse struct {
 
 // HMACResponse is the response sent to clients by the HMAC API.
 type HMACResponse struct {
-	Sum []byte `json:"hmac"`
+	Sum     []byte `json:"hmac"`
+	Version string `json:"version,omitempty"`
 }
 
 // ReadPolicyResponse is the response sent to clients by the ReadPolicy API.
