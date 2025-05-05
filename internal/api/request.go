@@ -14,20 +14,24 @@ type ImportKeyRequest struct {
 type EncryptKeyRequest struct {
 	Plaintext []byte `json:"plaintext"`
 	Context   []byte `json:"context"` // optional
+	Version   string `json:"version"` // optional
 }
 
 // GenerateKeyRequest is the request sent by clients when calling the GenerateKey API.
 type GenerateKeyRequest struct {
 	Context []byte `json:"context"` // optional
+	Version string `json:"version"` // optional
 }
 
 // DecryptKeyRequest is the request sent by clients when calling the DecryptKey API.
 type DecryptKeyRequest struct {
 	Ciphertext []byte `json:"ciphertext"`
 	Context    []byte `json:"context"` // optional
+	Version    string `json:"version"` // optional
 }
 
 // HMACRequest is the request sent by clients when calling the HMAC API.
 type HMACRequest struct {
 	Message []byte `json:"message"`
+	Version string `json:"version"` // optional
 }
