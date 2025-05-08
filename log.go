@@ -6,9 +6,11 @@ package kes
 
 import (
 	"context"
+	"io"
 	"log/slog"
 
 	"github.com/minio/kes/internal/api"
+	"github.com/minio/kes/internal/log"
 )
 
 // logHandler is an slog.Handler that handles Server log records.
@@ -43,6 +45,16 @@ func newLogHandler(h slog.Handler, level slog.Leveler) *logHandler {
 		Level: level,
 	})
 	return handler
+}
+
+// newFormattedLogHandler returns a new text or JSON formatted log handler.
+func newFormattedLogHandler(w io.Writer, f log.Format, opts *slog.HandlerOptions) slog.Handler {
+	switch f {
+	case log.JSONFormat:
+		return slog.NewJSONHandler(w, opts)
+	default:
+		return slog.NewTextHandler(w, opts)
+	}
 }
 
 // Enabled reports whether h handles records at the given level.
