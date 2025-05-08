@@ -19,28 +19,34 @@ func List(names []string, prefix string, n int) ([]string, string, error) {
 	const N = 1024
 
 	slices.Sort(names)
+	// If a prefix is provided, filter the list to start with the first name that matches the prefix
 	if prefix != "" {
 		i := slices.IndexFunc(names, func(name string) bool {
 			return strings.HasPrefix(name, prefix)
 		})
 		if i < 0 {
-			return []string{}, "", nil
+			return []string{}, "", nil // Return empty if no match found
 		}
 		names = names[i:]
 
+		// Find the range of names that match the prefix
 		for i, name := range names {
 			if !strings.HasPrefix(name, prefix) {
+				// Return the slice of names that match the prefix
 				return names[:i], "", nil
 			}
-			if (n > 0 && i > n) || i == N {
-				if i == len(names)-1 {
-					return names, "", nil
+			if (n > 0 && i+1 == n) || i+1 == N {
+				if i+1 == len(names) {
+					// Return all names if the list ends here
+					return names[:i+1], "", nil
 				}
-				return names[:i], names[i], nil
+				// Return the first n names or N names, plus the next name to continue from
+				return names[:i+1], names[i+1], nil
 			}
 		}
 	}
 
+	// If no prefix or entire list matches the prefix
 	switch {
 	case (n <= 0 && len(names) <= N) || len(names) <= n:
 		return names, "", nil
