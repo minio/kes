@@ -571,9 +571,6 @@ func ymlToKeyStore(y *ymlFile) (KeyStore, error) {
 		if keystore != nil {
 			return nil, errors.New("kesconf: invalid keystore config: more than once keystore specified")
 		}
-		if y.KeyStore.AWS.SecretsManager.Endpoint.Value == "" {
-			return nil, errors.New("kesconf: invalid AWS secretsmanager keystore: no endpoint specified")
-		}
 		if y.KeyStore.AWS.SecretsManager.Region.Value == "" {
 			return nil, errors.New("kesconf: invalid AWS secretsmanager keystore: no region specified")
 		}
