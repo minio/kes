@@ -13,7 +13,7 @@
  
 ## What is KES?
 
-KES is a distributed key management server that scales horizontally. It can either be run as edge server close to the applications
+KES (Key Encryption Service) is a distributed key management server that scales horizontally. It can either be run as edge server close to the applications
 reducing latency to and load on a central key management system (KMS) or as central key management service. KES nodes are self-contained
 stateless instances that can be scaled up and down automatically.
 
