@@ -1,0 +1,19 @@
+version: v1
+
+admin:
+  identity: disabled
+
+tls:
+  key: ./server.key
+  cert: ./server.cert
+
+keystore:
+  credhub:
+    base_url: https://localhost:8844
+    enable_mutual_tls: true
+    client_cert_file_path: ./client.cert
+    client_key_file_path: ./client.key
+    server_insecure_skip_verify: false
+    server_ca_cert_file_path: ./server-ca.cert
+    namespace: /test-namespace
+    force_base64_values_encoding: false
