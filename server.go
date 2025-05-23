@@ -245,7 +245,7 @@ func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
 		Audit:      old.Audit,
 	}
 
-	state, err = createPredefinedKeys(ctx, conf, state)
+	err = createPredefinedKeys(ctx, conf, state)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 		Metrics:    metric.New(),
 	}
 
-	state, err = createPredefinedKeys(ctx, conf, state)
+	err = createPredefinedKeys(ctx, conf, state)
 	if err != nil {
 		return nil, err
 	}
@@ -463,17 +463,17 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 	}), nil
 }
 
-func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState) (*serverState, error) {
+func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState) error {
 	if len(conf.PredefinedKeys) > 0 {
 		cipher := crypto.DetermineSecretKeyType()
 		for _, k := range conf.PredefinedKeys {
 			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
 			if err != nil {
-				return state, err
+				return err
 			}
 			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
 			if err != nil {
-				return state, err
+				return err
 			}
 			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
 				Key:       key,
@@ -482,13 +482,12 @@ func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState)
 				CreatedBy: conf.Admin,
 			}); err != nil {
 				if err != kes.ErrKeyExists {
-					return state, err
+					return err
 				}
 			}
 		}
 	}
-
-	return state, nil
+	return nil
 }
 func (s *Server) version(resp *api.Response, req *api.Request) {
 	info, err := sys.ReadBinaryInfo()
