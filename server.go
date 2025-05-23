@@ -211,7 +211,7 @@ func (s *Server) UpdatePolicies(policies map[string]Policy) error {
 // or policies use [Server.UpdateAdmin], [Server.UpdateTLS] or
 // [Server.UpdatePolicies]. These more specific methods are usually
 // simpler to use and more efficient.
-func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
+func (s *Server) Update(conf *Config) (io.Closer, error) {
 	if err := verifyConfig(conf); err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
 		Audit:      old.Audit,
 	}
 
-	err = createPredefinedKeys(ctx, conf, state)
+	err = createPredefinedKeys(context.Background(), conf, state)
 	if err != nil {
 		return nil, err
 	}
