@@ -262,9 +262,7 @@ func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
 				CreatedAt: time.Now().UTC(),
 				CreatedBy: conf.Admin,
 			}); err != nil {
-				if err == kes.ErrKeyExists {
-					continue
-				} else {
+				if err != kes.ErrKeyExists {
 					return nil, err
 				}
 			}
@@ -443,15 +441,13 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 			if err != nil {
 				return nil, err
 			}
-			if err = s.state.Load().Keys.Create(ctx, k.Name, crypto.KeyVersion{
+			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
 				Key:       key,
 				HMACKey:   hmac,
 				CreatedAt: time.Now().UTC(),
 				CreatedBy: conf.Admin,
 			}); err != nil {
-				if err == kes.ErrKeyExists {
-					continue
-				} else {
+				if err != kes.ErrKeyExists {
 					return nil, err
 				}
 			}
