@@ -39,6 +39,9 @@ type Config struct {
 	// must be assigned to a policy only once.
 	Policies map[string]Policy
 
+	// Predefined Keys to be added to KeyStore before server starts.
+	PredefinedKeys []Key
+
 	// Keys is the KeyStore the KES server fetches keys from.
 	Keys KeyStore
 
