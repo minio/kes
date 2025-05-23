@@ -183,6 +183,7 @@ func startServer(addrFlag, configFlag string) error {
 	srv := &kes.Server{}
 	conf.Cache = configureCache(conf.Cache)
 	if rawConfig.Log != nil {
+		srv.LogFormat = rawConfig.Log.LogFormat
 		srv.ErrLevel.Set(rawConfig.Log.ErrLevel)
 		srv.AuditLevel.Set(rawConfig.Log.AuditLevel)
 	}
@@ -215,9 +216,9 @@ func startServer(addrFlag, configFlag string) error {
 		} else {
 			fmt.Fprintf(buf, "%-33s <disabled>\n", blue.Render("Admin"))
 		}
-		fmt.Fprintf(buf, "%-33s error=stderr level=%s\n", blue.Render("Logs"), srv.ErrLevel.Level())
+		fmt.Fprintf(buf, "%-33s error=stderr level=%s format=%s\n", blue.Render("Logs"), srv.ErrLevel.Level(), srv.LogFormat)
 		if srv.AuditLevel.Level() <= slog.LevelInfo {
-			fmt.Fprintf(buf, "%-11s audit=stdout level=%s\n", " ", srv.AuditLevel.Level())
+			fmt.Fprintf(buf, "%-11s audit=stdout level=%s format=%s\n", " ", srv.AuditLevel.Level(), srv.LogFormat)
 		}
 		if memLocked {
 			fmt.Fprintf(buf, "%-33s %s\n", blue.Render("MLock"), "enabled")
@@ -251,6 +252,7 @@ func startServer(addrFlag, configFlag string) error {
 					continue
 				}
 				if file.Log != nil {
+					srv.LogFormat = file.Log.LogFormat
 					srv.ErrLevel.Set(file.Log.ErrLevel)
 					srv.AuditLevel.Set(file.Log.AuditLevel)
 				}
@@ -375,8 +377,8 @@ func startDevServer(addr string) error {
 	fmt.Fprintln(buf)
 	fmt.Fprintf(buf, "%-33s %s\n", blue.Render("API Key"), apiKey.String())
 	fmt.Fprintf(buf, "%-33s %s\n", blue.Render("Admin"), apiKey.Identity())
-	fmt.Fprintf(buf, "%-33s error=stderr level=%s\n", blue.Render("Logs"), srv.ErrLevel.Level())
-	fmt.Fprintf(buf, "%-11s audit=stdout level=%s\n", " ", srv.AuditLevel.Level())
+	fmt.Fprintf(buf, "%-33s error=stderr level=%s format=%s\n", blue.Render("Logs"), srv.ErrLevel.Level(), srv.LogFormat)
+	fmt.Fprintf(buf, "%-11s audit=stdout level=%s format=%s\n", " ", srv.AuditLevel.Level(), srv.LogFormat)
 	fmt.Fprintln(buf)
 	fmt.Fprintln(buf, "=> Server is up and running...")
 	fmt.Println(buf.String())

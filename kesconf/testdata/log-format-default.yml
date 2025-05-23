@@ -1,0 +1,24 @@
+
+address: 0.0.0.0:7373
+admin:
+  identity: disabled
+  
+tls:
+  key: ./private.key
+  cert: ./public.crt
+  
+cache:
+  expiry:
+    any: 5m0s
+    unused: 30s
+    offline: 0s
+
+keystore:
+  fs:
+    path: /tmp/kes
+
+# no log format in this file, use defaults
+log:
+  error: INFO
+  audit: INFO
+

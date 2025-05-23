@@ -28,6 +28,7 @@ import (
 	"github.com/minio/kes/internal/keystore/gcp"
 	"github.com/minio/kes/internal/keystore/gemalto"
 	"github.com/minio/kes/internal/keystore/vault"
+	"github.com/minio/kes/internal/log"
 	kesdk "github.com/minio/kms-go/kes"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -291,6 +292,9 @@ type CacheConfig struct {
 // LogConfig is a structure that holds the logging configuration
 // for a KES server.
 type LogConfig struct {
+	// LogFormat determines the format of the default audit and error logger.
+	LogFormat log.Format
+
 	// Error determines whether the KES server logs error events to STDERR.
 	// It does not en/disable error logging in general.
 	ErrLevel slog.Level
