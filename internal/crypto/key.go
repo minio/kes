@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/fips"
 	pb "github.com/minio/kes/internal/protobuf"
 	"github.com/minio/kms-go/kes"
@@ -43,6 +44,13 @@ const (
 	// ChaCha20 represents the ChaCha20-Poly1305 secret key type.
 	ChaCha20
 )
+
+func DetermineSecretKeyType() SecretKeyType {
+	if fips.Enabled || cpu.HasAESGCM() {
+		return AES256
+	}
+	return ChaCha20
+}
 
 // ParseSecretKeyType parse s as SecretKeyType string representation
 // and returns an error if s is not a valid representation.

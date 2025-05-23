@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/minio/kes/internal/api"
-	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/headers"
@@ -212,7 +211,7 @@ func (s *Server) UpdatePolicies(policies map[string]Policy) error {
 // or policies use [Server.UpdateAdmin], [Server.UpdateTLS] or
 // [Server.UpdatePolicies]. These more specific methods are usually
 // simpler to use and more efficient.
-func (s *Server) Update(conf *Config) (io.Closer, error) {
+func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
 	if err := verifyConfig(conf); err != nil {
 		return nil, err
 	}
@@ -246,6 +245,31 @@ func (s *Server) Update(conf *Config) (io.Closer, error) {
 		Audit:      old.Audit,
 	}
 
+	if len(conf.PredefinedKeys) > 0 {
+		cipher := crypto.DetermineSecretKeyType()
+		for _, k := range conf.PredefinedKeys {
+			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
+			if err != nil {
+				return nil, err
+			}
+			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
+			if err != nil {
+				return nil, err
+			}
+			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
+				Key:       key,
+				HMACKey:   hmac,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: conf.Admin,
+			}); err != nil {
+				if err == kes.ErrKeyExists {
+					continue
+				} else {
+					return nil, err
+				}
+			}
+		}
+	}
 	if conf.ErrorLog != nil && conf.ErrorLog != state.LogHandler.Handler() {
 		state.LogHandler = &logHandler{
 			h:    conf.ErrorLog,
@@ -408,6 +432,32 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 		Metrics:    metric.New(),
 	}
 
+	if len(conf.PredefinedKeys) > 0 {
+		cipher := crypto.DetermineSecretKeyType()
+		for _, k := range conf.PredefinedKeys {
+			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
+			if err != nil {
+				return nil, err
+			}
+			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
+			if err != nil {
+				return nil, err
+			}
+			if err = s.state.Load().Keys.Create(ctx, k.Name, crypto.KeyVersion{
+				Key:       key,
+				HMACKey:   hmac,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: conf.Admin,
+			}); err != nil {
+				if err == kes.ErrKeyExists {
+					continue
+				} else {
+					return nil, err
+				}
+			}
+		}
+	}
+
 	if conf.ErrorLog == nil {
 		state.LogHandler = newLogHandler(
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -433,39 +483,6 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 	s.tls.Store(conf.TLS.Clone())
 	s.state.Store(state)
 	s.handler.Store(mux)
-
-	if len(conf.PredefinedKeys) > 0 {
-		var cipher crypto.SecretKeyType
-		if fips.Enabled || cpu.HasAESGCM() {
-			cipher = crypto.AES256
-		} else {
-			cipher = crypto.ChaCha20
-		}
-		for _, k := range conf.PredefinedKeys {
-			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
-			if err != nil {
-				s.state.Load().Log.ErrorContext(ctx, err.Error(), "key", k.Name)
-				continue // TODO: discuss whether to stop complete process or continue with other keys
-			}
-			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
-			if err != nil {
-				s.state.Load().Log.ErrorContext(ctx, err.Error(), "key", k.Name)
-				continue
-			}
-			if err = s.state.Load().Keys.Create(ctx, k.Name, crypto.KeyVersion{
-				Key:       key,
-				HMACKey:   hmac,
-				CreatedAt: time.Now().UTC(),
-				CreatedBy: conf.Admin,
-			}); err != nil {
-				if err == kes.ErrKeyExists {
-					s.state.Load().Log.Info("Already Exists", "Key Name", k.Name)
-				} else {
-					s.state.Load().Log.ErrorContext(ctx, err.Error(), "key", k.Name)
-				}
-			}
-		}
-	}
 
 	s.srv = &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -585,12 +602,7 @@ func (s *Server) createKey(resp *api.Response, req *api.Request) {
 		return
 	}
 
-	var cipher crypto.SecretKeyType
-	if fips.Enabled || cpu.HasAESGCM() {
-		cipher = crypto.AES256
-	} else {
-		cipher = crypto.ChaCha20
-	}
+	cipher := crypto.DetermineSecretKeyType()
 
 	key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
 	if err != nil {

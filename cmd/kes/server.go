@@ -245,7 +245,7 @@ func startServer(addrFlag, configFlag string) error {
 				}
 				config.Cache = configureCache(config.Cache)
 
-				closer, err := srv.Update(config)
+				closer, err := srv.Update(ctx, config)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to update server configuration: %v\n", err)
 					continue
