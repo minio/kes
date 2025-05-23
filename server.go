@@ -489,6 +489,7 @@ func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState)
 	}
 	return nil
 }
+
 func (s *Server) version(resp *api.Response, req *api.Request) {
 	info, err := sys.ReadBinaryInfo()
 	if err != nil {
