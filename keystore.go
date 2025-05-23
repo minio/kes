@@ -19,7 +19,7 @@ import (
 	"github.com/minio/kms-go/kes"
 )
 
-// This key will be predefined in the config file, which will be stored in keystore before server starts
+// Key structure define a cryptographic key
 type Key struct {
 	Name string // Name of cryptographic key
 }

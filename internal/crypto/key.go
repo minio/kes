@@ -45,6 +45,7 @@ const (
 	ChaCha20
 )
 
+// DetermineSecretKeyType determines the secret type
 func DetermineSecretKeyType() SecretKeyType {
 	if fips.Enabled || cpu.HasAESGCM() {
 		return AES256
