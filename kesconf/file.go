@@ -210,6 +210,14 @@ func (f *File) Config(ctx context.Context) (*kes.Config, error) {
 		conf.Policies = policies
 	}
 
+	if len(f.Keys) > 0 {
+		preDefinedKeys := make([]kes.Key, 0, len(f.Keys))
+		for _, k := range f.Keys {
+			preDefinedKeys = append(preDefinedKeys, kes.Key{Name: k.Name})
+		}
+		conf.PredefinedKeys = preDefinedKeys
+	}
+
 	if f.KeyStore != nil {
 		keystore, err := f.KeyStore.Connect(ctx)
 		if err != nil {
