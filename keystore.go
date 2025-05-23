@@ -19,7 +19,7 @@ import (
 	"github.com/minio/kms-go/kes"
 )
 
-// Key structure define a cryptographic key
+// Key define a cryptographic key
 type Key struct {
 	Name string // Name of cryptographic key
 }

@@ -245,29 +245,11 @@ func (s *Server) Update(ctx context.Context, conf *Config) (io.Closer, error) {
 		Audit:      old.Audit,
 	}
 
-	if len(conf.PredefinedKeys) > 0 {
-		cipher := crypto.DetermineSecretKeyType()
-		for _, k := range conf.PredefinedKeys {
-			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
-			if err != nil {
-				return nil, err
-			}
-			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
-			if err != nil {
-				return nil, err
-			}
-			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
-				Key:       key,
-				HMACKey:   hmac,
-				CreatedAt: time.Now().UTC(),
-				CreatedBy: conf.Admin,
-			}); err != nil {
-				if err != kes.ErrKeyExists {
-					return nil, err
-				}
-			}
-		}
+	state, err = createPredefinedKeys(ctx, conf, state)
+	if err != nil {
+		return nil, err
 	}
+
 	if conf.ErrorLog != nil && conf.ErrorLog != state.LogHandler.Handler() {
 		state.LogHandler = &logHandler{
 			h:    conf.ErrorLog,
@@ -430,28 +412,9 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 		Metrics:    metric.New(),
 	}
 
-	if len(conf.PredefinedKeys) > 0 {
-		cipher := crypto.DetermineSecretKeyType()
-		for _, k := range conf.PredefinedKeys {
-			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
-			if err != nil {
-				return nil, err
-			}
-			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
-			if err != nil {
-				return nil, err
-			}
-			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
-				Key:       key,
-				HMACKey:   hmac,
-				CreatedAt: time.Now().UTC(),
-				CreatedBy: conf.Admin,
-			}); err != nil {
-				if err != kes.ErrKeyExists {
-					return nil, err
-				}
-			}
-		}
+	state, err = createPredefinedKeys(ctx, conf, state)
+	if err != nil {
+		return nil, err
 	}
 
 	if conf.ErrorLog == nil {
@@ -500,6 +463,33 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 	}), nil
 }
 
+func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState) (*serverState, error) {
+	if len(conf.PredefinedKeys) > 0 {
+		cipher := crypto.DetermineSecretKeyType()
+		for _, k := range conf.PredefinedKeys {
+			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
+			if err != nil {
+				return state, err
+			}
+			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
+			if err != nil {
+				return state, err
+			}
+			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
+				Key:       key,
+				HMACKey:   hmac,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: conf.Admin,
+			}); err != nil {
+				if err != kes.ErrKeyExists {
+					return state, err
+				}
+			}
+		}
+	}
+
+	return state, nil
+}
 func (s *Server) version(resp *api.Response, req *api.Request) {
 	info, err := sys.ReadBinaryInfo()
 	if err != nil {
