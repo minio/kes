@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/minio/kes/internal/api"
-	"github.com/minio/kes/internal/cpu"
 	"github.com/minio/kes/internal/crypto"
 	"github.com/minio/kes/internal/fips"
 	"github.com/minio/kes/internal/headers"
@@ -246,6 +245,11 @@ func (s *Server) Update(conf *Config) (io.Closer, error) {
 		Audit:      old.Audit,
 	}
 
+	err = createPredefinedKeys(context.Background(), conf, state)
+	if err != nil {
+		return nil, err
+	}
+
 	if conf.ErrorLog != nil && conf.ErrorLog != state.LogHandler.Handler() {
 		state.LogHandler = &logHandler{
 			h:    conf.ErrorLog,
@@ -408,6 +412,11 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 		Metrics:    metric.New(),
 	}
 
+	err = createPredefinedKeys(ctx, conf, state)
+	if err != nil {
+		return nil, err
+	}
+
 	if conf.ErrorLog == nil {
 		state.LogHandler = newLogHandler(
 			slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -452,6 +461,33 @@ func (s *Server) listen(ctx context.Context, ln net.Listener, conf *Config) (net
 			return s.tls.Load(), nil
 		},
 	}), nil
+}
+
+func createPredefinedKeys(ctx context.Context, conf *Config, state *serverState) error {
+	if len(conf.PredefinedKeys) > 0 {
+		cipher := crypto.DetermineSecretKeyType()
+		for _, k := range conf.PredefinedKeys {
+			key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
+			if err != nil {
+				return err
+			}
+			hmac, err := crypto.GenerateHMACKey(crypto.SHA256, rand.Reader)
+			if err != nil {
+				return err
+			}
+			if err = state.Keys.Create(ctx, k.Name, crypto.KeyVersion{
+				Key:       key,
+				HMACKey:   hmac,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: conf.Admin,
+			}); err != nil {
+				if err != kes.ErrKeyExists {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) version(resp *api.Response, req *api.Request) {
@@ -552,12 +588,7 @@ func (s *Server) createKey(resp *api.Response, req *api.Request) {
 		return
 	}
 
-	var cipher crypto.SecretKeyType
-	if fips.Enabled || cpu.HasAESGCM() {
-		cipher = crypto.AES256
-	} else {
-		cipher = crypto.ChaCha20
-	}
+	cipher := crypto.DetermineSecretKeyType()
 
 	key, err := crypto.GenerateSecretKey(cipher, rand.Reader)
 	if err != nil {

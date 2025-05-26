@@ -19,6 +19,11 @@ import (
 	"github.com/minio/kms-go/kes"
 )
 
+// Key define a cryptographic key
+type Key struct {
+	Name string // Name of cryptographic key
+}
+
 // A KeyStore stores key-value pairs. It provides durable storage for a
 // KES server to persist and access keys. A KeyStore may be modified
 // concurrently by different go routines.
