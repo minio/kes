@@ -285,3 +285,44 @@ func TestReadServerConfigYAML_AWS_NoCredentials(t *testing.T) {
 		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SessionToken, SessionToken)
 	}
 }
+
+func TestReadServerConfigYAML_AWS_NoEndpoint(t *testing.T) {
+	// The AWS SDK will use the pre-configured endpoints
+	// when no endpoint is specified in the config.
+
+	const (
+		Filename = "./testdata/aws-no-endpoint.yml"
+
+		Endpoint     = ""
+		Region       = "us-east-2"
+		AccessKey    = "AKIAIOSFODNN7EXAMPLE"
+		Secretkey    = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+		SessionToken = ""
+	)
+
+	config, err := ReadFile(Filename)
+	if err != nil {
+		t.Fatalf("Failed to read file '%s': %v", Filename, err)
+	}
+
+	aws, ok := config.KeyStore.(*AWSSecretsManagerKeyStore)
+	if !ok {
+		var want *AWSSecretsManagerKeyStore
+		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
+	}
+	if aws.Endpoint != Endpoint {
+		t.Fatalf("Invalid endpoint: got '%s' - want '%s'", aws.Endpoint, Endpoint)
+	}
+	if aws.Region != Region {
+		t.Fatalf("Invalid region: got '%s' - want '%s'", aws.Region, Region)
+	}
+	if aws.AccessKey != AccessKey {
+		t.Fatalf("Invalid access key: got '%s' - want '%s'", aws.AccessKey, AccessKey)
+	}
+	if aws.SecretKey != Secretkey {
+		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SecretKey, Secretkey)
+	}
+	if aws.SessionToken != SessionToken {
+		t.Fatalf("Invalid secret key: got '%s' - want '%s'", aws.SessionToken, SessionToken)
+	}
+}
