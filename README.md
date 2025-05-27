@@ -1,6 +1,11 @@
-# ⛔️ DEPRECATED
+# ⛔️ MAINTENANCE MODE
 
-**This repository is no longer maintained.**. No new features or bug fixes will be added here.
+KES has reached a state of maturity where we are considering it to be Feature Complete. 
+
+Moving forward, the KES project will enter a 'Maintenance Mode' where only small bugs, security fixes, and CVEs will be addressed. We encourage the submission of PRs for patching bugs and similar small-scale fixes, but will not be reviewing nor accepting larger feature sets moving forward.
+
+For Customers relying on KES to enable Server Side Encryption against your preferred KMS, please open a SUBNET ticket for further guidance.
+For Community members, you can continue to use KES in your personal projects, for development, testing, etc.
 
 <p align="center">
   <img src='.github/logo.svg?sanitize=true' width='55%'>
