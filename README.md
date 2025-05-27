@@ -1,3 +1,7 @@
+# ⛔️ DEPRECATED
+
+**This repository is no longer maintained.**. No new features or bug fixes will be added here.
+
 <p align="center">
   <img src='.github/logo.svg?sanitize=true' width='55%'>
 </p>
