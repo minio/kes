@@ -1,3 +1,18 @@
+# ⛔️ DEPRECATED
+
+**This repository is no longer maintained.**. No new features, releases or bug fixes will be added here.
+
+**All previous open source releases of KES will continue to be available.**
+
+**All paying customers have access to Enterprise version of KES which is actively maintained at 
+https://github.com/miniohq/kes - please open a [SUBNET](https://subnet.min.io) issue to discuss further.**
+
+**MinIO alternatively provides [MinKMS AiStor Key Manager](https://min.io/docs/aistor-custom/key-manager/)**
+
+**MinKMS is a fully featured key manager optimized to be used with [MinIO AiStor](https://min.io/download?view=aistor-custom).**
+
+> NOTE: Migration from KES Open Source and KES Enterprise to MinKMS is supported as well.
+
 <p align="center">
   <img src='.github/logo.svg?sanitize=true' width='55%'>
 </p>
