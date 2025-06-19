@@ -30,6 +30,35 @@ func TestReadServerConfigYAML_FS(t *testing.T) {
 	}
 }
 
+func TestReadServerConfigYAML_EncryptedFS(t *testing.T) {
+	const (
+		Filename        = "./testdata/efs.yml"
+		MasterKeyPath   = "./kes-master-key"
+		MasterKeyCipher = "master-key-cipher"
+		FSPath          = "/tmp/keys"
+	)
+
+	config, err := ReadFile(Filename)
+	if err != nil {
+		t.Fatalf("Failed to read file '%s': %v", Filename, err)
+	}
+
+	fs, ok := config.KeyStore.(*EncryptedFSKeyStore)
+	if !ok {
+		var want *EncryptedFSKeyStore
+		t.Fatalf("Invalid keystore: got type '%T' - want type '%T'", config.KeyStore, want)
+	}
+	if fs.MasterKeyPath != MasterKeyPath {
+		t.Fatalf("Invalid keystore: got master key path '%s' - want path '%s'", fs.MasterKeyPath, MasterKeyPath)
+	}
+	if fs.MasterKeyCipher != MasterKeyCipher {
+		t.Fatalf("Invalid keystore: got master key cipher '%s' - want cipher '%s'", fs.MasterKeyCipher, MasterKeyCipher)
+	}
+	if fs.Path != FSPath {
+		t.Fatalf("Invalid keystore: got path '%s' - want path '%s'", fs.Path, FSPath)
+	}
+}
+
 func TestReadServerConfigYAML_CustomAPI(t *testing.T) {
 	const (
 		Filename = "./testdata/custom-api.yml"
