@@ -53,4 +53,18 @@ var listTests = []struct {
 		List:       []string{"my-key"},
 		ContinueAt: "my-key2",
 	},
+	{
+		Names:      []string{"my-key1", "my-key2", "other-key3", "my-key3"},
+		Prefix:     "my",
+		N:          2,
+		List:       []string{"my-key1", "my-key2"},
+		ContinueAt: "my-key3",
+	},
+	{
+		Names:      []string{"other-key", "my-key4", "my-key2", "my-key1", "my-key3"},
+		Prefix:     "my",
+		N:          2,
+		List:       []string{"my-key1", "my-key2"},
+		ContinueAt: "my-key3",
+	},
 }
